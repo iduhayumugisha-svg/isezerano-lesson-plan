@@ -94,7 +94,7 @@ export const SavedLessonPlansView: React.FC<SavedLessonPlansViewProps> = ({
 
       return true;
     });
-  }, [lessonPlans, searchTerm, levelFilter, selectedSubject]);
+  }, [lessonPlans, searchTerm, levelFilter, selectedSubject, user, isAdmin]);
 
   const confirmDelete = () => {
     if (planToDelete) {

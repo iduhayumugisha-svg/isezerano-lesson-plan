@@ -81,6 +81,8 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [lastRemovedStage, setLastRemovedStage] = useState<{ stage: LessonStage; index: number } | null>(null);
+  const [confirmDeleteStageId, setConfirmDeleteStageId] = useState<string | null>(null);
 
   useEffect(() => {
     getAppSettings().then((s) => {
@@ -164,13 +166,63 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
     }));
   };
 
-  const handleDeleteStage = (id: string, stageName: string) => {
-    if (window.confirm(`Are you sure you want to delete the stage "${stageName || 'Untitled'}"?`)) {
-      setPlan((prev) => ({
-        ...prev,
-        stages: prev.stages.filter((s) => s.id !== id)
-      }));
+  const handleRequestRemoveStage = (id: string) => {
+    const stage = plan.stages.find((s) => s.id === id);
+    if (!stage) return;
+
+    // Check if stage has any entered content
+    const hasContent = Boolean(
+      (stage.stageName && stage.stageName.trim()) ||
+      (stage.duration && stage.duration.trim()) ||
+      (stage.teacherActivities && stage.teacherActivities.trim()) ||
+      (stage.learnerActivities && stage.learnerActivities.trim()) ||
+      (stage.competencesAndCrossCutting && stage.competencesAndCrossCutting.trim()) ||
+      (stage.materials && stage.materials.trim()) ||
+      (stage.assessment && stage.assessment.trim())
+    );
+
+    if (hasContent) {
+      setConfirmDeleteStageId(id);
+    } else {
+      executeRemoveStage(id);
     }
+  };
+
+  const executeRemoveStage = (id: string) => {
+    const stageIndex = plan.stages.findIndex((s) => s.id === id);
+    const stageToRemove = plan.stages[stageIndex];
+    if (!stageToRemove) return;
+
+    setLastRemovedStage({ stage: stageToRemove, index: stageIndex });
+    setConfirmDeleteStageId(null);
+
+    setPlan((prev) => ({
+      ...prev,
+      stages: prev.stages.filter((s) => s.id !== id)
+    }));
+
+    setSaveMessage({
+      type: 'success',
+      text: `Stage ${stageIndex + 1} ("${stageToRemove.stageName || 'Stage'}") removed.`
+    });
+  };
+
+  const handleUndoRemoveStage = () => {
+    if (!lastRemovedStage) return;
+    const { stage, index } = lastRemovedStage;
+
+    setPlan((prev) => {
+      const nextStages = [...prev.stages];
+      const insertAt = Math.min(index, nextStages.length);
+      nextStages.splice(insertAt, 0, stage);
+      return { ...prev, stages: nextStages };
+    });
+
+    setLastRemovedStage(null);
+    setSaveMessage({
+      type: 'success',
+      text: `Stage "${stage.stageName || 'Stage'}" restored.`
+    });
   };
 
   const handleMoveStage = (index: number, direction: 'up' | 'down') => {
@@ -267,18 +319,30 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
       {/* Notifications banner */}
       {saveMessage && (
         <div
-          className={`p-4 rounded-xl text-sm font-semibold flex items-center space-x-2 shadow-sm ${
+          className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between shadow-sm ${
             saveMessage.type === 'success'
               ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
               : 'bg-red-50 border border-red-300 text-red-800'
           }`}
         >
-          {saveMessage.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <div className="flex items-center space-x-2">
+            {saveMessage.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+            )}
+            <span>{saveMessage.text}</span>
+          </div>
+
+          {lastRemovedStage && (
+            <button
+              type="button"
+              onClick={handleUndoRemoveStage}
+              className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs shrink-0 ml-3"
+            >
+              {t.undoRemove || 'Undo'}
+            </button>
           )}
-          <span>{saveMessage.text}</span>
         </div>
       )}
 
@@ -665,26 +729,26 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
                   <thead>
                     {/* Header Row 1 */}
                     <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-300 text-center">
-                      <th rowSpan={2} className="border-r border-slate-300 p-2.5 w-[16%] align-middle">
+                      <th rowSpan={2} className="border-r border-slate-300 p-2.5 w-[18%] align-middle">
                         {t.stageAndTimeHeader}
                       </th>
-                      <th colSpan={2} className="border-r border-slate-300 p-2.5 w-[50%]">
+                      <th colSpan={2} className="border-r border-slate-300 p-2.5 w-[48%]">
                         {t.activitiesGroupHeader}
                       </th>
-                      <th rowSpan={2} className="border-r border-slate-300 p-2.5 w-[28%] align-middle">
+                      <th rowSpan={2} className="border-r border-slate-300 p-2.5 w-[26%] align-middle">
                         {t.competencesCrossCuttingHeader}
                       </th>
-                      <th rowSpan={2} className="p-2.5 w-[60px] align-middle">
-                        {t.orderDel}
+                      <th rowSpan={2} className="p-2.5 w-[80px] align-middle">
+                        Actions
                       </th>
                     </tr>
 
                     {/* Header Row 2 (Sub-headers) */}
                     <tr className="bg-slate-200 text-slate-900 font-bold border-b border-slate-300 text-center">
-                      <th className="border-r border-slate-300 p-2 w-[25%]">
+                      <th className="border-r border-slate-300 p-2 w-[24%]">
                         {t.teacherActivitiesHeader}
                       </th>
-                      <th className="border-r border-slate-300 p-2 w-[25%]">
+                      <th className="border-r border-slate-300 p-2 w-[24%]">
                         {t.learnerActivitiesHeader}
                       </th>
                     </tr>
@@ -693,7 +757,7 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
                   <tbody className="divide-y divide-slate-300 bg-white">
                     {plan.stages.map((stage, idx) => (
                       <tr key={stage.id} className="hover:bg-slate-50/80 transition-colors align-top">
-                        {/* Col 1: Stage and Time */}
+                        {/* Col 1: Stage and Time with Easy-to-find Remove Stage button */}
                         <td className="border-r border-slate-300 p-2.5 bg-slate-50/70">
                           <div className="space-y-1.5">
                             <span className="text-[10px] font-bold uppercase text-slate-500 block">
@@ -713,6 +777,41 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
                               placeholder={t.durationInputPlaceholder}
                               className="w-full px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-[11px] text-slate-700 bg-white"
                             />
+
+                            {/* Prominent, easy-to-find Remove Stage button */}
+                            {confirmDeleteStageId === stage.id ? (
+                              <div className="mt-2 p-1.5 rounded-lg bg-red-50 border border-red-200 text-center animate-in fade-in duration-150">
+                                <p className="text-[10px] font-bold text-red-800 mb-1 leading-tight">
+                                  {t.confirmRemoveStage || 'Remove this stage?'}
+                                </p>
+                                <div className="flex items-center justify-center space-x-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => executeRemoveStage(stage.id)}
+                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white hover:bg-red-700 cursor-pointer shadow-2xs"
+                                  >
+                                    Yes, Remove
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteStageId(null)}
+                                    className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-700 hover:bg-slate-300 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleRequestRemoveStage(stage.id)}
+                                className="w-full mt-2 inline-flex items-center justify-center space-x-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors shadow-2xs active:scale-98 cursor-pointer"
+                                title={`Remove Stage ${idx + 1}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                <span>{t.removeStageBtn || 'Remove Stage'}</span>
+                              </button>
+                            )}
                           </div>
                         </td>
 
@@ -749,14 +848,14 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
                           />
                         </td>
 
-                        {/* Col 5: Reorder & Delete */}
-                        <td className="p-2.5 text-center">
-                          <div className="flex flex-col items-center space-y-1">
+                        {/* Col 5: Reorder & Remove Action */}
+                        <td className="p-2.5 text-center align-middle">
+                          <div className="flex flex-col items-center space-y-1.5">
                             <button
                               type="button"
                               disabled={idx === 0}
                               onClick={() => handleMoveStage(idx, 'up')}
-                              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-200 disabled:opacity-20 transition-colors"
+                              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-200 disabled:opacity-20 transition-colors cursor-pointer"
                               title={t.moveUp}
                             >
                               <ArrowUp className="w-3.5 h-3.5" />
@@ -765,19 +864,21 @@ export const CreateLessonPlanView: React.FC<CreateLessonPlanViewProps> = ({
                               type="button"
                               disabled={idx === plan.stages.length - 1}
                               onClick={() => handleMoveStage(idx, 'down')}
-                              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-200 disabled:opacity-20 transition-colors"
+                              className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-200 disabled:opacity-20 transition-colors cursor-pointer"
                               title={t.moveDown}
                             >
                               <ArrowDown className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStage(stage.id, stage.stageName)}
-                              className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
-                              title={t.deleteStage}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {confirmDeleteStageId !== stage.id && (
+                              <button
+                                type="button"
+                                onClick={() => handleRequestRemoveStage(stage.id)}
+                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                                title={t.removeStageBtn || 'Remove Stage'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
