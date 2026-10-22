@@ -19,6 +19,7 @@ import { LessonPlan } from '../types/lessonPlan';
 import { SaasNavPage } from '../components/Sidebar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { FEATURE_FLAGS } from '../config/features';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];
@@ -79,17 +80,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     },
     {
       id: 'settings' as SaasNavPage,
-      title: t.moduleSettingsTitle || 'Settings & Cloud Sync',
-      badge: 'Cloud & Backup',
+      title: t.moduleSettingsTitle || 'Settings',
+      badge: (isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI) ? 'Cloud & Backup' : 'Preferences',
       badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
-      description: t.moduleSettingsDesc || 'Configure Cloud Firestore database synchronization, offline JSON exports/backups, and security rules.',
+      description: (isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI)
+        ? (t.moduleSettingsDesc || 'Configure Cloud Firestore database synchronization, offline JSON exports/backups, and security rules.')
+        : 'Manage language preferences and application settings.',
       icon: Settings,
       iconColor: 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white',
       buttonText: t.navSettings || 'Configure Settings'
     }
   ];
 
-  if (isAdmin) {
+  if (isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI) {
     educationModules.push({
       id: 'admin' as SaasNavPage,
       title: 'Admin Management Dashboard',

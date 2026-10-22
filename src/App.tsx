@@ -20,6 +20,7 @@ import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AuthModal } from './components/AuthModal';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { FEATURE_FLAGS } from './config/features';
 
 function AppContent() {
   const { t } = useLanguage();
@@ -45,11 +46,30 @@ function AppContent() {
 
   useEffect(() => {
     refreshData();
+    // Clean up unwanted tracking parameters (e.g. ?utm_source=chatgpt.com) from browser URL
+    if (typeof window !== 'undefined' && window.location.search) {
+      try {
+        const url = new URL(window.location.href);
+        let modified = false;
+        ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((key) => {
+          if (url.searchParams.has(key)) {
+            url.searchParams.delete(key);
+            modified = true;
+          }
+        });
+        if (modified) {
+          const cleanPath = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : '') + url.hash;
+          window.history.replaceState({}, document.title, cleanPath);
+        }
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
-  // When non-admin tries to view admin page, redirect to create
+  // When non-admin or during beta mode, redirect admin page to create
   useEffect(() => {
-    if (currentPage === 'admin' && !isAdmin) {
+    if (currentPage === 'admin' && (!isAdmin || !FEATURE_FLAGS.ENABLE_ADMIN_UI)) {
       setCurrentPage('create');
     }
   }, [isAdmin, currentPage]);
@@ -188,8 +208,8 @@ function AppContent() {
             />
           )}
 
-          {/* 6. Admin Management Dashboard View (Protected) */}
-          {currentPage === 'admin' && (
+          {/* 6. Admin Management Dashboard View (Protected, Gated by Feature Flag) */}
+          {currentPage === 'admin' && isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI && (
             <AdminDashboardView
               lessonPlans={lessonPlans}
               onNavigate={setCurrentPage}
@@ -205,11 +225,13 @@ function AppContent() {
           />
         )}
 
-        {/* Authentication Modal */}
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-        />
+        {/* Authentication Modal (Available only when Admin UI is enabled) */}
+        {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+          />
+        )}
 
         {/* Professional SaaS Footer */}
         <footer className="no-print bg-white border-t border-slate-200 py-5 mt-auto">
@@ -222,23 +244,27 @@ function AppContent() {
               <span>Rwanda Competence-Based Curriculum (CBC)</span>
             </div>
             <div className="flex items-center space-x-3 text-slate-400">
-              <span className="hidden sm:inline">MINEDUC / REB National Curriculum Compliance</span>
-              <span className="hidden sm:inline">•</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isAdmin) {
-                    setCurrentPage('admin');
-                  } else {
-                    setIsAuthModalOpen(true);
-                  }
-                }}
-                className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer py-1 px-2 rounded-md hover:bg-slate-100"
-                title="Website Owner / Administrator Portal"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Admin Portal'}</span>
-              </button>
+              <span>MINEDUC / REB National Curriculum Compliance</span>
+              {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
+                <>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isAdmin) {
+                        setCurrentPage('admin');
+                      } else {
+                        setIsAuthModalOpen(true);
+                      }
+                    }}
+                    className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer py-1 px-2 rounded-md hover:bg-slate-100"
+                    title="Website Owner / Administrator Portal"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Admin Portal'}</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </footer>

@@ -14,6 +14,7 @@ import { SaasNavPage } from './Sidebar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
+import { FEATURE_FLAGS } from '../config/features';
 
 interface HeaderProps {
   currentPage: SaasNavPage;
@@ -55,8 +56,10 @@ export const Header: React.FC<HeaderProps> = ({
         };
       case 'settings':
         return {
-          title: t.settingsTitle || 'Settings & Cloud Sync',
-          subtitle: 'Firebase Firestore connection, JSON backups, and security rules'
+          title: t.settingsTitle || 'Settings',
+          subtitle: isAdmin
+            ? 'Firebase Firestore connection, JSON backups, and security rules'
+            : 'Application database, offline JSON backups, and data restore'
         };
       case 'admin':
         return {
@@ -136,12 +139,12 @@ export const Header: React.FC<HeaderProps> = ({
                     {user.displayName || user.email.split('@')[0]}
                   </span>
                   <span className="text-[10px] text-slate-500 capitalize">
-                    {user.role} • {user.schoolName || 'Rwanda'}
+                    {FEATURE_FLAGS.ENABLE_ADMIN_UI ? user.role : 'Teacher'} • {user.schoolName || 'Rwanda'}
                   </span>
                 </div>
 
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-2xs ${
-                  user.role === 'admin'
+                  user.role === 'admin' && FEATURE_FLAGS.ENABLE_ADMIN_UI
                     ? 'bg-purple-600 text-white'
                     : 'bg-emerald-600 text-white'
                 }`}>
@@ -156,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
+            ) : FEATURE_FLAGS.ENABLE_ADMIN_UI ? (
               <button
                 onClick={onOpenAuth}
                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer border border-slate-200 shadow-2xs"
@@ -165,7 +168,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <Lock className="w-3.5 h-3.5 text-slate-500" />
                 <span>Admin Login</span>
               </button>
-            )}
+            ) : null}
 
           </div>
 

@@ -216,6 +216,12 @@ export interface Translations {
   printSavePdfBtn: string;
   closePreview: string;
   noStagesPrint: string;
+  removeStageBtn: string;
+  confirmRemoveStage: string;
+  undoRemove: string;
+  printOrientationLabel: string;
+  portraitOption: string;
+  landscapeOption: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -423,7 +429,13 @@ export const translations: Record<Language, Translations> = {
     printModalSubtext: 'Official Ministry of Education / REB Exact Table Format',
     printSavePdfBtn: 'Print / Save PDF',
     closePreview: 'Close Preview',
-    noStagesPrint: 'No lesson stages added yet.'
+    noStagesPrint: 'No lesson stages added yet.',
+    removeStageBtn: 'Remove Stage',
+    confirmRemoveStage: 'Are you sure you want to remove this stage?',
+    undoRemove: 'Undo',
+    printOrientationLabel: 'Page Orientation',
+    portraitOption: 'Portrait (Standard A4)',
+    landscapeOption: 'Landscape (Wide Table)'
   },
 
   rw: {
@@ -630,7 +642,13 @@ export const translations: Record<Language, Translations> = {
     printModalSubtext: 'Imiterere Yemewe ya Minisiteri y’Uburezi / REB',
     printSavePdfBtn: 'Gucapa / Bika nka PDF',
     closePreview: 'Funga Kureba',
-    noStagesPrint: 'Nta cyiciro kirashyirwamo.'
+    noStagesPrint: 'Nta cyiciro kirashyirwamo.',
+    removeStageBtn: 'Siba Icyiciro',
+    confirmRemoveStage: 'Wizeye neza ko ushaka gusiba iki cyiciro?',
+    undoRemove: 'Guhagarika (Undo)',
+    printOrientationLabel: "Imiterere y'Ipaji",
+    portraitOption: 'Bihagaze (Portrait A4)',
+    landscapeOption: 'Birambitse (Landscape)'
   },
 
   fr: {
@@ -837,6 +855,12 @@ export const translations: Record<Language, Translations> = {
     printModalSubtext: "Format Officiel Exact du Ministère de l'Éducation / REB",
     printSavePdfBtn: 'Imprimer / Enregistrer en PDF',
     closePreview: "Fermer l'Aperçu",
-    noStagesPrint: 'Aucune étape de leçon ajoutée pour le moment.'
+    noStagesPrint: 'Aucune étape de leçon ajoutée pour le moment.',
+    removeStageBtn: "Supprimer l'Étape",
+    confirmRemoveStage: 'Êtes-vous sûr de vouloir supprimer cette étape ?',
+    undoRemove: 'Annuler',
+    printOrientationLabel: 'Orientation de la Page',
+    portraitOption: 'Portrait (A4 Standard)',
+    landscapeOption: 'Paysage (Tableau Large)'
   }
 };

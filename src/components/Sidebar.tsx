@@ -19,6 +19,7 @@ import {
 import { NavPage } from './Navbar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { FEATURE_FLAGS } from '../config/features';
 
 // Extended NavPage to include 'admin'
 export type SaasNavPage = NavPage | 'admin';
@@ -90,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   // Admin exclusive item
-  if (isAdmin) {
+  if (isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI) {
     navItems.push({
       id: 'admin' as SaasNavPage,
       label: 'Admin Dashboard',
@@ -120,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5">
                 <span className="font-extrabold text-base tracking-tight text-white group-hover:text-emerald-300 transition-colors truncate">
-                  GS GITUMBA.
+                  ISEZERANO
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60 uppercase">
                   SaaS
@@ -207,11 +208,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {user.displayName || user.email.split('@')[0]}
                     </span>
                     <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
-                      user.role === 'admin'
+                      user.role === 'admin' && FEATURE_FLAGS.ENABLE_ADMIN_UI
                         ? 'bg-purple-900 text-purple-200 border border-purple-700'
                         : 'bg-emerald-900 text-emerald-200 border border-emerald-700'
                     }`}>
-                      {user.role}
+                      {FEATURE_FLAGS.ENABLE_ADMIN_UI ? user.role : 'teacher'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 truncate">
@@ -238,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
-        ) : (
+        ) : FEATURE_FLAGS.ENABLE_ADMIN_UI ? (
           <div>
             {!isCollapsed ? (
               <button
@@ -258,7 +259,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Desktop Collapse / Expand Toggle Button */}
         <div className="hidden lg:flex items-center justify-end pt-2 mt-2 border-t border-slate-800/80">
