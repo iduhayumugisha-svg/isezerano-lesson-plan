@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5">
                 <span className="font-extrabold text-base tracking-tight text-white group-hover:text-emerald-300 transition-colors truncate">
-                  ISEZERANO
+                  GS GITUMBA.
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60 uppercase">
                   SaaS
