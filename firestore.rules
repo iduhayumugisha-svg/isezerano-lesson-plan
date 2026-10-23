@@ -69,6 +69,15 @@ service cloud.firestore {
       );
     }
 
+    // 4. Homepage Hero Slides
+    match /homepage_slides/{slideId} {
+      // Anyone can read slides for the homepage carousel
+      allow read: if true;
+
+      // Only verified Admin can create, update, or delete slides
+      allow write: if isAdmin();
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;

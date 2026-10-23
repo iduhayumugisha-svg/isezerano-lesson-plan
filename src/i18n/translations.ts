@@ -11,6 +11,11 @@ export interface Translations {
   navCreate: string;
   navSaved: string;
   navSettings: string;
+  navHome: string;
+  navLessonPlan: string;
+  navAbout: string;
+  navContact: string;
+  navPrivacy: string;
   newPlanButton: string;
   footerStandard: string;
 
@@ -235,6 +240,11 @@ export const translations: Record<Language, Translations> = {
     navCreate: 'Create Lesson Plan',
     navSaved: 'Saved Lesson Plans',
     navSettings: 'Settings',
+    navHome: 'Home',
+    navLessonPlan: 'Lesson Plan',
+    navAbout: 'About Us',
+    navContact: 'Contact Us',
+    navPrivacy: 'Privacy Policy',
     newPlanButton: 'New Plan',
     footerStandard: 'Ministry of Education (MINEDUC) / Rwanda Basic Education Board (REB) Standards',
 
@@ -448,6 +458,11 @@ export const translations: Record<Language, Translations> = {
     navCreate: "Tegura Imbata y'Isomo",
     navSaved: 'Amasomo Yabitswe',
     navSettings: 'Ibihindurwa',
+    navHome: 'Ahabanza',
+    navLessonPlan: "Imbata y'Isomo",
+    navAbout: 'Ibyerekeye Twebwe',
+    navContact: 'Twandikire',
+    navPrivacy: 'Ubuzima Bwite',
     newPlanButton: 'Isomo Rishya',
     footerStandard: "Ibipimo Ngenderwaho bya Minisiteri y'Uburezi (MINEDUC) / REB",
 
@@ -661,6 +676,11 @@ export const translations: Record<Language, Translations> = {
     navCreate: 'Créer une Fiche',
     navSaved: 'Fiches Enregistrées',
     navSettings: 'Paramètres',
+    navHome: 'Accueil',
+    navLessonPlan: 'Fiche de Cours',
+    navAbout: 'À Propos',
+    navContact: 'Contactez-nous',
+    navPrivacy: 'Confidentialité',
     newPlanButton: 'Nouvelle Fiche',
     footerStandard: "Normes du Ministère de l'Éducation (MINEDUC) / REB",
 

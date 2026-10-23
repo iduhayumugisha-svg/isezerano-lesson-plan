@@ -68,8 +68,8 @@ export const Header: React.FC<HeaderProps> = ({
         };
       default:
         return {
-          title: 'ISEZERANO Lesson Plan',
-          subtitle: 'Rwanda CBC SaaS'
+          title: 'ISEZERANO ONLINE',
+          subtitle: 'GS GITUMBA • Rwanda CBC Platform'
         };
     }
   };

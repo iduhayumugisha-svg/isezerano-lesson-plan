@@ -134,15 +134,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
 
           <div className="flex items-center space-x-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md ring-2 ring-emerald-400/30">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 shadow-md">
+              <img 
+                src="/isezerano-online-logo.jpg" 
+                alt="ISEZERANO ONLINE Logo" 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h2 className="text-lg font-bold tracking-tight text-white flex items-center space-x-2">
                 <span>Admin & Account Portal</span>
               </h2>
-              <p className="text-xs text-emerald-300 font-medium">
-                ISEZERANO Lesson Plan • Rwanda CBC
+              <p className="text-xs text-teal-300 font-medium">
+                ISEZERANO ONLINE • GS GITUMBA
               </p>
             </div>
           </div>

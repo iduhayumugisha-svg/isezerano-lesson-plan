@@ -71,18 +71,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
     },
     {
-      id: 'students' as SaasNavPage,
-      label: t.navStudents || 'Student Identification',
-      shortLabel: 'Students',
-      icon: Users
-    },
-    {
-      id: 'dashboard' as SaasNavPage,
-      label: t.navAllTools || 'Dashboard / All Tools',
-      shortLabel: 'Dashboard',
-      icon: LayoutDashboard
-    },
-    {
       id: 'settings' as SaasNavPage,
       label: t.navSettings || 'Settings & Sync',
       shortLabel: 'Settings',
@@ -111,25 +99,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div 
           onClick={() => handleItemClick('create')} 
           className="flex items-center space-x-3 cursor-pointer group min-w-0"
-          title="ISEZERANO Lesson Plan"
+          title="ISEZERANO ONLINE – GS GITUMBA"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-sm ring-2 ring-emerald-400/30 group-hover:bg-emerald-500 transition-colors shrink-0">
-            <GraduationCap className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md group-hover:border-teal-400 transition-all">
+            <img 
+              src="/isezerano-online-logo.jpg" 
+              alt="ISEZERANO ONLINE – GS GITUMBA Logo" 
+              className="w-full h-full object-cover" 
+              referrerPolicy="no-referrer"
+            />
           </div>
 
           {!isCollapsed && (
-            <div className="min-w-0">
-              <div className="flex items-center space-x-1.5">
-                <span className="font-extrabold text-base tracking-tight text-white group-hover:text-emerald-300 transition-colors truncate">
-                  ISEZERANO
-                </span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60 uppercase">
-                  SaaS
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-medium truncate">
-                Lesson Plan Platform
-              </p>
+            <div className="min-w-0 flex flex-col justify-center">
+              <span className="font-extrabold text-sm tracking-tight text-white group-hover:text-teal-300 transition-colors truncate leading-tight">
+                ISEZERANO ONLINE
+              </span>
+              <span className="text-[10px] text-teal-400 font-semibold tracking-wider uppercase truncate mt-0.5">
+                GS GITUMBA
+              </span>
             </div>
           )}
         </div>

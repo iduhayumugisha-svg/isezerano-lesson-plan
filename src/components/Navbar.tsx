@@ -73,14 +73,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate, savedCo
       highlight: true
     },
     {
-      id: 'dashboard' as NavPage,
-      label: t.navAllTools || 'Dashboard / All Tools',
-      badgeText: undefined,
-      desc: 'Central overview & education tools',
-      icon: LayoutDashboard,
-      highlight: false
-    },
-    {
       id: 'saved' as NavPage,
       label: t.navSaved || 'Saved Lesson Plans',
       badgeText: savedCount > 0 ? String(savedCount) : undefined,
@@ -89,18 +81,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate, savedCo
       highlight: false
     },
     {
-      id: 'students' as NavPage,
-      label: t.navStudents || 'Student Identification',
-      badgeText: undefined,
-      desc: 'Learner counts & classes',
-      icon: Users,
-      highlight: false
-    },
-    {
       id: 'settings' as NavPage,
       label: t.navSettings || 'Settings',
       badgeText: undefined,
-      desc: 'Cloud sync & JSON backups',
+      desc: 'Preferences & backup',
       icon: Settings,
       highlight: false
     }

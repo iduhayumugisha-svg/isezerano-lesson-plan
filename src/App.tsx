@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Lock } from 'lucide-react';
+import { 
+  PlusCircle, 
+  FolderClock, 
+  Settings as SettingsIcon, 
+  LayoutDashboard,
+  ShieldCheck,
+  Home
+} from 'lucide-react';
 import { LessonPlan } from './types/lessonPlan';
 import { 
   getSavedLessonPlans, 
@@ -8,36 +15,47 @@ import {
   duplicateLessonPlanLocal,
   createEmptyLessonPlan
 } from './services/storageService';
-import { Sidebar, SaasNavPage } from './components/Sidebar';
-import { Header } from './components/Header';
+
+// Public Website Components & Views
+import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
+import { WebsiteFooter } from './components/WebsiteFooter';
+import { HomeView } from './views/HomeView';
+import { AboutView } from './views/AboutView';
+import { ContactView } from './views/ContactView';
+import { PrivacyPolicyView } from './views/PrivacyPolicyView';
+
+// Central Application Views
 import { DashboardView } from './views/DashboardView';
-import { StudentsIdentificationView } from './views/StudentsIdentificationView';
 import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
-import { AdminDashboardView } from './views/AdminDashboardView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
+
+// Preserved Hidden Views (Retained for future activation, hidden from UI)
+import { StudentsIdentificationView } from './views/StudentsIdentificationView';
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { Sidebar, SaasNavPage } from './components/Sidebar';
+import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
+
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FEATURE_FLAGS } from './config/features';
+
+export type AppPage = WebsitePage | 'students' | 'admin';
 
 function AppContent() {
   const { t } = useLanguage();
   const { user, isAdmin } = useAuth();
 
-  // Primary application route: Lesson Plan Generator (Home)
-  const [currentPage, setCurrentPage] = useState<SaasNavPage>('create');
-
-  // Sidebar Layout States
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  // Requirement 1: Home page must be the first page displayed when someone opens the website
+  const [currentPage, setCurrentPage] = useState<AppPage>('home');
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
   const [editingPlan, setEditingPlan] = useState<LessonPlan | null>(null);
   const [printingPlan, setPrintingPlan] = useState<LessonPlan | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Load saved lesson plans on mount
   const refreshData = () => {
@@ -67,10 +85,13 @@ function AppContent() {
     }
   }, []);
 
-  // When non-admin or during beta mode, redirect admin page to create
+  // Redirect hidden routes (admin or students) safely
   useEffect(() => {
-    if (currentPage === 'admin' && (!isAdmin || !FEATURE_FLAGS.ENABLE_ADMIN_UI)) {
-      setCurrentPage('create');
+    if (currentPage === 'admin' && !isAdmin) {
+      setCurrentPage('dashboard');
+    }
+    if (currentPage === 'students') {
+      setCurrentPage('dashboard');
     }
   }, [isAdmin, currentPage]);
 
@@ -104,6 +125,7 @@ function AppContent() {
       refreshData();
       setEditingPlan(duplicated);
       setCurrentPage('create');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -111,6 +133,7 @@ function AppContent() {
   const handleEditPlan = (plan: LessonPlan) => {
     setEditingPlan(plan);
     setCurrentPage('create');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrintPlan = (plan: LessonPlan) => {
@@ -125,150 +148,278 @@ function AppContent() {
       setEditingPlan(null);
     }
     setCurrentPage('create');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleNavigate = (page: WebsitePage) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const isLessonPlanWorkspace = ['create', 'saved', 'settings'].includes(currentPage);
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans antialiased">
-      {/* 1. Professional LEFT Sidebar (Fixed on Desktop, Drawer on Mobile) */}
-      <Sidebar
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-serif antialiased selection:bg-teal-700 selection:text-white">
+      
+      {/* 1. Global Professional Public Website Header */}
+      <WebsiteHeader
         currentPage={currentPage}
-        onNavigate={(page) => setCurrentPage(page)}
+        onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
-      {/* 2. Main SaaS Workspace (Positioned to the RIGHT of the Sidebar) */}
-      <div 
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ease-in-out ${
-          isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
-        }`}
-      >
-        {/* Top Header */}
-        <Header
-          currentPage={currentPage}
-          onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
-          isSidebarCollapsed={isSidebarCollapsed}
-        />
+      {/* 2. Main Content Area */}
+      <main className="flex-1 w-full">
+        
+        {/* PUBLIC PAGE 1: Home View (Default opening page) */}
+        {currentPage === 'home' && (
+          <HomeView
+            onNavigate={handleNavigate}
+            savedPlansCount={lessonPlans.length}
+          />
+        )}
 
-        {/* Content Container */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {/* 1. Main Lesson Plan Generator (Home) */}
-          {currentPage === 'create' && (
-            <CreateLessonPlanView
-              initialPlan={editingPlan}
-              onSavePlan={handleSaveLessonPlan}
-              onPrintPreview={handlePrintPlan}
-              onCancelOrNew={handleCreateNew}
-            />
-          )}
+        {/* APPLICATION DASHBOARD VIEW: Opened by clicking Dashboard menu or button */}
+        {currentPage === 'dashboard' && (
+          <DashboardView
+            lessonPlans={lessonPlans}
+            onNavigate={(page) => {
+              if (page === 'home') {
+                handleNavigate('home');
+              } else if (page === 'create' || page === 'saved' || page === 'settings') {
+                handleNavigate(page);
+              } else if (page === 'admin' && isAdmin) {
+                setCurrentPage('admin');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                handleNavigate('dashboard');
+              }
+            }}
+            onSelectPlanToEdit={handleEditPlan}
+            onSelectPlanToPrint={handlePrintPlan}
+          />
+        )}
 
-          {/* 2. Saved Lesson Plans & Export View */}
-          {currentPage === 'saved' && (
-            <SavedLessonPlansView
+        {/* ADMIN DASHBOARD & SLIDER MANAGEMENT VIEW: Accessible only to verified administrators */}
+        {currentPage === 'admin' && isAdmin && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <AdminDashboardView
               lessonPlans={lessonPlans}
-              onEditPlan={handleEditPlan}
-              onDeletePlan={handleDeleteLessonPlan}
-              onDuplicatePlan={handleDuplicateLessonPlan}
-              onPrintPlan={handlePrintPlan}
-              onCreateNew={handleCreateNew}
+              onNavigate={(page) => {
+                if (page === 'create' || page === 'saved' || page === 'settings') {
+                  handleNavigate(page);
+                } else {
+                  handleNavigate('dashboard');
+                }
+              }}
             />
-          )}
+          </div>
+        )}
 
-          {/* 3. Students Identification View */}
-          {currentPage === 'students' && (
+        {/* PUBLIC PAGE 2: About Us View */}
+        {currentPage === 'about' && (
+          <AboutView onNavigate={handleNavigate} />
+        )}
+
+        {/* PUBLIC PAGE 3: Contact Us View */}
+        {currentPage === 'contact' && (
+          <ContactView onNavigate={handleNavigate} />
+        )}
+
+        {/* PUBLIC PAGE 4: Privacy Policy View */}
+        {currentPage === 'privacy' && (
+          <PrivacyPolicyView onNavigate={handleNavigate} />
+        )}
+
+        {/* PRIMARY FUNCTIONAL APPLICATION SECTION: Lesson Plan Workspace */}
+        {isLessonPlanWorkspace && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            
+            {/* Dedicated Workspace Navigation Bar with Deep Navy and Teal Palette */}
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
+                {/* Return to Dashboard */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('dashboard')}
+                  className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shrink-0 text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer border border-slate-200"
+                >
+                  <LayoutDashboard className="w-4 h-4 text-teal-700" />
+                  <span>Dashboard</span>
+                </button>
+
+                {/* Tab 1: Create Lesson Plan */}
+                <button
+                  type="button"
+                  onClick={() => handleCreateNew()}
+                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                    currentPage === 'create'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <PlusCircle className="w-4 h-4 text-teal-400" />
+                  <span>{t.navCreate || 'Create Lesson Plan'}</span>
+                </button>
+
+                {/* Tab 2: Saved Plans */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('saved')}
+                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                    currentPage === 'saved'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <FolderClock className="w-4 h-4 text-teal-400" />
+                  <span>{t.navSaved || 'Saved Plans'}</span>
+                  {lessonPlans.length > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-extrabold ${
+                      currentPage === 'saved'
+                        ? 'bg-teal-400 text-slate-950'
+                        : 'bg-teal-100 text-teal-900'
+                    }`}>
+                      {lessonPlans.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Tab 3: Settings & Preferences */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('settings')}
+                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                    currentPage === 'settings'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <SettingsIcon className="w-4 h-4 text-teal-400" />
+                  <span>{t.navSettings || 'Preferences'}</span>
+                </button>
+              </div>
+
+              {/* Status info */}
+              <div className="hidden lg:flex items-center space-x-2 text-xs font-semibold text-slate-500 pr-2">
+                <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse" />
+                <span>Rwanda CBC 8-Column Official Generator</span>
+              </div>
+            </div>
+
+            {/* Sub-View 1: Main Create Lesson Plan View (Primary) */}
+            {currentPage === 'create' && (
+              <CreateLessonPlanView
+                initialPlan={editingPlan}
+                onSavePlan={handleSaveLessonPlan}
+                onPrintPreview={handlePrintPlan}
+                onCancelOrNew={handleCreateNew}
+              />
+            )}
+
+            {/* Sub-View 2: Saved Lesson Plans */}
+            {currentPage === 'saved' && (
+              <SavedLessonPlansView
+                lessonPlans={lessonPlans}
+                onEditPlan={handleEditPlan}
+                onDeletePlan={handleDeleteLessonPlan}
+                onDuplicatePlan={handleDuplicateLessonPlan}
+                onPrintPlan={handlePrintPlan}
+                onCreateNew={handleCreateNew}
+              />
+            )}
+
+            {/* Sub-View 3: Preferences / Settings */}
+            {currentPage === 'settings' && (
+              <SettingsView
+                totalPlansCount={lessonPlans.length}
+                onNavigate={(page) => {
+                  if (page === 'saved' || page === 'create' || page === 'settings') {
+                    setCurrentPage(page);
+                  } else {
+                    setCurrentPage('dashboard');
+                  }
+                }}
+                onDataImported={refreshData}
+              />
+            )}
+
+          </div>
+        )}
+
+        {/* 
+          PRESERVED BUT HIDDEN SECTIONS:
+          The following components are preserved in the codebase for future administrator activation 
+          as required by instructions, but remain completely hidden from all standard user paths.
+        */}
+        {false && (
+          <div style={{ display: 'none' }}>
             <StudentsIdentificationView
               lessonPlans={lessonPlans}
-              onNavigate={setCurrentPage}
+              onNavigate={(page) => setCurrentPage(page as AppPage)}
               onSelectPlanToEdit={handleEditPlan}
               onCreateNewWithStudents={handleCreateNew}
             />
-          )}
-
-          {/* 4. Centralized Dashboard View */}
-          {currentPage === 'dashboard' && (
-            <DashboardView
-              lessonPlans={lessonPlans}
-              onNavigate={setCurrentPage}
-              onSelectPlanToEdit={handleEditPlan}
-              onSelectPlanToPrint={handlePrintPlan}
+            <Sidebar
+              currentPage="create"
+              onNavigate={(page) => setCurrentPage(page as AppPage)}
+              savedCount={lessonPlans.length}
+              isCollapsed={false}
+              onToggleCollapse={() => {}}
+              isMobileOpen={false}
+              onCloseMobile={() => {}}
+              onOpenAuth={() => {}}
             />
-          )}
-
-          {/* 5. Settings & Cloud Sync View */}
-          {currentPage === 'settings' && (
-            <SettingsView
-              totalPlansCount={lessonPlans.length}
-              onNavigate={setCurrentPage}
-              onDataImported={refreshData}
+            <Header
+              currentPage="create"
+              onOpenMobileMenu={() => {}}
+              onOpenAuth={() => {}}
+              isSidebarCollapsed={false}
             />
-          )}
-
-          {/* 6. Admin Management Dashboard View (Protected, Gated by Feature Flag) */}
-          {currentPage === 'admin' && isAdmin && FEATURE_FLAGS.ENABLE_ADMIN_UI && (
-            <AdminDashboardView
-              lessonPlans={lessonPlans}
-              onNavigate={setCurrentPage}
-            />
-          )}
-        </main>
-
-        {/* Print / PDF Export Modal */}
-        {printingPlan && (
-          <PrintLessonPlanModal
-            plan={printingPlan}
-            onClose={() => setPrintingPlan(null)}
-          />
-        )}
-
-        {/* Authentication Modal (Available only when Admin UI is enabled) */}
-        {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
-          <AuthModal
-            isOpen={isAuthModalOpen}
-            onClose={() => setIsAuthModalOpen(false)}
-          />
-        )}
-
-        {/* Professional SaaS Footer */}
-        <footer className="no-print bg-white border-t border-slate-200 py-5 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-slate-800">
-                ISEZERANO Lesson Plan
-              </span>
-              <span>•</span>
-              <span>Rwanda Competence-Based Curriculum (CBC)</span>
-            </div>
-            <div className="flex items-center space-x-3 text-slate-400">
-              <span>MINEDUC / REB National Curriculum Compliance</span>
-              {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
-                <>
-                  <span>•</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isAdmin) {
-                        setCurrentPage('admin');
-                      } else {
-                        setIsAuthModalOpen(true);
-                      }
-                    }}
-                    className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer py-1 px-2 rounded-md hover:bg-slate-100"
-                    title="Website Owner / Administrator Portal"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="font-medium">{isAdmin ? 'Admin Dashboard' : 'Admin Portal'}</span>
-                  </button>
-                </>
-              )}
-            </div>
+            {FEATURE_FLAGS.ENABLE_ADMIN_UI && isAdmin && (
+              <AdminDashboardView
+                lessonPlans={lessonPlans}
+                onNavigate={(page) => setCurrentPage(page as AppPage)}
+              />
+            )}
+            {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
+              <AuthModal
+                isOpen={false}
+                onClose={() => {}}
+              />
+            )}
           </div>
-        </footer>
-      </div>
+        )}
+
+      </main>
+
+      {/* 3. Global Print / PDF Export Modal */}
+      {printingPlan && (
+        <PrintLessonPlanModal
+          plan={printingPlan}
+          onClose={() => setPrintingPlan(null)}
+        />
+      )}
+
+      {/* 4. Global Professional Public Website Footer */}
+      <WebsiteFooter 
+        onNavigate={(page) => {
+          if (page === 'admin' && isAdmin) {
+            setCurrentPage('admin');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            handleNavigate(page);
+          }
+        }}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+      />
+
+      {/* 5. Authentication Modal for Teachers & Admins */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
+
     </div>
   );
 }

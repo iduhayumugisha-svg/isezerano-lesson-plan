@@ -30,20 +30,21 @@ import { getAppSettings, saveAppSettings } from '../services/appSettingsService'
 import { listUsers, setUserStatus, setUserRole } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
+import { SliderManager } from '../components/SliderManager';
 
 interface AdminDashboardViewProps {
   lessonPlans: LessonPlan[];
   onNavigate: (page: SaasNavPage) => void;
 }
 
-type AdminTab = 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'slider' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
   onNavigate
 }) => {
   const { user, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('modules');
+  const [activeTab, setActiveTab] = useState<AdminTab>('slider');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -293,8 +294,20 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm flex flex-wrap gap-1">
         <button
+          onClick={() => setActiveTab('slider')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'slider'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-300" />
+          <span>Homepage Hero Slider</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('modules')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'modules'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -306,7 +319,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           onClick={() => setActiveTab('curriculum')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'curriculum'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -318,7 +331,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           onClick={() => setActiveTab('teachers')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'teachers'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -330,7 +343,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           onClick={() => setActiveTab('usage')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'usage'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -342,7 +355,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           onClick={() => setActiveTab('security')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'security'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -352,6 +365,11 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
           <span>Admin Setup & Security</span>
         </button>
       </div>
+
+      {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
+      {activeTab === 'slider' && (
+        <SliderManager />
+      )}
 
       {/* ================= TAB 1: MODULES & PLATFORM ================= */}
       {activeTab === 'modules' && settings && (

@@ -1,6 +1,6 @@
 {
-  "name": "Lesson Plan – Primary & Secondary",
-  "description": "Professional Rwanda Competence-Based Curriculum (CBC) lesson planning web application for Primary and Secondary school teachers.",
+  "name": "ISEZERANO ONLINE – GS GITUMBA",
+  "description": "ISEZERANO ONLINE – GS GITUMBA: Professional Rwanda Competence-Based Curriculum (CBC) lesson planning platform for educators and teachers.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
