@@ -7,11 +7,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Only the authorized administrator (twizerefelix90@gmail.com or active admin role)
     function isAdmin() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'twizerefelix90@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active')
+      );
     }
 
     function isOwner(uid) {
@@ -23,12 +26,13 @@ service cloud.firestore {
       // Authenticated users can read profiles
       allow read: if isAuthenticated();
 
-      // New users can create their own profile, MUST have role 'teacher'
-      allow create: if isOwner(userId) && 
-        request.resource.data.role == 'teacher' &&
-        request.resource.data.status == 'active';
+      // New users can create their own profile (defaults to teacher unless authorized admin)
+      allow create: if isOwner(userId) && (
+        (request.resource.data.role == 'teacher' && request.resource.data.status == 'active') ||
+        isAdmin()
+      );
 
-      // Users can update their own non-sensitive profile fields (cannot escalate own role or unfreeze status)
+      // Users can update their own non-sensitive profile fields; Admin can update all
       allow update: if (isOwner(userId) && 
         request.resource.data.role == resource.data.role && 
         request.resource.data.status == resource.data.status) || isAdmin();
@@ -71,10 +75,10 @@ service cloud.firestore {
 
     // 4. Homepage Hero Slides
     match /homepage_slides/{slideId} {
-      // Anyone can read slides for the homepage carousel
+      // Anyone (including ordinary website visitors) can read published slides
       allow read: if true;
 
-      // Only verified Admin can create, update, or delete slides
+      // Only the authorized administrator (twizerefelix90@gmail.com or verified admin role) can add, replace, delete, reorder, and publish photos
       allow write: if isAdmin();
     }
 

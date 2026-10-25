@@ -9,12 +9,14 @@ import {
   BookOpen, 
   ChevronRight,
   ShieldCheck,
-  ArrowRight
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
+import { useAuth } from '../context/AuthContext';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'admin';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -28,6 +30,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   savedCount = 0
 }) => {
   const { language, setLanguage, t } = useLanguage();
+  const { isAdmin } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isLessonPlanActive = ['create', 'saved', 'settings'].includes(currentPage);
@@ -144,6 +147,22 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               </select>
             </div>
 
+            {/* Admin Manage Photos Button (Visible only to authorized administrator twizerefelix90@gmail.com) */}
+            {isAdmin && (
+              <button
+                onClick={() => handleNavClick('admin')}
+                className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold border transition-all cursor-pointer ${
+                  currentPage === 'admin'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                }`}
+                title="Manage Homepage Photos (Admin: twizerefelix90@gmail.com)"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-700" />
+                <span>Manage Photos</span>
+              </button>
+            )}
+
             {/* Quick Action Button: Go to Dashboard */}
             <button
               onClick={() => handleNavClick('dashboard')}
@@ -156,6 +175,17 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
           {/* Mobile Hamburger Button */}
           <div className="flex items-center space-x-2 md:hidden">
+            {isAdmin && (
+              <button
+                onClick={() => handleNavClick('admin')}
+                className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 shadow-2xs"
+                title="Manage Homepage Photos"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-900" />
+                <span>Photos</span>
+              </button>
+            )}
+
             <button
               onClick={() => handleNavClick('dashboard')}
               className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-2xs"
@@ -180,6 +210,23 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 shadow-lg">
           <div className="flex flex-col space-y-1">
+            {isAdmin && (
+              <button
+                onClick={() => handleNavClick('admin')}
+                className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg text-sm font-bold transition-colors ${
+                  currentPage === 'admin'
+                    ? 'bg-amber-100 text-amber-950 border border-amber-400'
+                    : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-600" />
+                  <span>Manage Homepage Photos (Admin)</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-amber-600" />
+              </button>
+            )}
+
             {navLinks.map((link) => (
               <button
                 key={link.id}

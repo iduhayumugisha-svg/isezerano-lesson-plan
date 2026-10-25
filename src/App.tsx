@@ -30,6 +30,7 @@ import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
+import { AdminPortalGateway } from './views/AdminPortalGateway';
 
 // Preserved Hidden Views (Retained for future activation, hidden from UI)
 import { StudentsIdentificationView } from './views/StudentsIdentificationView';
@@ -44,12 +45,41 @@ import { FEATURE_FLAGS } from './config/features';
 
 export type AppPage = WebsitePage | 'students' | 'admin';
 
+// Helper to determine initial page from browser URL or hash (/admin, /manage, #admin, etc.)
+const getPageFromUrl = (): AppPage => {
+  if (typeof window === 'undefined') return 'home';
+  const pathname = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const search = new URLSearchParams(window.location.search);
+
+  if (
+    pathname === '/admin' || 
+    pathname.startsWith('/admin/') || 
+    pathname === '/manage' || 
+    pathname.startsWith('/manage/') ||
+    hash === '#admin' || 
+    hash === '#manage' ||
+    search.get('page') === 'admin'
+  ) {
+    return 'admin';
+  }
+  if (pathname === '/dashboard' || hash === '#dashboard' || search.get('page') === 'dashboard') return 'dashboard';
+  if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
+  if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
+  if (pathname === '/settings' || hash === '#settings' || search.get('page') === 'settings') return 'settings';
+  if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
+  if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
+  if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
+
+  return 'home';
+};
+
 function AppContent() {
   const { t } = useLanguage();
   const { user, isAdmin } = useAuth();
 
-  // Requirement 1: Home page must be the first page displayed when someone opens the website
-  const [currentPage, setCurrentPage] = useState<AppPage>('home');
+  // Route state initialized from browser URL (/admin, /manage, #admin, etc.)
+  const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -64,6 +94,16 @@ function AppContent() {
 
   useEffect(() => {
     refreshData();
+
+    // Listen to browser navigation (back/forward button and hash changes)
+    const handleUrlChange = () => {
+      const detected = getPageFromUrl();
+      setCurrentPage(detected);
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+
     // Clean up unwanted tracking parameters (e.g. ?utm_source=chatgpt.com) from browser URL
     if (typeof window !== 'undefined' && window.location.search) {
       try {
@@ -83,17 +123,19 @@ function AppContent() {
         // ignore
       }
     }
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
   }, []);
 
-  // Redirect hidden routes (admin or students) safely
+  // Redirect legacy hidden routes safely (students)
   useEffect(() => {
-    if (currentPage === 'admin' && !isAdmin) {
-      setCurrentPage('dashboard');
-    }
     if (currentPage === 'students') {
       setCurrentPage('dashboard');
     }
-  }, [isAdmin, currentPage]);
+  }, [currentPage]);
 
   // Lesson plan save handler with ownerUid binding
   const handleSaveLessonPlan = async (plan: LessonPlan): Promise<{ success: boolean; error?: string }> => {
@@ -151,9 +193,24 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleNavigate = (page: WebsitePage) => {
+  const handleNavigate = (page: WebsitePage | 'admin' | 'students') => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (typeof window !== 'undefined') {
+      try {
+        const targetPath = page === 'home' 
+          ? '/' 
+          : page === 'admin' 
+          ? '/admin' 
+          : `/${page}`;
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ page }, '', targetPath);
+        }
+      } catch {
+        // Fallback or hash
+      }
+    }
   };
 
   const isLessonPlanWorkspace = ['create', 'saved', 'settings'].includes(currentPage);
@@ -188,9 +245,8 @@ function AppContent() {
                 handleNavigate('home');
               } else if (page === 'create' || page === 'saved' || page === 'settings') {
                 handleNavigate(page);
-              } else if (page === 'admin' && isAdmin) {
-                setCurrentPage('admin');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else if (page === 'admin') {
+                handleNavigate('admin');
               } else {
                 handleNavigate('dashboard');
               }
@@ -200,19 +256,26 @@ function AppContent() {
           />
         )}
 
-        {/* ADMIN DASHBOARD & SLIDER MANAGEMENT VIEW: Accessible only to verified administrators */}
-        {currentPage === 'admin' && isAdmin && (
+        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin, /manage, or footer link */}
+        {currentPage === 'admin' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            <AdminDashboardView
-              lessonPlans={lessonPlans}
-              onNavigate={(page) => {
-                if (page === 'create' || page === 'saved' || page === 'settings') {
-                  handleNavigate(page);
-                } else {
-                  handleNavigate('dashboard');
-                }
-              }}
-            />
+            {isAdmin ? (
+              <AdminDashboardView
+                lessonPlans={lessonPlans}
+                onNavigate={(page) => {
+                  if (page === 'create' || page === 'saved' || page === 'settings') {
+                    handleNavigate(page);
+                  } else {
+                    handleNavigate('dashboard');
+                  }
+                }}
+              />
+            ) : (
+              <AdminPortalGateway
+                onNavigate={handleNavigate}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              />
+            )}
           </div>
         )}
 
@@ -403,14 +466,7 @@ function AppContent() {
 
       {/* 4. Global Professional Public Website Footer */}
       <WebsiteFooter 
-        onNavigate={(page) => {
-          if (page === 'admin' && isAdmin) {
-            setCurrentPage('admin');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          } else {
-            handleNavigate(page);
-          }
-        }}
+        onNavigate={handleNavigate}
         onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 

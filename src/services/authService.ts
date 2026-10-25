@@ -6,6 +6,8 @@ import {
   onAuthStateChanged,
   updateProfile as fbUpdateProfile,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -42,6 +44,13 @@ const saveLocalUsers = (users: UserProfile[]) => {
   }
 };
 
+export const SUPER_ADMIN_EMAIL = 'twizerefelix90@gmail.com';
+
+export const isAuthorizedAdminEmail = (email?: string | null): boolean => {
+  if (!email) return false;
+  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+};
+
 export const getFirebaseAuth = () => {
   const app = getFirebaseApp();
   if (app) {
@@ -64,12 +73,29 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
+        const userEmail = data.email || '';
+        const isSuperAdmin = isAuthorizedAdminEmail(userEmail);
+        const resolvedRole: UserRole = (isSuperAdmin || data.role === 'admin') ? 'admin' : 'teacher';
+
+        // Self-heal Firestore document if authorized admin was previously stored as teacher
+        if (isSuperAdmin && data.role !== 'admin') {
+          try {
+            await updateDoc(doc(db, 'users', uid), {
+              role: 'admin',
+              status: 'active',
+              updatedAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.warn('Could not auto-promote admin in Firestore:', e);
+          }
+        }
+
         return {
           uid: data.uid || uid,
-          email: data.email || '',
-          displayName: data.displayName || data.email?.split('@')[0] || 'Teacher',
-          role: (data.role === 'admin' ? 'admin' : 'teacher') as UserRole,
-          status: (data.status === 'inactive' ? 'inactive' : 'active') as UserStatus,
+          email: userEmail,
+          displayName: data.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+          role: resolvedRole,
+          status: (data.status === 'inactive' && !isSuperAdmin ? 'inactive' : 'active') as UserStatus,
           schoolName: data.schoolName || '',
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString()
@@ -83,13 +109,25 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   // Local fallback
   const localUsers = getLocalUsers();
   const found = localUsers.find(u => u.uid === uid);
-  if (found) return found;
+  if (found) {
+    if (isAuthorizedAdminEmail(found.email)) {
+      found.role = 'admin';
+      found.status = 'active';
+    }
+    return found;
+  }
 
   const rawSession = localStorage.getItem(LOCAL_USER_KEY);
   if (rawSession) {
     try {
       const session = JSON.parse(rawSession);
-      if (session && session.uid === uid) return session;
+      if (session && session.uid === uid) {
+        if (isAuthorizedAdminEmail(session.email)) {
+          session.role = 'admin';
+          session.status = 'active';
+        }
+        return session;
+      }
     } catch {
       // ignore
     }
@@ -99,7 +137,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 };
 
 /**
- * Register a new user. Always defaults strictly to role: 'teacher'.
+ * Register a new user. Auto-grants role 'admin' if email is twizerefelix90@gmail.com.
  */
 export const signUp = async (
   email: string, 
@@ -109,10 +147,12 @@ export const signUp = async (
 ): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
   const auth = getFirebaseAuth();
   const db = initFirestoreIfConfigured();
+  const cleanEmail = email.trim();
+  const isSuperAdmin = isAuthorizedAdminEmail(cleanEmail);
 
   if (auth && db) {
     try {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = credential.user;
 
       if (displayName) {
@@ -121,11 +161,11 @@ export const signUp = async (
 
       const newProfile: UserProfile = {
         uid: user.uid,
-        email: user.email || email.trim(),
-        displayName: displayName || user.email?.split('@')[0] || 'Teacher',
-        role: 'teacher', // ALWAYS strictly teacher
+        email: user.email || cleanEmail,
+        displayName: displayName || user.email?.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+        role: isSuperAdmin ? 'admin' : 'teacher',
         status: 'active',
-        schoolName: schoolName || '',
+        schoolName: schoolName || (isSuperAdmin ? 'GS GITUMBA' : ''),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -191,15 +231,16 @@ export const signIn = async (
         return { success: true, user: profile };
       }
 
-      // If document does not exist yet in Firestore, create default teacher record
+      // If document does not exist yet in Firestore, create default profile record
       const db = initFirestoreIfConfigured();
+      const isSuperAdmin = isAuthorizedAdminEmail(user.email || email);
       const defaultProfile: UserProfile = {
         uid: user.uid,
         email: user.email || email.trim(),
-        displayName: user.displayName || user.email?.split('@')[0] || 'Teacher',
-        role: 'teacher',
+        displayName: user.displayName || user.email?.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+        role: isSuperAdmin ? 'admin' : 'teacher',
         status: 'active',
-        schoolName: '',
+        schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -224,6 +265,10 @@ export const signIn = async (
   const localUsers = getLocalUsers();
   const found = localUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
   if (found) {
+    if (isAuthorizedAdminEmail(found.email)) {
+      found.role = 'admin';
+      found.status = 'active';
+    }
     if (found.status === 'inactive') {
       return { success: false, error: 'Your account has been deactivated by an Administrator.' };
     }
@@ -232,6 +277,75 @@ export const signIn = async (
   }
 
   return { success: false, error: 'Invalid credentials or user not found. Please sign up or configure Firebase.' };
+};
+
+/**
+ * Sign In with Google Popup (Quick 1-click authentication for twizerefelix90@gmail.com)
+ */
+export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+  const auth = getFirebaseAuth();
+
+  if (auth) {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const credential = await signInWithPopup(auth, provider);
+      const user = credential.user;
+
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        if (profile.status === 'inactive') {
+          await fbSignOut(auth);
+          return { success: false, error: 'Your account has been deactivated by an Administrator.' };
+        }
+        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+        return { success: true, user: profile };
+      }
+
+      // If document does not exist yet in Firestore, create profile
+      const db = initFirestoreIfConfigured();
+      const userEmail = user.email || '';
+      const isSuperAdmin = isAuthorizedAdminEmail(userEmail);
+      const defaultProfile: UserProfile = {
+        uid: user.uid,
+        email: userEmail,
+        displayName: user.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+        role: isSuperAdmin ? 'admin' : 'teacher',
+        status: 'active',
+        schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (db) {
+        try {
+          await setDoc(doc(db, 'users', user.uid), defaultProfile);
+        } catch (e) {
+          console.warn('Failed to auto-create user document in Firestore:', e);
+        }
+      }
+
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
+      return { success: true, user: defaultProfile };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Google sign-in was cancelled or failed';
+      return { success: false, error: message };
+    }
+  }
+
+  // Local fallback
+  const adminProfile: UserProfile = {
+    uid: 'local-admin-felix',
+    email: SUPER_ADMIN_EMAIL,
+    displayName: 'Felix Twizere (Administrator)',
+    role: 'admin',
+    status: 'active',
+    schoolName: 'GS GITUMBA',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(adminProfile));
+  return { success: true, user: adminProfile };
 };
 
 /**

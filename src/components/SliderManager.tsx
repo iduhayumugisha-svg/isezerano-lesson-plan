@@ -261,14 +261,14 @@ export const SliderManager: React.FC<SliderManagerProps> = ({ onClose }) => {
         <div>
           <div className="flex items-center space-x-2 text-teal-800 text-xs font-bold uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4 text-teal-600" />
-            <span>Homepage Hero Slider System</span>
+            <span>Homepage Hero Photo Management System</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Manage Homepage Slider
+            Manage Homepage Photos
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-            Add, edit, reorder, and publish carousel slides displayed on the ISEZERANO ONLINE homepage. 
-            All uploads are compressed automatically on your device for 100% free hosting.
+            Upload, replace, delete, reorder, and publish hero photos displayed on the ISEZERANO ONLINE – GS GITUMBA homepage carousel.
+            Authorized Administrator: <strong className="text-teal-900 font-bold">twizerefelix90@gmail.com</strong>.
           </p>
         </div>
 
@@ -278,7 +278,7 @@ export const SliderManager: React.FC<SliderManagerProps> = ({ onClose }) => {
             onClick={loadSlides}
             disabled={isLoading}
             className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-            title="Refresh slides"
+            title="Refresh photos"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -286,10 +286,10 @@ export const SliderManager: React.FC<SliderManagerProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition-all cursor-pointer ring-2 ring-teal-500/20 active:scale-98"
+            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-teal-700 hover:bg-teal-600 shadow-sm transition-all cursor-pointer ring-2 ring-teal-500/20 active:scale-98"
           >
-            <Plus className="w-4 h-4 text-teal-400" />
-            <span>Add New Slide</span>
+            <Plus className="w-4 h-4 text-white" />
+            <span>Upload New Photo</span>
           </button>
 
           {onClose && (
@@ -451,6 +451,21 @@ export const SliderManager: React.FC<SliderManagerProps> = ({ onClose }) => {
                     }`}
                   >
                     {slide.published ? 'Unpublish' : 'Publish'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenEdit(slide);
+                      setTimeout(() => {
+                        fileInputRef.current?.click();
+                      }, 200);
+                    }}
+                    className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold cursor-pointer"
+                    title="Upload or select a replacement photo"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-teal-700" />
+                    <span>Replace Photo</span>
                   </button>
 
                   <button

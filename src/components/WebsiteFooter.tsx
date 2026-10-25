@@ -112,6 +112,22 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                   {t.navPrivacy || 'Privacy Policy'}
                 </button>
               </li>
+              <li className="pt-2 border-t border-slate-800/80">
+                <button
+                  onClick={() => {
+                    onNavigate('admin');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer inline-flex items-center space-x-1.5 group"
+                  title="Administrator Management Portal"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                  <span>Admin Portal</span>
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    Staff
+                  </span>
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -176,17 +192,14 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
             <span>•</span>
             <button
               onClick={() => {
-                if (isAdmin) {
-                  onNavigate('admin');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                } else if (onOpenAuth) {
-                  onOpenAuth();
-                }
+                onNavigate('admin');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="hover:text-slate-300 transition-colors cursor-pointer text-slate-500 hover:text-slate-400"
+              className="hover:text-amber-300 transition-colors cursor-pointer text-amber-400/90 font-medium inline-flex items-center space-x-1"
               title="Administrator Management Access"
             >
-              {user ? (isAdmin ? 'Admin Dashboard' : 'Account') : 'Admin Portal'}
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>Admin Portal</span>
             </button>
           </div>
         </div>

@@ -170,6 +170,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="absolute right-0 bottom-0 translate-x-8 translate-y-8 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
       </div>
 
+      {/* Authorized Administrator Quick Access Banner */}
+      {isAdmin && (
+        <div className="bg-gradient-to-r from-teal-900 via-slate-900 to-slate-900 text-white p-5 rounded-2xl border border-teal-500/40 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-11 h-11 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-300" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-400">
+                  Administrator Workspace
+                </span>
+                <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full font-bold border border-teal-500/30">
+                  twizerefelix90@gmail.com
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-white mt-0.5">
+                Manage Homepage Photos & Administration
+              </h3>
+              <p className="text-xs text-slate-300">
+                Upload, replace, reorder, delete, and publish homepage hero slider photos and configure curriculum settings.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('admin')}
+            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all cursor-pointer shrink-0 active:scale-98"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Open Photo Manager →</span>
+          </button>
+        </div>
+      )}
+
       {/* ================= CENTRALIZED EDUCATION MODULES GRID ================= */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">

@@ -6,7 +6,8 @@ import {
   signOut as apiSignOut, 
   subscribeToAuth, 
   getUserProfile,
-  sendPasswordReset as apiSendPasswordReset
+  sendPasswordReset as apiSendPasswordReset,
+  signInWithGoogle as apiSignInWithGoogle
 } from '../services/authService';
 
 interface AuthContextType {
@@ -15,6 +16,7 @@ interface AuthContextType {
   isTeacher: boolean;
   isLoading: boolean;
   signIn: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, pass: string, name: string, school?: string) => Promise<{ success: boolean; error?: string }>;
   signOutUser: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -41,6 +43,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, pass: string) => {
     setIsLoading(true);
     const result = await apiSignIn(email, pass);
+    if (result.success && result.user) {
+      setUser(result.user);
+    }
+    setIsLoading(false);
+    return result;
+  };
+
+  const signInWithGoogle = async () => {
+    setIsLoading(true);
+    const result = await apiSignInWithGoogle();
     if (result.success && result.user) {
       setUser(result.user);
     }
@@ -78,8 +90,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isAdmin = Boolean(user && user.role === 'admin' && user.status === 'active');
-  const isTeacher = Boolean(user && (user.role === 'teacher' || user.role === 'admin') && user.status === 'active');
+  const isAdmin = Boolean(
+    user && 
+    (user.role === 'admin' || user.email?.toLowerCase() === 'twizerefelix90@gmail.com') && 
+    user.status === 'active'
+  );
+  const isTeacher = Boolean(user && (user.role === 'teacher' || user.role === 'admin' || user.email?.toLowerCase() === 'twizerefelix90@gmail.com') && user.status === 'active');
 
   return (
     <AuthContext.Provider
@@ -89,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isTeacher,
         isLoading,
         signIn,
+        signInWithGoogle,
         signUp,
         signOutUser,
         sendResetEmail,

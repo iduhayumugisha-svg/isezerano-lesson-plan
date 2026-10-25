@@ -241,17 +241,17 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
   return (
     <div className="space-y-6 pb-16">
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-slate-900 rounded-2xl p-6 text-white shadow-lg border border-purple-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-2xl p-6 text-white shadow-lg border border-teal-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-xs font-semibold mb-2 border border-purple-500/30">
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-            <span>Authorized Administrator Workspace</span>
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-semibold mb-2 border border-teal-500/30">
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+            <span>Authorized Administrator: twizerefelix90@gmail.com</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-            ISEZERANO Admin Management Dashboard
+            ISEZERANO ONLINE – Admin Management Dashboard
           </h1>
           <p className="text-xs text-slate-300 mt-1">
-            Configure system modules, curriculum parameters, and teacher accounts.
+            Manage homepage photos, curriculum parameters, platform settings, and teacher access.
           </p>
         </div>
 
@@ -259,7 +259,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
           <button
             onClick={loadAdminData}
             disabled={isLoading}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
             title="Refresh Data"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -267,7 +267,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
           <button
             onClick={handleSaveSettings}
             disabled={isSaving || !settings}
-            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>{isSaving ? 'Saving...' : 'Save All Settings'}</span>
@@ -295,14 +295,17 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
       <div className="bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm flex flex-wrap gap-1">
         <button
           onClick={() => setActiveTab('slider')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'slider'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
           <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>Homepage Hero Slider</span>
+          <span>Manage Homepage Photos</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'slider' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            Photos & Slider
+          </span>
         </button>
 
         <button

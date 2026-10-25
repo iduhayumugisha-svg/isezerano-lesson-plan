@@ -12,6 +12,7 @@
  *   controls will immediately be restored for verified Admin accounts.
  */
 export const FEATURE_FLAGS = {
-  // Toggle this flag to true when ready to activate visible Admin UI
-  ENABLE_ADMIN_UI: false,
+  // Activated: Admin Portal and administrative management controls are restored
+  ENABLE_ADMIN_UI: true,
 } as const;
+
