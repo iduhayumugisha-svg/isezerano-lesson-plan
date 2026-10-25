@@ -236,7 +236,7 @@ async function promoteToAdmin(targetEmail) {
 }
 
 // Example usage:
-promoteToAdmin('twizerefelix90@gmail.com');`;
+promoteToAdmin('admin@example.com');`;
 
   return (
     <div className="space-y-6 pb-16">
@@ -245,7 +245,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-semibold mb-2 border border-teal-500/30">
             <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-            <span>Authorized Administrator: twizerefelix90@gmail.com</span>
+            <span>Authorized Administrator{user?.displayName ? `: ${user.displayName}` : ''}</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
             ISEZERANO ONLINE – Admin Management Dashboard

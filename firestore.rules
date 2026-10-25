@@ -7,9 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Only the authorized administrator (twizerefelix90@gmail.com or active admin role)
+    // Only the authorized administrator (Custom Claims admin == true, verified administrator email, or active admin role)
     function isAdmin() {
       return isAuthenticated() && (
+        (request.auth.token.admin == true) ||
         (request.auth.token.email != null && request.auth.token.email.lower() == 'twizerefelix90@gmail.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&

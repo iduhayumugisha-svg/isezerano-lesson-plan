@@ -183,7 +183,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Administrator Workspace
                 </span>
                 <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full font-bold border border-teal-500/30">
-                  twizerefelix90@gmail.com
+                  Verified Admin
                 </span>
               </div>
               <h3 className="text-base font-bold text-white mt-0.5">

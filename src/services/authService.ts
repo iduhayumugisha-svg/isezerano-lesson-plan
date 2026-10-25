@@ -44,11 +44,11 @@ const saveLocalUsers = (users: UserProfile[]) => {
   }
 };
 
-export const SUPER_ADMIN_EMAIL = 'twizerefelix90@gmail.com';
+export const SUPER_ADMIN_EMAIL = ((import.meta as any).env?.VITE_ADMIN_EMAIL || 'twizerefelix90@gmail.com').toLowerCase().trim();
 
 export const isAuthorizedAdminEmail = (email?: string | null): boolean => {
   if (!email) return false;
-  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 };
 
 export const getFirebaseAuth = () => {
@@ -67,14 +67,25 @@ export const getFirebaseAuth = () => {
  * Fetch a user's profile from Firestore `users/{uid}`
  */
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+  const auth = getFirebaseAuth();
+  let hasAdminClaim = false;
+  if (auth?.currentUser && auth.currentUser.uid === uid) {
+    try {
+      const tokenResult = await auth.currentUser.getIdTokenResult();
+      hasAdminClaim = Boolean(tokenResult.claims && tokenResult.claims.admin === true);
+    } catch {
+      // ignore
+    }
+  }
+
   const db = initFirestoreIfConfigured();
   if (db) {
     try {
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
-        const userEmail = data.email || '';
-        const isSuperAdmin = isAuthorizedAdminEmail(userEmail);
+        const userEmail = data.email || auth?.currentUser?.email || '';
+        const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
         const resolvedRole: UserRole = (isSuperAdmin || data.role === 'admin') ? 'admin' : 'teacher';
 
         // Self-heal Firestore document if authorized admin was previously stored as teacher
@@ -137,7 +148,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 };
 
 /**
- * Register a new user. Auto-grants role 'admin' if email is twizerefelix90@gmail.com.
+ * Register a new user. Defaults to teacher unless authorized admin.
  */
 export const signUp = async (
   email: string, 
@@ -212,7 +223,7 @@ export const signUp = async (
 export const signIn = async (
   email: string, 
   password: string
-): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }> => {
   const auth = getFirebaseAuth();
 
   if (auth) {
@@ -220,20 +231,29 @@ export const signIn = async (
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const user = credential.user;
 
+      // Check Custom Claims on token
+      let hasAdminClaim = false;
+      try {
+        const idTokenResult = await user.getIdTokenResult();
+        hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
+      } catch {
+        // ignore
+      }
+
       // Load Firestore profile to get verified role
       const profile = await getUserProfile(user.uid);
       if (profile) {
         if (profile.status === 'inactive') {
           await fbSignOut(auth);
-          return { success: false, error: 'Your teacher account has been deactivated by an Administrator.' };
+          return { success: false, error: 'Your account has been deactivated by an Administrator.' };
         }
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-        return { success: true, user: profile };
+        return { success: true, user: profile, isAdmin: hasAdminClaim || profile.role === 'admin' };
       }
 
       // If document does not exist yet in Firestore, create default profile record
       const db = initFirestoreIfConfigured();
-      const isSuperAdmin = isAuthorizedAdminEmail(user.email || email);
+      const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(user.email || email);
       const defaultProfile: UserProfile = {
         uid: user.uid,
         email: user.email || email.trim(),
@@ -254,7 +274,7 @@ export const signIn = async (
       }
 
       localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
-      return { success: true, user: defaultProfile };
+      return { success: true, user: defaultProfile, isAdmin: isSuperAdmin };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Invalid email or password';
       return { success: false, error: message };
@@ -273,24 +293,37 @@ export const signIn = async (
       return { success: false, error: 'Your account has been deactivated by an Administrator.' };
     }
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(found));
-    return { success: true, user: found };
+    return { success: true, user: found, isAdmin: found.role === 'admin' };
   }
 
   return { success: false, error: 'Invalid credentials or user not found. Please sign up or configure Firebase.' };
 };
 
 /**
- * Sign In with Google Popup (Quick 1-click authentication for twizerefelix90@gmail.com)
+ * Sign In with Google Popup (With account picker prompt)
  */
-export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
+export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }> => {
   const auth = getFirebaseAuth();
 
   if (auth) {
     try {
       const provider = new GoogleAuthProvider();
+      // Forces Google to show account selection picker so user can choose which Google account to use
       provider.setCustomParameters({ prompt: 'select_account' });
       const credential = await signInWithPopup(auth, provider);
       const user = credential.user;
+
+      // Check Custom Claims on verified Firebase ID Token
+      let hasAdminClaim = false;
+      try {
+        const idTokenResult = await user.getIdTokenResult(true);
+        hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
+      } catch (claimErr) {
+        console.warn('Could not read ID token claims:', claimErr);
+      }
+
+      const userEmail = user.email || '';
+      const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
 
       const profile = await getUserProfile(user.uid);
       if (profile) {
@@ -298,14 +331,15 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
           await fbSignOut(auth);
           return { success: false, error: 'Your account has been deactivated by an Administrator.' };
         }
+        if (isSuperAdmin && profile.role !== 'admin') {
+          profile.role = 'admin';
+        }
         localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-        return { success: true, user: profile };
+        return { success: true, user: profile, isAdmin: isSuperAdmin || profile.role === 'admin' };
       }
 
-      // If document does not exist yet in Firestore, create profile
+      // If document does not exist yet in Firestore, create default profile record
       const db = initFirestoreIfConfigured();
-      const userEmail = user.email || '';
-      const isSuperAdmin = isAuthorizedAdminEmail(userEmail);
       const defaultProfile: UserProfile = {
         uid: user.uid,
         email: userEmail,
@@ -326,26 +360,14 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
       }
 
       localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
-      return { success: true, user: defaultProfile };
+      return { success: true, user: defaultProfile, isAdmin: isSuperAdmin };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Google sign-in was cancelled or failed';
       return { success: false, error: message };
     }
   }
 
-  // Local fallback
-  const adminProfile: UserProfile = {
-    uid: 'local-admin-felix',
-    email: SUPER_ADMIN_EMAIL,
-    displayName: 'Felix Twizere (Administrator)',
-    role: 'admin',
-    status: 'active',
-    schoolName: 'GS GITUMBA',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(adminProfile));
-  return { success: true, user: adminProfile };
+  return { success: false, error: 'Firebase Authentication is not configured.' };
 };
 
 /**

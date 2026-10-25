@@ -204,7 +204,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* Quick 1-Click Google Sign In (for Administrator twizerefelix90@gmail.com) */}
+          {/* Google Sign In */}
           {view === 'signin' && (
             <div className="space-y-3">
               <button
@@ -279,15 +279,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                 Email Address
               </label>
-              {view === 'signin' && (
-                <button
-                  type="button"
-                  onClick={() => setEmail('twizerefelix90@gmail.com')}
-                  className="text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer underline"
-                >
-                  Fill Owner Email
-                </button>
-              )}
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -298,7 +289,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="twizerefelix90@gmail.com"
+                placeholder="teacher@school.rw"
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-900"
               />
             </div>

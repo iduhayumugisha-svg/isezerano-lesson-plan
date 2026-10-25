@@ -268,7 +268,6 @@ export const SliderManager: React.FC<SliderManagerProps> = ({ onClose }) => {
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
             Upload, replace, delete, reorder, and publish hero photos displayed on the ISEZERANO ONLINE – GS GITUMBA homepage carousel.
-            Authorized Administrator: <strong className="text-teal-900 font-bold">twizerefelix90@gmail.com</strong>.
           </p>
         </div>
 

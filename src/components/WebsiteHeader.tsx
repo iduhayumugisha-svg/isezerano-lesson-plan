@@ -147,7 +147,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               </select>
             </div>
 
-            {/* Admin Manage Photos Button (Visible only to authorized administrator twizerefelix90@gmail.com) */}
+            {/* Admin Manage Photos Button (Visible only to authorized administrator) */}
             {isAdmin && (
               <button
                 onClick={() => handleNavClick('admin')}
@@ -156,7 +156,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
                     : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                 }`}
-                title="Manage Homepage Photos (Admin: twizerefelix90@gmail.com)"
+                title="Manage Homepage Photos (Admin)"
               >
                 <ShieldCheck className="w-4 h-4 text-amber-700" />
                 <span>Manage Photos</span>

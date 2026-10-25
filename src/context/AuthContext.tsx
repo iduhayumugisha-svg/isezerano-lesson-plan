@@ -7,7 +7,8 @@ import {
   subscribeToAuth, 
   getUserProfile,
   sendPasswordReset as apiSendPasswordReset,
-  signInWithGoogle as apiSignInWithGoogle
+  signInWithGoogle as apiSignInWithGoogle,
+  isAuthorizedAdminEmail
 } from '../services/authService';
 
 interface AuthContextType {
@@ -15,8 +16,8 @@ interface AuthContextType {
   isAdmin: boolean;
   isTeacher: boolean;
   isLoading: boolean;
-  signIn: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
-  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, pass: string) => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }>;
   signUp: (email: string, pass: string, name: string, school?: string) => Promise<{ success: boolean; error?: string }>;
   signOutUser: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -92,10 +93,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = Boolean(
     user && 
-    (user.role === 'admin' || user.email?.toLowerCase() === 'twizerefelix90@gmail.com') && 
+    (user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && 
     user.status === 'active'
   );
-  const isTeacher = Boolean(user && (user.role === 'teacher' || user.role === 'admin' || user.email?.toLowerCase() === 'twizerefelix90@gmail.com') && user.status === 'active');
+  const isTeacher = Boolean(user && (user.role === 'teacher' || user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && user.status === 'active');
 
   return (
     <AuthContext.Provider
