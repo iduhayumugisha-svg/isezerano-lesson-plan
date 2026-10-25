@@ -22,10 +22,10 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // 1. Users Collection
+    // 1. Users Collection (Confidential: user directory restricted to owner or admin)
     match /users/{userId} {
-      // Authenticated users can read profiles
-      allow read: if isAuthenticated();
+      // Users can only read their own profile; Admin can read all for oversight
+      allow read: if isOwner(userId) || isAdmin();
 
       // New users can create their own profile (defaults to teacher unless authorized admin)
       allow create: if isOwner(userId) && (
@@ -42,10 +42,10 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 2. Application Configurable Settings
+    // 2. Application Configurable Settings (Curriculum & Platform Parameters)
     match /appSettings/{settingId} {
-      // All authenticated users can read the active curriculum, modules and settings
-      allow read: if isAuthenticated();
+      // General curriculum settings can be read publicly without an account
+      allow read: if true;
 
       // Only verified Admin can modify platform settings
       allow write: if isAdmin();

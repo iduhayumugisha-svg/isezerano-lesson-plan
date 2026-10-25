@@ -1,18 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
+  ShieldAlert,
   Lock, 
-  Mail, 
-  Eye, 
-  EyeOff, 
   AlertCircle, 
   CheckCircle2, 
   ArrowLeft, 
-  KeyRound, 
-  Sparkles,
   LogOut,
-  ExternalLink,
-  BookOpen
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { WebsitePage } from '../components/WebsiteHeader';
@@ -26,15 +21,24 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   onNavigate,
   onOpenAuthModal 
 }) => {
-  const { user, isAdmin, signIn, signInWithGoogle, signOutUser, sendResetEmail } = useAuth();
+  const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
   
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [isResetMode, setIsResetMode] = useState(false);
+
+  // Requirement: If an unauthorized person selects another account or opens admin without permission,
+  // deny access and return them to the public website.
+  useEffect(() => {
+    if (user && !isAdmin) {
+      setErrorMsg('Access Denied: This account is not authorized to access the Admin Portal. Returning to public website...');
+      const timer = setTimeout(async () => {
+        await signOutUser();
+        onNavigate('home');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [user, isAdmin, onNavigate, signOutUser]);
 
   // If already verified admin, fast jump to dashboard
   if (isAdmin) {
@@ -70,10 +74,15 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
       const res = await signInWithGoogle();
       if (res.success) {
         if (res.isAdmin) {
-          setSuccessMsg('Authenticated successfully as Administrator! Loading Dashboard...');
+          setSuccessMsg('Authenticated successfully as Administrator! Opening Dashboard...');
         } else {
-          // Explicitly deny access if the account selected does not have administrator authorization
-          setErrorMsg('This Google account is not authorized to access the Admin Portal.');
+          // Requirement: If an unauthorized person selects another Google account,
+          // deny access and return them to the public website.
+          await signOutUser();
+          setErrorMsg('Access Denied: This Google account is not authorized to access the Admin Portal. Returning to public website...');
+          setTimeout(() => {
+            onNavigate('home');
+          }, 2000);
         }
       } else {
         setErrorMsg(res.error || 'Google sign-in was not completed.');
@@ -85,66 +94,10 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
     }
   };
 
-  // Handle Email & Password Sign-In
-  const handlePasswordSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    if (!email.trim() || !password.trim()) {
-      setErrorMsg('Please enter both your email address and password.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await signIn(email.trim(), password);
-      if (res.success) {
-        if (res.isAdmin) {
-          setSuccessMsg('Authenticated successfully as Administrator! Loading Dashboard...');
-        } else {
-          setErrorMsg('This account is not authorized to access the Admin Portal.');
-        }
-      } else {
-        setErrorMsg(res.error || 'Failed to sign in. Please verify your credentials.');
-      }
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'An error occurred during sign in.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Handle Password Reset Request
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    if (!email.trim()) {
-      setErrorMsg('Please enter your email to receive password reset instructions.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await sendResetEmail(email.trim());
-      if (res.success) {
-        setSuccessMsg(`Password reset instructions have been sent to your email. Please check your inbox.`);
-      } else {
-        setErrorMsg(res.error || 'Failed to send password reset email.');
-      }
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'An error occurred.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="max-w-xl mx-auto px-4 py-8 sm:py-12 space-y-6">
       
-      {/* Back button */}
+      {/* Return to public website button */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => onNavigate('home')}
@@ -185,54 +138,19 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
 
           <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-amber-400/20 text-amber-300 text-xs font-semibold border border-amber-400/30">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>Authorized Management Access</span>
+            <span>Authorized Administrator Access Only</span>
           </div>
 
           <p className="text-xs text-slate-300 mt-3 leading-relaxed">
-            Sign in with an authorized Google account to manage homepage photos, publish announcements, and configure platform settings.
+            This management gateway is strictly restricted to the authorized platform administrator. All visitors and teachers can freely access and use the public lesson planning tools without signing in.
           </p>
         </div>
-
-        {/* Notice for logged-in non-admin user */}
-        {user && !isAdmin && (
-          <div className="p-4 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs space-y-2.5">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Access Restricted</p>
-                <p className="mt-0.5">
-                  This Google account is not authorized to access the Admin Portal.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 pt-1 pl-6">
-              <button
-                type="button"
-                onClick={async () => {
-                  await signOutUser();
-                  handleGoogleSignIn();
-                }}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-950 cursor-pointer transition-colors shadow-2xs"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Choose Another Google Account</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('dashboard')}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-amber-100 cursor-pointer"
-              >
-                Return to Dashboard
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Public info banner */}
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between text-xs text-slate-600">
           <span className="flex items-center space-x-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-            <span>Teachers & public visitors remain in read-only mode</span>
+            <span>Public visitors and teachers require no account</span>
           </span>
           <button
             onClick={() => onNavigate('dashboard')}
@@ -242,159 +160,58 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
+        {/* Action Body */}
         <div className="p-6 sm:p-8 space-y-5">
           {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
+              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span className="font-medium leading-relaxed">{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start space-x-2">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>{successMsg}</span>
+              <span className="font-medium leading-relaxed">{successMsg}</span>
             </div>
           )}
 
-          {!isResetMode ? (
-            <>
-              {/* Primary Action: Google Sign-In with Account Chooser */}
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={isSubmitting}
-                  className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center space-x-3 cursor-pointer disabled:opacity-50 hover:border-slate-400 active:scale-98"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  <span>Sign in with Google</span>
-                </button>
+          {/* Primary Action: Sign in with Google (with Account Chooser prompt) */}
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isSubmitting}
+              className="w-full py-3.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center space-x-3 cursor-pointer disabled:opacity-50 hover:border-slate-400 active:scale-98"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>{isSubmitting ? 'Authenticating with Google...' : 'Sign in with Google'}</span>
+            </button>
 
-                <p className="text-[11px] text-center text-slate-500">
-                  Google will prompt you to select an account. Only authorized administrators will be granted dashboard access.
-                </p>
+            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 text-center space-y-1">
+              <p className="text-xs text-slate-700 font-semibold">
+                Account Selection Required
+              </p>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Google will prompt you to select an account. Only the explicitly authorized administrator account will be permitted to access the dashboard.
+              </p>
+            </div>
+          </div>
 
-                <div className="relative flex items-center justify-center pt-2 pb-1">
-                  <div className="border-t border-slate-200 w-full" />
-                  <span className="bg-white px-3 text-[11px] uppercase font-bold text-slate-400 absolute">
-                    or sign in with password
-                  </span>
-                </div>
-              </div>
-
-              {/* Secondary Option: Email & Password Form */}
-              <form onSubmit={handlePasswordSignIn} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@school.rw"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600 font-medium text-slate-900"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => { setIsResetMode(true); setErrorMsg(null); setSuccessMsg(null); }}
-                      className="text-[11px] text-slate-500 hover:text-teal-700 cursor-pointer"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600 font-medium text-slate-900"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3 rounded-xl font-bold text-xs sm:text-sm bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer mt-2"
-                >
-                  <KeyRound className="w-4 h-4 text-teal-400" />
-                  <span>{isSubmitting ? 'Authenticating...' : 'Sign In with Password'}</span>
-                </button>
-              </form>
-            </>
-          ) : (
-            /* Password Reset Request Form */
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                  Account Email
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@school.rw"
-                    className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600 font-medium text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-teal-700 hover:bg-teal-600 text-white transition-all shadow-sm active:scale-98 disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? 'Sending...' : 'Send Reset Link'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setIsResetMode(false); setErrorMsg(null); setSuccessMsg(null); }}
-                  className="px-4 py-2.5 rounded-xl font-semibold text-xs text-slate-700 hover:bg-slate-100 border border-slate-200 cursor-pointer"
-                >
-                  Back to Sign In
-                </button>
-              </div>
-            </form>
-          )}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => onNavigate('home')}
+              className="w-full py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Cancel and Return to Home
+            </button>
+          </div>
 
         </div>
 

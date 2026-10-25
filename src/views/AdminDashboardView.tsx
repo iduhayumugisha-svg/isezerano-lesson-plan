@@ -238,6 +238,26 @@ async function promoteToAdmin(targetEmail) {
 // Example usage:
 promoteToAdmin('admin@example.com');`;
 
+  // Defense-in-depth: Strict authorization guard
+  if (!isAdmin) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 text-center bg-white rounded-2xl border border-red-200 shadow-md space-y-4">
+        <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900">Administrator Access Required</h2>
+        <p className="text-sm text-slate-600">
+          This management dashboard is restricted exclusively to authorized platform administrators.
+        </p>
+        <button
+          onClick={() => onNavigate('dashboard')}
+          className="inline-flex items-center space-x-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Return to Public Website</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-16">
       {/* Top Banner */}
