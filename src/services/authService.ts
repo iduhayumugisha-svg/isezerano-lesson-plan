@@ -21,7 +21,13 @@ import {
   orderBy 
 } from 'firebase/firestore';
 import { UserProfile, UserRole, UserStatus } from '../types/lessonPlan';
-import { initFirestoreIfConfigured, getFirebaseApp } from './storageService';
+import { 
+  initFirestoreIfConfigured, 
+  getFirebaseApp, 
+  getFirebaseAuth as getStorageFirebaseAuth,
+  getFirebaseConfig,
+  isFirebaseConfigured
+} from './storageService';
 
 const LOCAL_USER_KEY = 'isezerano_user_session';
 const LOCAL_USERS_TABLE_KEY = 'isezerano_registered_users';
@@ -52,15 +58,7 @@ export const isAuthorizedAdminEmail = (email?: string | null): boolean => {
 };
 
 export const getFirebaseAuth = () => {
-  const app = getFirebaseApp();
-  if (app) {
-    try {
-      return getAuth(app);
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return getStorageFirebaseAuth();
 };
 
 /**
@@ -302,72 +300,132 @@ export const signIn = async (
 /**
  * Sign In with Google Popup (With account picker prompt)
  */
-export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }> => {
+export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string; code?: string }> => {
   const auth = getFirebaseAuth();
 
-  if (auth) {
-    try {
-      const provider = new GoogleAuthProvider();
-      // Forces Google to show account selection picker so user can choose which Google account to use
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const credential = await signInWithPopup(auth, provider);
-      const user = credential.user;
-
-      // Check Custom Claims on verified Firebase ID Token
-      let hasAdminClaim = false;
-      try {
-        const idTokenResult = await user.getIdTokenResult(true);
-        hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
-      } catch (claimErr) {
-        console.warn('Could not read ID token claims:', claimErr);
-      }
-
-      const userEmail = user.email || '';
-      const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
-
-      const profile = await getUserProfile(user.uid);
-      if (profile) {
-        if (profile.status === 'inactive') {
-          await fbSignOut(auth);
-          return { success: false, error: 'Your account has been deactivated by an Administrator.' };
-        }
-        if (isSuperAdmin && profile.role !== 'admin') {
-          profile.role = 'admin';
-        }
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-        return { success: true, user: profile, isAdmin: isSuperAdmin || profile.role === 'admin' };
-      }
-
-      // If document does not exist yet in Firestore, create default profile record
-      const db = initFirestoreIfConfigured();
-      const defaultProfile: UserProfile = {
-        uid: user.uid,
-        email: userEmail,
-        displayName: user.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-        role: isSuperAdmin ? 'admin' : 'teacher',
-        status: 'active',
-        schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+  if (!auth) {
+    const config = getFirebaseConfig();
+    if (!config.apiKey) {
+      return { 
+        success: false, 
+        error: 'Firebase Web API Key is missing for project "isezerano-news". Please configure your Firebase Web App credentials.',
+        code: 'MISSING_API_KEY'
       };
-
-      if (db) {
-        try {
-          await setDoc(doc(db, 'users', user.uid), defaultProfile);
-        } catch (e) {
-          console.warn('Failed to auto-create user document in Firestore:', e);
-        }
-      }
-
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
-      return { success: true, user: defaultProfile, isAdmin: isSuperAdmin };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Google sign-in was cancelled or failed';
-      return { success: false, error: message };
     }
+    return { 
+      success: false, 
+      error: 'Firebase Authentication is not configured or failed to initialize.',
+      code: 'AUTH_UNAVAILABLE'
+    };
   }
 
-  return { success: false, error: 'Firebase Authentication is not configured.' };
+  try {
+    const provider = new GoogleAuthProvider();
+    // Forces Google to show account selection picker so user can choose which Google account to use
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const credential = await signInWithPopup(auth, provider);
+    const user = credential.user;
+
+    // Check Custom Claims on verified Firebase ID Token
+    let hasAdminClaim = false;
+    try {
+      const idTokenResult = await user.getIdTokenResult(true);
+      hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
+    } catch (claimErr) {
+      console.warn('Could not read ID token claims:', claimErr);
+    }
+
+    const userEmail = user.email || '';
+    const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
+
+    // Strict requirement: Only the explicitly authorized administrator account may enter the Admin Dashboard.
+    // If an unauthorized person selects another Google account, deny access and return them to the public website.
+    if (!isSuperAdmin) {
+      try {
+        await fbSignOut(auth);
+      } catch (soErr) {
+        console.warn('Sign out warning for unauthorized account:', soErr);
+      }
+      localStorage.removeItem(LOCAL_USER_KEY);
+      return { 
+        success: false, 
+        isAdmin: false,
+        error: 'This Google account is not authorized to access the Admin Portal.',
+        code: 'UNAUTHORIZED_ACCOUNT'
+      };
+    }
+
+    const profile = await getUserProfile(user.uid);
+    if (profile) {
+      if (profile.status === 'inactive') {
+        await fbSignOut(auth);
+        return { success: false, error: 'Your account has been deactivated by an Administrator.' };
+      }
+      if (isSuperAdmin && profile.role !== 'admin') {
+        profile.role = 'admin';
+      }
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+      return { success: true, user: profile, isAdmin: true };
+    }
+
+    // If document does not exist yet in Firestore, create default profile record
+    const db = initFirestoreIfConfigured();
+    const defaultProfile: UserProfile = {
+      uid: user.uid,
+      email: userEmail,
+      displayName: user.displayName || userEmail.split('@')[0] || 'Administrator',
+      role: 'admin',
+      status: 'active',
+      schoolName: 'GS GITUMBA',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'users', user.uid), defaultProfile);
+      } catch (e) {
+        console.warn('Failed to auto-create user document in Firestore:', e);
+      }
+    }
+
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
+    return { success: true, user: defaultProfile, isAdmin: true };
+  } catch (err: unknown) {
+    const fbError = err as { code?: string; message?: string };
+    const errCode = fbError.code || '';
+
+    if (errCode === 'auth/popup-closed-by-user') {
+      return { success: false, error: 'Google sign-in was cancelled (the account selection window was closed).', code: errCode };
+    }
+    if (errCode === 'auth/popup-blocked') {
+      return { success: false, error: 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.', code: errCode };
+    }
+    if (errCode === 'auth/unauthorized-domain') {
+      return { 
+        success: false, 
+        error: `This domain is not authorized in Firebase Console. Please add this domain under Firebase Console > Authentication > Settings > Authorized domains for project "isezerano-news".`,
+        code: errCode
+      };
+    }
+    if (errCode === 'auth/operation-not-allowed') {
+      return { 
+        success: false, 
+        error: 'Google Sign-In is not enabled as an Authentication provider. Please go to Firebase Console > Authentication > Sign-in method and enable Google.',
+        code: errCode
+      };
+    }
+    if (errCode === 'auth/invalid-api-key') {
+      return { 
+        success: false, 
+        error: 'The Firebase Web API Key is invalid. Please check the Web API Key in Firebase Console for project "isezerano-news".',
+        code: errCode
+      };
+    }
+
+    const message = err instanceof Error ? err.message : 'Google sign-in was cancelled or failed';
+    return { success: false, error: message, code: errCode };
+  }
 };
 
 /**

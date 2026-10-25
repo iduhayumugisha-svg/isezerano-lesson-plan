@@ -291,6 +291,60 @@ export const clearAllDataLocal = (): void => {
 };
 
 // Firebase Cloud Sync Configuration
+export const parseFirebaseConfigSnippet = (raw: string): Partial<FirebaseConnectionConfig> | null => {
+  if (!raw || !raw.trim()) return null;
+  const text = raw.trim();
+
+  // If raw string starts with AIza (Google Web API key)
+  if (/^AIza[0-9A-Za-z-_]{25,}/.test(text)) {
+    return {
+      apiKey: text,
+      projectId: 'isezerano-news',
+      authDomain: 'isezerano-news.firebaseapp.com',
+      storageBucket: 'isezerano-news.firebasestorage.app',
+      enabled: true
+    };
+  }
+
+  // Regex extract if pasted as JS/JSON snippet from Firebase Console
+  try {
+    const apiKeyMatch = text.match(/apiKey\s*:\s*["']([^"']+)["']/);
+    const authDomainMatch = text.match(/authDomain\s*:\s*["']([^"']+)["']/);
+    const projectIdMatch = text.match(/projectId\s*:\s*["']([^"']+)["']/);
+    const storageBucketMatch = text.match(/storageBucket\s*:\s*["']([^"']+)["']/);
+    const messagingSenderIdMatch = text.match(/messagingSenderId\s*:\s*["']([^"']+)["']/);
+    const appIdMatch = text.match(/appId\s*:\s*["']([^"']+)["']/);
+
+    if (apiKeyMatch || projectIdMatch) {
+      return {
+        apiKey: apiKeyMatch ? apiKeyMatch[1].trim() : undefined,
+        authDomain: authDomainMatch ? authDomainMatch[1].trim() : 'isezerano-news.firebaseapp.com',
+        projectId: projectIdMatch ? projectIdMatch[1].trim() : 'isezerano-news',
+        storageBucket: storageBucketMatch ? storageBucketMatch[1].trim() : 'isezerano-news.firebasestorage.app',
+        messagingSenderId: messagingSenderIdMatch ? messagingSenderIdMatch[1].trim() : undefined,
+        appId: appIdMatch ? appIdMatch[1].trim() : undefined,
+        enabled: true
+      };
+    }
+  } catch {
+    // continue
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        ...parsed,
+        enabled: true
+      };
+    }
+  } catch {
+    // continue
+  }
+
+  return null;
+};
+
 export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   // Check localStorage first
   let stored: Partial<FirebaseConnectionConfig> = {};
@@ -302,19 +356,19 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   }
 
   // Also read VITE_ environment variables if available
-  const envApiKey = (import.meta as any).env?.VITE_FIREBASE_API_KEY || '';
-  const envAuthDomain = (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '';
-  const envProjectId = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'isezerano-news';
-  const envStorageBucket = (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '';
-  const envMessagingSenderId = (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '';
-  const envAppId = (import.meta as any).env?.VITE_FIREBASE_APP_ID || '';
+  const envApiKey = ((import.meta as any).env?.VITE_FIREBASE_API_KEY || '').trim();
+  const envAuthDomain = ((import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '').trim();
+  const envProjectId = ((import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'isezerano-news').trim();
+  const envStorageBucket = ((import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '').trim();
+  const envMessagingSenderId = ((import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim();
+  const envAppId = ((import.meta as any).env?.VITE_FIREBASE_APP_ID || '').trim();
 
-  const apiKey = stored.apiKey || envApiKey;
-  const authDomain = stored.authDomain || envAuthDomain || (envProjectId ? `${envProjectId}.firebaseapp.com` : '');
-  const projectId = stored.projectId || envProjectId;
-  const storageBucket = stored.storageBucket || envStorageBucket || (envProjectId ? `${envProjectId}.appspot.com` : '');
-  const messagingSenderId = stored.messagingSenderId || envMessagingSenderId;
-  const appId = stored.appId || envAppId;
+  const apiKey = (stored.apiKey || envApiKey || '').trim();
+  const projectId = (stored.projectId || envProjectId || 'isezerano-news').trim();
+  const authDomain = (stored.authDomain || envAuthDomain || (projectId ? `${projectId}.firebaseapp.com` : '')).trim();
+  const storageBucket = (stored.storageBucket || envStorageBucket || (projectId ? `${projectId}.firebasestorage.app` : '')).trim();
+  const messagingSenderId = (stored.messagingSenderId || envMessagingSenderId || '').trim();
+  const appId = (stored.appId || envAppId || '').trim();
   const firestoreDatabaseId = stored.firestoreDatabaseId || '(default)';
   const enabled = stored.enabled !== undefined ? stored.enabled : Boolean(apiKey && projectId);
 
@@ -330,16 +384,34 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   };
 };
 
-export const saveFirebaseConfig = (config: FirebaseConnectionConfig): void => {
-  localStorage.setItem(STORAGE_KEYS.FIREBASE_CONFIG, JSON.stringify(config));
-};
-
 let initializedFirebaseApp: any = null;
 let initializedDb: any = null;
+let initializedAuth: any = null;
 
-export const initFirestoreIfConfigured = () => {
+export const resetFirebaseInitialization = (): void => {
+  initializedFirebaseApp = null;
+  initializedDb = null;
+  initializedAuth = null;
+};
+
+export const saveFirebaseConfig = (config: FirebaseConnectionConfig): void => {
+  localStorage.setItem(STORAGE_KEYS.FIREBASE_CONFIG, JSON.stringify(config));
+  resetFirebaseInitialization();
+  initFirebaseApp();
+};
+
+export const isFirebaseConfigured = (): boolean => {
   const config = getFirebaseConfig();
-  if (!config.enabled || !config.apiKey || !config.projectId) {
+  return Boolean(config.apiKey && config.projectId);
+};
+
+export const initFirebaseApp = () => {
+  if (initializedFirebaseApp) {
+    return initializedFirebaseApp;
+  }
+
+  const config = getFirebaseConfig();
+  if (!config.apiKey || !config.projectId) {
     return null;
   }
 
@@ -349,15 +421,14 @@ export const initFirestoreIfConfigured = () => {
     } else {
       initializedFirebaseApp = initializeApp({
         apiKey: config.apiKey,
-        authDomain: config.authDomain,
+        authDomain: config.authDomain || `${config.projectId}.firebaseapp.com`,
         projectId: config.projectId,
-        storageBucket: config.storageBucket,
-        messagingSenderId: config.messagingSenderId,
-        appId: config.appId
+        storageBucket: config.storageBucket || `${config.projectId}.firebasestorage.app`,
+        messagingSenderId: config.messagingSenderId || '',
+        appId: config.appId || ''
       });
     }
-    initializedDb = getFirestore(initializedFirebaseApp, config.firestoreDatabaseId || '(default)');
-    return initializedDb;
+    return initializedFirebaseApp;
   } catch (err) {
     console.error('Firebase initialization error:', err);
     return null;
@@ -365,8 +436,40 @@ export const initFirestoreIfConfigured = () => {
 };
 
 export const getFirebaseApp = () => {
-  initFirestoreIfConfigured();
-  return initializedFirebaseApp;
+  return initFirebaseApp();
+};
+
+export const initFirestoreIfConfigured = () => {
+  if (initializedDb) {
+    return initializedDb;
+  }
+  const app = initFirebaseApp();
+  if (!app) return null;
+
+  const config = getFirebaseConfig();
+  try {
+    initializedDb = getFirestore(app, config.firestoreDatabaseId || '(default)');
+    return initializedDb;
+  } catch (err) {
+    console.error('Firestore initialization error:', err);
+    return null;
+  }
+};
+
+export const getFirebaseAuth = () => {
+  if (initializedAuth) {
+    return initializedAuth;
+  }
+  const app = initFirebaseApp();
+  if (!app) return null;
+
+  try {
+    initializedAuth = getAuth(app);
+    return initializedAuth;
+  } catch (err) {
+    console.error('Firebase Auth initialization error:', err);
+    return null;
+  }
 };
 
 export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ success: boolean; error?: string; isCloudSynced?: boolean }> => {
@@ -380,8 +483,8 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
 
   // Check if an authorized account is signed in (e.g. Website Owner / Admin)
   try {
-    const auth = getAuth();
-    if (!auth.currentUser) {
+    const auth = getFirebaseAuth();
+    if (!auth || !auth.currentUser) {
       // Unauthenticated teacher: plan safely stored in browser storage
       return { success: true, isCloudSynced: false };
     }
@@ -407,8 +510,8 @@ export const deleteLessonPlanFromFirestore = async (id: string): Promise<boolean
   if (!db) return true;
 
   try {
-    const auth = getAuth();
-    if (!auth.currentUser) return true;
+    const auth = getFirebaseAuth();
+    if (!auth || !auth.currentUser) return true;
 
     await deleteDoc(doc(db, 'lesson_plans', id));
     return true;

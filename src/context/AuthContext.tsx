@@ -17,7 +17,7 @@ interface AuthContextType {
   isTeacher: boolean;
   isLoading: boolean;
   signIn: (email: string, pass: string) => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }>;
-  signInWithGoogle: () => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string; code?: string }>;
   signUp: (email: string, pass: string, name: string, school?: string) => Promise<{ success: boolean; error?: string }>;
   signOutUser: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;

@@ -6,11 +6,21 @@ import {
   AlertCircle, 
   CheckCircle2, 
   ArrowLeft, 
-  LogOut,
-  Sparkles
+  Key,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Server,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { WebsitePage } from '../components/WebsiteHeader';
+import { 
+  getFirebaseConfig, 
+  saveFirebaseConfig, 
+  isFirebaseConfigured, 
+  parseFirebaseConfigSnippet 
+} from '../services/storageService';
 
 interface AdminPortalGatewayProps {
   onNavigate: (page: WebsitePage) => void;
@@ -18,8 +28,7 @@ interface AdminPortalGatewayProps {
 }
 
 export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({ 
-  onNavigate,
-  onOpenAuthModal 
+  onNavigate 
 }) => {
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
   
@@ -27,15 +36,25 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Firebase Web Config Connection State
+  const [firebaseReady, setFirebaseReady] = useState<boolean>(() => isFirebaseConfigured());
+  const [showConfigHelper, setShowConfigHelper] = useState<boolean>(() => !isFirebaseConfigured());
+  const [configInput, setConfigInput] = useState<string>('');
+  const [configFeedback, setConfigFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    setFirebaseReady(isFirebaseConfigured());
+  }, []);
+
   // Requirement: If an unauthorized person selects another account or opens admin without permission,
   // deny access and return them to the public website.
   useEffect(() => {
     if (user && !isAdmin) {
-      setErrorMsg('Access Denied: This account is not authorized to access the Admin Portal. Returning to public website...');
+      setErrorMsg('Access Denied: This Google account is not authorized to access the Admin Portal. Returning to public website...');
       const timer = setTimeout(async () => {
         await signOutUser();
         onNavigate('home');
-      }, 2000);
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [user, isAdmin, onNavigate, signOutUser]);
@@ -65,10 +84,62 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
     );
   }
 
+  // Handle Quick Web App Configuration
+  const handleSaveConnection = (e: React.FormEvent) => {
+    e.preventDefault();
+    setConfigFeedback(null);
+
+    const raw = configInput.trim();
+    if (!raw) {
+      setConfigFeedback({
+        type: 'error',
+        message: 'Please paste your Firebase Web API Key or web configuration snippet.'
+      });
+      return;
+    }
+
+    const parsed = parseFirebaseConfigSnippet(raw);
+    if (!parsed || !parsed.apiKey) {
+      setConfigFeedback({
+        type: 'error',
+        message: 'Could not extract a valid apiKey. Please paste either your Firebase Web API Key (starts with AIza) or the firebaseConfig snippet.'
+      });
+      return;
+    }
+
+    const current = getFirebaseConfig();
+    const updated = {
+      ...current,
+      apiKey: parsed.apiKey,
+      projectId: parsed.projectId || current.projectId || 'isezerano-news',
+      authDomain: parsed.authDomain || current.authDomain || `${current.projectId || 'isezerano-news'}.firebaseapp.com`,
+      storageBucket: parsed.storageBucket || current.storageBucket || `${current.projectId || 'isezerano-news'}.firebasestorage.app`,
+      messagingSenderId: parsed.messagingSenderId || current.messagingSenderId || '',
+      appId: parsed.appId || current.appId || '',
+      enabled: true
+    };
+
+    saveFirebaseConfig(updated);
+    setFirebaseReady(true);
+    setErrorMsg(null);
+    setConfigFeedback({
+      type: 'success',
+      message: `Firebase Web client successfully connected to project "${updated.projectId}". You can now sign in with Google!`
+    });
+  };
+
   // Handle Google Sign-In with Account Selection
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
     setSuccessMsg(null);
+
+    // If Firebase is not configured with an API key, prompt user
+    if (!isFirebaseConfigured()) {
+      setShowConfigHelper(true);
+      setErrorMsg('Firebase Web Configuration required: please enter your Firebase Web API Key below to enable Google Sign-In.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await signInWithGoogle();
@@ -76,15 +147,17 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         if (res.isAdmin) {
           setSuccessMsg('Authenticated successfully as Administrator! Opening Dashboard...');
         } else {
-          // Requirement: If an unauthorized person selects another Google account,
-          // deny access and return them to the public website.
+          // If an unauthorized person selects another Google account, deny access and return to public website
           await signOutUser();
           setErrorMsg('Access Denied: This Google account is not authorized to access the Admin Portal. Returning to public website...');
           setTimeout(() => {
             onNavigate('home');
-          }, 2000);
+          }, 2500);
         }
       } else {
+        if (res.code === 'MISSING_API_KEY' || res.code === 'AUTH_UNAVAILABLE') {
+          setShowConfigHelper(true);
+        }
         setErrorMsg(res.error || 'Google sign-in was not completed.');
       }
     } catch (err: unknown) {
@@ -201,6 +274,96 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
                 Google will prompt you to select an account. Only the explicitly authorized administrator account will be permitted to access the dashboard.
               </p>
             </div>
+          </div>
+
+          {/* Firebase Web Configuration Helper (For project isezerano-news) */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowConfigHelper(prev => !prev)}
+              className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2">
+                <Server className="w-3.5 h-3.5 text-teal-600" />
+                <span>Firebase Web Connection: <span className="font-mono text-[11px] text-teal-800">isezerano-news</span></span>
+                {firebaseReady ? (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    Ready
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                    Config Required
+                  </span>
+                )}
+              </div>
+              {showConfigHelper ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+
+            {showConfigHelper && (
+              <div className="p-4 bg-white border-t border-slate-200 space-y-3.5 text-xs">
+                <p className="text-slate-600 leading-relaxed">
+                  Web Google Sign-In requires your Firebase Web App configuration for project <strong className="text-slate-800">isezerano-news</strong>. You can paste your Web API key or the <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[11px]">firebaseConfig</code> object below:
+                </p>
+
+                {configFeedback && (
+                  <div className={`p-3 rounded-lg border text-xs ${
+                    configFeedback.type === 'success' 
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    {configFeedback.message}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveConnection} className="space-y-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Firebase Web API Key or firebaseConfig snippet:
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={configInput}
+                      onChange={(e) => setConfigInput(e.target.value)}
+                      placeholder='Paste your API key (e.g. AIzaSy...) or {"apiKey": "AIzaSy...", ...}'
+                      className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 placeholder-slate-400"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="submit"
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-teal-700 hover:bg-teal-600 text-white font-semibold text-xs cursor-pointer shadow-sm transition-colors"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>Save & Connect Firebase</span>
+                    </button>
+
+                    <a
+                      href="https://console.firebase.google.com/project/isezerano-news/settings/general"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 text-[11px] text-teal-700 hover:text-teal-900 underline font-medium"
+                    >
+                      <span>Open Firebase Console</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </form>
+
+                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
+                  <p className="font-semibold text-slate-700">Where to find this in Firebase Console:</p>
+                  <ol className="list-decimal pl-4 space-y-0.5 text-slate-600">
+                    <li>Go to <strong>Firebase Console</strong> → Project <strong>isezerano-news</strong></li>
+                    <li>Click <strong>Project Settings (gear icon)</strong> → <strong>General</strong></li>
+                    <li>Scroll down to <strong>Your apps</strong>. If you haven't created a Web App, click <strong>Web (&lt;/&gt;)</strong> to register one</li>
+                    <li>Copy the <strong>apiKey</strong> or the entire <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">firebaseConfig</code> code snippet and paste it above</li>
+                  </ol>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Tip: For automatic CI/CD deployment via GitHub Actions, add <code className="font-mono">VITE_FIREBASE_API_KEY</code> to your repository environment variables.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-2">
