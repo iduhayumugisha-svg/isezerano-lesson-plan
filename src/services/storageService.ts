@@ -353,6 +353,7 @@ export const CANONICAL_FIREBASE_CONFIG: FirebaseConnectionConfig = {
   storageBucket: 'isezerano-news.firebasestorage.app',
   messagingSenderId: '37703708100',
   appId: '1:37703708100:web:4e59c508899434b8b74891',
+  measurementId: 'G-XVJBQX90HX',
   firestoreDatabaseId: '(default)',
   enabled: true
 };
@@ -374,6 +375,7 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   const envStorageBucket = ((import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '').trim();
   const envMessagingSenderId = ((import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim();
   const envAppId = ((import.meta as any).env?.VITE_FIREBASE_APP_ID || '').trim();
+  const envMeasurementId = ((import.meta as any).env?.VITE_GA_MEASUREMENT_ID || (import.meta as any).env?.VITE_FIREBASE_MEASUREMENT_ID || '').trim();
 
   // Resolution hierarchy: Stored custom config -> Environment variable -> Canonical project configuration
   const apiKey = (stored.apiKey || envApiKey || CANONICAL_FIREBASE_CONFIG.apiKey).trim();
@@ -382,6 +384,7 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   const storageBucket = (stored.storageBucket || envStorageBucket || (projectId ? `${projectId}.firebasestorage.app` : CANONICAL_FIREBASE_CONFIG.storageBucket)).trim();
   const messagingSenderId = (stored.messagingSenderId || envMessagingSenderId || CANONICAL_FIREBASE_CONFIG.messagingSenderId || '').trim();
   const appId = (stored.appId || envAppId || CANONICAL_FIREBASE_CONFIG.appId || '').trim();
+  const measurementId = (stored.measurementId || envMeasurementId || CANONICAL_FIREBASE_CONFIG.measurementId || '').trim();
   const firestoreDatabaseId = stored.firestoreDatabaseId || CANONICAL_FIREBASE_CONFIG.firestoreDatabaseId || '(default)';
   const enabled = stored.enabled !== undefined ? stored.enabled : Boolean(apiKey && projectId);
 
@@ -392,6 +395,7 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
     storageBucket,
     messagingSenderId,
     appId,
+    measurementId,
     firestoreDatabaseId,
     enabled
   };
@@ -438,7 +442,8 @@ export const initFirebaseApp = () => {
         projectId: config.projectId,
         storageBucket: config.storageBucket || `${config.projectId}.firebasestorage.app`,
         messagingSenderId: config.messagingSenderId || '',
-        appId: config.appId || ''
+        appId: config.appId || '',
+        measurementId: config.measurementId || ''
       });
     }
     return initializedFirebaseApp;

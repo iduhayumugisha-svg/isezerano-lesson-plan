@@ -43,6 +43,8 @@ import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider } from './context/WebsiteDesignContext';
 import { FEATURE_FLAGS } from './config/features';
+import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
+import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
 
 export type AppPage = WebsitePage | 'students' | 'admin';
 
@@ -125,11 +127,19 @@ function AppContent() {
       }
     }
 
+    // Initialize Google Analytics 4 (Measurement ID: G-XVJBQX90HX)
+    initGoogleAnalytics();
+
     return () => {
       window.removeEventListener('popstate', handleUrlChange);
       window.removeEventListener('hashchange', handleUrlChange);
     };
   }, []);
+
+  // Track SPA navigation in Google Analytics 4 and local telemetry
+  useEffect(() => {
+    trackPageView(currentPage);
+  }, [currentPage]);
 
   // Redirect legacy hidden routes safely (students)
   useEffect(() => {
@@ -151,6 +161,11 @@ function AppContent() {
     if (result.success) {
       refreshData();
       setEditingPlan(enrichedPlan);
+      trackEvent('lesson_plan_created', {
+        subject: enrichedPlan.subject,
+        grade: enrichedPlan.classGrade,
+        page: currentPage
+      });
     }
     return result;
   };
@@ -181,6 +196,11 @@ function AppContent() {
 
   const handlePrintPlan = (plan: LessonPlan) => {
     setPrintingPlan(plan);
+    trackEvent('lesson_plan_export_pdf', {
+      subject: plan.subject,
+      title: plan.lessonTitle,
+      page: currentPage
+    });
   };
 
   const handleCreateNew = (prefill?: Partial<LessonPlan>) => {
@@ -480,6 +500,9 @@ function AppContent() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
       />
+
+      {/* 6. Persistent WhatsApp Floating Action Button (Rwanda: 0782971258 / https://wa.me/250782971258) */}
+      <WhatsAppFloatingButton currentPage={currentPage} />
 
     </div>
   );

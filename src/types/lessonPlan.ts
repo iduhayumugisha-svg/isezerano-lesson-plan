@@ -143,6 +143,7 @@ export interface FirebaseConnectionConfig {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  measurementId?: string;
   firestoreDatabaseId?: string;
   enabled: boolean;
 }

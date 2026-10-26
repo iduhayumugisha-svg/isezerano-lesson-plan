@@ -25,7 +25,14 @@ import {
   Sparkles, 
   Palette,
   ArrowLeft,
-  LogOut
+  LogOut,
+  BarChart3,
+  ExternalLink,
+  Eye,
+  MessageCircle,
+  Activity,
+  TrendingUp,
+  Globe
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
 import { getAppSettings, saveAppSettings } from '../services/appSettingsService';
@@ -34,6 +41,12 @@ import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
 import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
+import { 
+  getAnalyticsSummary, 
+  resetLocalTelemetry, 
+  AnalyticsSummary, 
+  GA_MEASUREMENT_ID 
+} from '../services/analyticsService';
 
 interface AdminDashboardViewProps {
   lessonPlans: LessonPlan[];
@@ -41,7 +54,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'design' | 'slider' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'design' | 'slider' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -57,6 +70,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [copiedScript, setCopiedScript] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsSummary>(() => getAnalyticsSummary());
 
   // Curriculum editing local states
   const [newSubject, setNewSubject] = useState('');
@@ -75,6 +89,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       ]);
       setSettings(appSettingsData);
       setUsersList(fetchedUsers);
+      setAnalyticsData(getAnalyticsSummary());
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
@@ -366,6 +381,24 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
+          onClick={() => {
+            setActiveTab('analytics');
+            setAnalyticsData(getAnalyticsSummary());
+          }}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'analytics'
+              ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-emerald-300" />
+          <span>Website Analytics</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'analytics' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+            GA4 Live
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('modules')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'modules'
@@ -434,6 +467,295 @@ promoteToAdmin('admin@example.com');`;
       {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
       {activeTab === 'slider' && (
         <SliderManager />
+      )}
+
+      {/* ================= TAB: WEBSITE ANALYTICS & GOOGLE ANALYTICS 4 ================= */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          {/* Top Status & Overview Banner */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-6 text-white border border-emerald-500/30 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold mb-2 border border-emerald-500/30">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Google Analytics 4 • Live Stream Connected</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+                  Website Traffic & Conversion Analytics
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                  Monitoring visitor traffic, lesson-planning activity, and parent/teacher WhatsApp inquiries for <span className="text-emerald-300 font-semibold">ISEZERANO ONLINE – GS GITUMBA</span>.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsData(getAnalyticsSummary())}
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
+                  title="Refresh live metrics"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Refresh</span>
+                </button>
+
+                <a
+                  href="https://analytics.google.com/analytics/web/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all cursor-pointer"
+                  title="Open official Google Analytics property console"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open GA4 Console</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to reset local session analytics counters?')) {
+                      const fresh = resetLocalTelemetry();
+                      setAnalyticsData(fresh);
+                    }
+                  }}
+                  className="inline-flex items-center space-x-1 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 transition-all cursor-pointer"
+                  title="Reset local telemetry counters"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Reset Counters</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Connection Credentials Pill Bar */}
+            <div className="mt-5 pt-4 border-t border-slate-700/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="flex items-center space-x-2 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800">
+                <span className="text-slate-400 font-medium">Measurement ID:</span>
+                <code className="text-emerald-400 font-mono font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+                  {analyticsData.measurementId || GA_MEASUREMENT_ID}
+                </code>
+              </div>
+              <div className="flex items-center space-x-2 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800">
+                <span className="text-slate-400 font-medium">Firebase Project:</span>
+                <span className="text-teal-300 font-mono font-semibold">isezerano-news</span>
+              </div>
+              <div className="flex items-center space-x-2 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800">
+                <span className="text-slate-400 font-medium">WhatsApp Conversion:</span>
+                <span className="text-amber-300 font-mono font-semibold">0782971258</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Metrics Grid (4 Cards) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Page Views */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Total Page Views
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+                  <Eye className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-3xl font-extrabold text-slate-900 tracking-tight">
+                {analyticsData.totalPageViews}
+              </div>
+              <p className="text-xs text-slate-500 mt-1 flex items-center space-x-1">
+                <span className="text-emerald-600 font-semibold">SPA tracked</span>
+                <span>across all public & tool pages</span>
+              </p>
+            </div>
+
+            {/* 2. WhatsApp Inquiries */}
+            <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs hover:border-emerald-300 transition-all bg-linear-to-b from-white to-emerald-50/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                  WhatsApp Inquiries
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <MessageCircle className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-3xl font-extrabold text-emerald-700 tracking-tight">
+                {analyticsData.totalWhatsAppClicks}
+              </div>
+              <p className="text-xs text-emerald-800/80 mt-1">
+                Clicks on floating 0782971258 button
+              </p>
+            </div>
+
+            {/* 3. Lesson Plans Created */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  CBC Lesson Plans
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-3xl font-extrabold text-purple-700 tracking-tight">
+                {analyticsData.totalLessonPlansCreated}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {lessonPlans.length} saved in local & cloud storage
+              </p>
+            </div>
+
+            {/* 4. PDF Exports */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  A4 PDF Exports
+                </span>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-3xl font-extrabold text-blue-700 tracking-tight">
+                {analyticsData.totalPdfExports}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Standard CBC official prints generated
+              </p>
+            </div>
+          </div>
+
+          {/* Detailed Two-Column Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Column A: Traffic Breakdown by Page */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <span>Traffic by Website Section</span>
+                </h3>
+                <span className="text-xs text-slate-500">
+                  {analyticsData.totalPageViews} total views
+                </span>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                {[
+                  { key: 'home', label: 'Homepage & Hero Slider', path: '/' },
+                  { key: 'dashboard', label: 'Lesson Plan Hub', path: '/dashboard' },
+                  { key: 'create', label: 'CBC Plan Creator (8 Columns)', path: '/create' },
+                  { key: 'saved', label: 'Saved Lesson Plans', path: '/saved' },
+                  { key: 'settings', label: 'Teacher Preferences', path: '/settings' },
+                  { key: 'about', label: 'About GS GITUMBA', path: '/about' },
+                  { key: 'contact', label: 'Contact & Location', path: '/contact' },
+                  { key: 'privacy', label: 'Privacy Policy', path: '/privacy' },
+                  { key: 'admin', label: 'Admin Management Portal', path: '/admin' }
+                ].map((item) => {
+                  const count = analyticsData.pageViewsByPage[item.key] || 0;
+                  const percentage = analyticsData.totalPageViews > 0 
+                    ? Math.round((count / analyticsData.totalPageViews) * 100) 
+                    : 0;
+
+                  return (
+                    <div key={item.key} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center space-x-1.5 font-medium text-slate-700">
+                          <span className="font-semibold text-slate-900">{item.label}</span>
+                          <span className="text-slate-400 font-mono text-[11px]">({item.path})</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-900">{count} views</span>
+                          <span className="text-slate-400 text-[11px] w-8 text-right">{percentage}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-emerald-600 h-2 rounded-full transition-all duration-500" 
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Column B: Real-Time Event Activity Feed */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
+                  <Activity className="w-4 h-4 text-emerald-600" />
+                  <span>Recent Activity Stream</span>
+                </h3>
+                <span className="text-xs text-slate-500">Live feed</span>
+              </div>
+
+              {analyticsData.recentEvents.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  No activity events recorded yet. Browse the website or create a plan to test tracking.
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                  {analyticsData.recentEvents.map((evt) => {
+                    const isWhatsApp = evt.eventName === 'whatsapp_click';
+                    const isLessonPlan = evt.eventName === 'lesson_plan_created';
+                    const isPdf = evt.eventName === 'lesson_plan_export_pdf';
+
+                    const badgeColor = isWhatsApp
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : isLessonPlan
+                      ? 'bg-purple-100 text-purple-800 border-purple-300'
+                      : isPdf
+                      ? 'bg-blue-100 text-blue-800 border-blue-300'
+                      : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                    return (
+                      <div
+                        key={evt.id}
+                        className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-white hover:border-slate-200 transition-colors flex items-start justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}>
+                              {evt.eventName}
+                            </span>
+                            <span className="text-slate-400 text-[11px] font-mono">
+                              /{evt.page}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-slate-800 text-xs">
+                            {evt.label}
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-slate-400 shrink-0 font-mono">
+                          {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Architectural Transparency & Security Disclosure */}
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-xs text-slate-600 space-y-3">
+            <div className="font-bold text-slate-900 flex items-center space-x-2 text-sm">
+              <Globe className="w-4 h-4 text-teal-600" />
+              <span>Google Analytics 4 Architecture & Admin Security</span>
+            </div>
+            <p className="leading-relaxed">
+              <strong>Measurement ID {analyticsData.measurementId || GA_MEASUREMENT_ID}</strong> is embedded via the official Google tag (gtag.js) script, transmitting telemetry directly to Google Cloud's Analytics infrastructure for long-term cohort, geographical, and demographic reports.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <span className="font-bold text-slate-800 block mb-1">Strict Administrator Isolation:</span>
+                This analytics dashboard is accessible strictly to the authorized administrator account (<code className="text-emerald-700 font-mono font-semibold">twizerefelix90@gmail.com</code>). General visitors and unauthenticated users cannot see or access these metrics.
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <span className="font-bold text-slate-800 block mb-1">Direct Console Access:</span>
+                To view deep historical reports, bounce rates, and Rwanda geographic distributions, click the <strong>Open GA4 Console</strong> button above to access Google Analytics directly with your authorized Google account.
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ================= TAB 1: MODULES & PLATFORM ================= */}
