@@ -345,8 +345,20 @@ export const parseFirebaseConfigSnippet = (raw: string): Partial<FirebaseConnect
   return null;
 };
 
+// Canonical Firebase Web App configuration for project isezerano-news
+export const CANONICAL_FIREBASE_CONFIG: FirebaseConnectionConfig = {
+  apiKey: 'AIzaSyBJToe1yvQJ8ZRRXn6xwOYxh8wZOa4HO0c',
+  authDomain: 'isezerano-news.firebaseapp.com',
+  projectId: 'isezerano-news',
+  storageBucket: 'isezerano-news.firebasestorage.app',
+  messagingSenderId: '37703708100',
+  appId: '1:37703708100:web:4e59c508899434b8b74891',
+  firestoreDatabaseId: '(default)',
+  enabled: true
+};
+
 export const getFirebaseConfig = (): FirebaseConnectionConfig => {
-  // Check localStorage first
+  // Check localStorage first (in case admin entered custom config)
   let stored: Partial<FirebaseConnectionConfig> = {};
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.FIREBASE_CONFIG);
@@ -358,18 +370,19 @@ export const getFirebaseConfig = (): FirebaseConnectionConfig => {
   // Also read VITE_ environment variables if available
   const envApiKey = ((import.meta as any).env?.VITE_FIREBASE_API_KEY || '').trim();
   const envAuthDomain = ((import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '').trim();
-  const envProjectId = ((import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'isezerano-news').trim();
+  const envProjectId = ((import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '').trim();
   const envStorageBucket = ((import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '').trim();
   const envMessagingSenderId = ((import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim();
   const envAppId = ((import.meta as any).env?.VITE_FIREBASE_APP_ID || '').trim();
 
-  const apiKey = (stored.apiKey || envApiKey || '').trim();
-  const projectId = (stored.projectId || envProjectId || 'isezerano-news').trim();
-  const authDomain = (stored.authDomain || envAuthDomain || (projectId ? `${projectId}.firebaseapp.com` : '')).trim();
-  const storageBucket = (stored.storageBucket || envStorageBucket || (projectId ? `${projectId}.firebasestorage.app` : '')).trim();
-  const messagingSenderId = (stored.messagingSenderId || envMessagingSenderId || '').trim();
-  const appId = (stored.appId || envAppId || '').trim();
-  const firestoreDatabaseId = stored.firestoreDatabaseId || '(default)';
+  // Resolution hierarchy: Stored custom config -> Environment variable -> Canonical project configuration
+  const apiKey = (stored.apiKey || envApiKey || CANONICAL_FIREBASE_CONFIG.apiKey).trim();
+  const projectId = (stored.projectId || envProjectId || CANONICAL_FIREBASE_CONFIG.projectId).trim();
+  const authDomain = (stored.authDomain || envAuthDomain || (projectId ? `${projectId}.firebaseapp.com` : CANONICAL_FIREBASE_CONFIG.authDomain)).trim();
+  const storageBucket = (stored.storageBucket || envStorageBucket || (projectId ? `${projectId}.firebasestorage.app` : CANONICAL_FIREBASE_CONFIG.storageBucket)).trim();
+  const messagingSenderId = (stored.messagingSenderId || envMessagingSenderId || CANONICAL_FIREBASE_CONFIG.messagingSenderId || '').trim();
+  const appId = (stored.appId || envAppId || CANONICAL_FIREBASE_CONFIG.appId || '').trim();
+  const firestoreDatabaseId = stored.firestoreDatabaseId || CANONICAL_FIREBASE_CONFIG.firestoreDatabaseId || '(default)';
   const enabled = stored.enabled !== undefined ? stored.enabled : Boolean(apiKey && projectId);
 
   return {

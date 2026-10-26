@@ -19,6 +19,7 @@ import {
 import { NavPage } from './Navbar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { FEATURE_FLAGS } from '../config/features';
 
 // Extended NavPage to include 'admin'
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
+  const { logoUrl, logoSettings } = useWebsiteDesign();
 
   const handleItemClick = (page: SaasNavPage) => {
     onNavigate(page);
@@ -101,14 +103,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center space-x-3 cursor-pointer group min-w-0"
           title="ISEZERANO ONLINE – GS GITUMBA"
         >
-          <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md group-hover:border-teal-400 transition-all">
-            <img 
-              src="/isezerano-online-logo.jpg" 
-              alt="ISEZERANO ONLINE – GS GITUMBA Logo" 
-              className="w-full h-full object-cover" 
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          {logoSettings.showInSidebar && (
+            <div className={`w-10 h-10 overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md group-hover:border-teal-400 transition-all ${logoSettings.borderRadius}`}>
+              <img 
+                src={logoUrl} 
+                alt={logoSettings.altText || "ISEZERANO ONLINE – GS GITUMBA Logo"} 
+                className={`w-full h-full object-${logoSettings.displayFit}`} 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
 
           {!isCollapsed && (
             <div className="min-w-0 flex flex-col justify-center">

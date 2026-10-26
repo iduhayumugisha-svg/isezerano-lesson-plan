@@ -22,7 +22,8 @@ import {
   Search,
   UserX,
   UserCheck,
-  Sparkles,
+  Sparkles, 
+  Palette,
   ArrowLeft
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
@@ -31,13 +32,14 @@ import { listUsers, setUserStatus, setUserRole } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
 import { SliderManager } from '../components/SliderManager';
+import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 
 interface AdminDashboardViewProps {
   lessonPlans: LessonPlan[];
   onNavigate: (page: SaasNavPage) => void;
 }
 
-type AdminTab = 'slider' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'design' | 'slider' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -314,6 +316,21 @@ promoteToAdmin('admin@example.com');`;
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm flex flex-wrap gap-1">
         <button
+          onClick={() => setActiveTab('design')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'design'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Palette className="w-4 h-4 text-amber-300" />
+          <span>Website Design & Logo</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'design' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            Colors, Fonts & Logo
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('slider')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'slider'
@@ -322,9 +339,9 @@ promoteToAdmin('admin@example.com');`;
           }`}
         >
           <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>Manage Homepage Photos</span>
+          <span>Homepage Photos</span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'slider' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Photos & Slider
+            Slides
           </span>
         </button>
 
@@ -388,6 +405,11 @@ promoteToAdmin('admin@example.com');`;
           <span>Admin Setup & Security</span>
         </button>
       </div>
+
+      {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}
+      {activeTab === 'design' && (
+        <WebsiteDesignManager />
+      )}
 
       {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
       {activeTab === 'slider' && (

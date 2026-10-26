@@ -1,0 +1,163 @@
+export interface WebsiteColorSettings {
+  // Header and Navigation Bar
+  headerBg: string;           // Header background color
+  headerText: string;         // Header title and text
+  headerBorder: string;       // Border below header
+  navLinkHover: string;       // Navigation link hover tint
+  navLinkActive: string;      // Active navigation item highlight
+
+  // Website Body and Page Background
+  bodyBg: string;             // Overall page background
+  bodyText: string;           // Standard body text
+  mutedText: string;          // Muted labels and subtitles
+
+  // Main Content Sections and Cards
+  cardBg: string;             // Cards, panels and containers
+  cardBorder: string;         // Borders of content cards
+  accentBg: string;           // Highlighted pill or alert background
+
+  // Buttons, Links, and Forms
+  primaryButtonBg: string;    // Main CTA buttons (Dashboard, Save, Export)
+  primaryButtonText: string;  // Text on primary buttons
+  secondaryButtonBg: string;  // Secondary buttons
+  secondaryButtonText: string;// Text on secondary buttons
+  linkColor: string;          // Hyperlinks
+  formInputBorder: string;    // Form input borders
+  formFocusRing: string;      // Form input focus outline color
+
+  // Footer Background and Footer Text
+  footerBg: string;           // Footer background
+  footerHeadingText: string;  // Footer section headings
+  footerBodyText: string;     // Footer descriptions and body
+  footerLinkColor: string;    // Footer links and staff badge
+
+  // Headings and Paragraph Text
+  headingPrimary: string;     // H1 and main section headings
+  headingSecondary: string;   // H2, H3 and sub-headings
+
+  // Sidebars and Additional Sections
+  sidebarBg: string;          // Side drawer or menu background
+  sidebarText: string;        // Sidebar text
+  accentBadgeBg: string;      // Badge backgrounds
+  accentBadgeText: string;    // Badge text
+}
+
+export interface WebsiteTypographySettings {
+  // Font Families
+  fontFamily: string;         // Body font family (e.g., Times New Roman, Georgia, Inter, etc.)
+  headingFontFamily: string;  // Headings font family
+
+  // Font Sizes (in px, with strict responsive scaling)
+  websiteTitleSize: number;   // Header platform title (16px - 32px)
+  websiteSubtitleSize: number;// Header subtitle (10px - 18px)
+  navMenuSize: number;        // Top navigation links (12px - 18px)
+  h1Size: number;             // Main page title (24px - 48px)
+  h2Size: number;             // Section headings (18px - 36px)
+  h3Size: number;             // Sub-headings (14px - 24px)
+  bodySize: number;           // Paragraph and table body (13px - 20px)
+  buttonSize: number;         // Buttons and form inputs (12px - 18px)
+  footerSize: number;         // Footer text and copyright (11px - 16px)
+
+  // Typography Weights & Line Spacing
+  headingWeight: 'normal' | 'medium' | 'semibold' | 'bold';
+  bodyWeight: 'normal' | 'medium';
+  lineHeight: 'tight' | 'normal' | 'relaxed';
+}
+
+export interface WebsiteLogoSettings {
+  logoUrl: string;            // URL or base64 data URI of the logo
+  isCustomLogo: boolean;      // True if user uploaded/selected custom logo
+  displayHeight: number;      // Height in px (28px - 84px)
+  displayFit: 'contain' | 'cover'; // Aspect ratio fit style
+  borderRadius: 'rounded-xl' | 'rounded-lg' | 'rounded-full' | 'rounded-none';
+  altText: string;            // Accessible alt description
+  showInHeader: boolean;      // Show in top navigation bar
+  showInFooter: boolean;      // Show in footer brand section
+  showInAdminGateway: boolean;// Show in admin login card
+  showInSidebar: boolean;     // Show in mobile drawer and sidebar
+  updateFavicon: boolean;     // Dynamically sync browser tab favicon
+}
+
+export interface WebsiteDesignSettings {
+  colors: WebsiteColorSettings;
+  typography: WebsiteTypographySettings;
+  logo: WebsiteLogoSettings;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export const DEFAULT_WEBSITE_COLORS: WebsiteColorSettings = {
+  headerBg: '#ffffff',
+  headerText: '#0f172a',
+  headerBorder: '#e2e8f0',
+  navLinkHover: '#0d9488',
+  navLinkActive: '#0f766e',
+
+  bodyBg: '#f8fafc',
+  bodyText: '#1e293b',
+  mutedText: '#64748b',
+
+  cardBg: '#ffffff',
+  cardBorder: '#e2e8f0',
+  accentBg: '#f0fdfa',
+
+  primaryButtonBg: '#0f766e',
+  primaryButtonText: '#ffffff',
+  secondaryButtonBg: '#0f172a',
+  secondaryButtonText: '#ffffff',
+  linkColor: '#0f766e',
+  formInputBorder: '#cbd5e1',
+  formFocusRing: '#14b8a6',
+
+  footerBg: '#090e1a',
+  footerHeadingText: '#ffffff',
+  footerBodyText: '#94a3b8',
+  footerLinkColor: '#2dd4bf',
+
+  headingPrimary: '#0f172a',
+  headingSecondary: '#334155',
+
+  sidebarBg: '#0f172a',
+  sidebarText: '#ffffff',
+  accentBadgeBg: '#ccfbf1',
+  accentBadgeText: '#115e59'
+};
+
+export const DEFAULT_WEBSITE_TYPOGRAPHY: WebsiteTypographySettings = {
+  fontFamily: "'Times New Roman', Times, Baskerville, Georgia, serif",
+  headingFontFamily: "'Times New Roman', Times, Baskerville, Georgia, serif",
+  websiteTitleSize: 20,
+  websiteSubtitleSize: 12,
+  navMenuSize: 14,
+  h1Size: 36,
+  h2Size: 24,
+  h3Size: 18,
+  bodySize: 15,
+  buttonSize: 14,
+  footerSize: 13,
+  headingWeight: 'bold',
+  bodyWeight: 'normal',
+  lineHeight: 'normal'
+};
+
+export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
+  logoUrl: '/isezerano-online-logo.jpg',
+  isCustomLogo: false,
+  displayHeight: 48,
+  displayFit: 'cover',
+  borderRadius: 'rounded-xl',
+  altText: 'ISEZERANO ONLINE – GS GITUMBA Logo',
+  showInHeader: true,
+  showInFooter: true,
+  showInAdminGateway: true,
+  showInSidebar: true,
+  updateFavicon: true
+};
+
+export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
+  colors: DEFAULT_WEBSITE_COLORS,
+  typography: DEFAULT_WEBSITE_TYPOGRAPHY,
+  logo: DEFAULT_WEBSITE_LOGO,
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  updatedBy: 'system'
+};

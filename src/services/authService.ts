@@ -402,9 +402,10 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
       return { success: false, error: 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.', code: errCode };
     }
     if (errCode === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
       return { 
         success: false, 
-        error: `This domain is not authorized in Firebase Console. Please add this domain under Firebase Console > Authentication > Settings > Authorized domains for project "isezerano-news".`,
+        error: `Domain authorization required: "${currentHost}" is not yet added to Authorized Domains for project "isezerano-news". Please add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`,
         code: errCode
       };
     }

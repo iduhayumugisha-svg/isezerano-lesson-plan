@@ -19,6 +19,12 @@ service firebase.storage {
       allow write: if isAdmin();
     }
 
+    // Publicly viewable website assets and branding logos
+    match /website_assets/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default deny
     match /{allPaths=**} {
       allow read, write: if false;

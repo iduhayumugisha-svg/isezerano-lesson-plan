@@ -15,6 +15,7 @@ import {
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 
 export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'admin';
 
@@ -31,6 +32,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { isAdmin } = useAuth();
+  const { logoUrl, logoSettings, colors, typography } = useWebsiteDesign();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isLessonPlanActive = ['create', 'saved', 'settings'].includes(currentPage);
@@ -76,7 +78,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   };
 
   return (
-    <header className="no-print sticky top-0 z-50 bg-white/98 backdrop-blur-md border-b border-slate-200 shadow-2xs">
+    <header 
+      className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
+      style={{
+        backgroundColor: colors.headerBg,
+        borderColor: colors.headerBorder,
+        color: colors.headerText
+      }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           
@@ -86,20 +95,40 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             className="flex items-center space-x-3 cursor-pointer group select-none shrink-0"
             title="ISEZERANO ONLINE – GS GITUMBA"
           >
-            {/* Square/Rounded-Square Logo Container with Bible Image */}
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:border-teal-500 group-hover:scale-102 transition-all">
-              <img 
-                src="/isezerano-online-logo.jpg" 
-                alt="ISEZERANO ONLINE – GS GITUMBA Logo" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+            {/* Dynamic Custom or Default Logo */}
+            {logoSettings.showInHeader && (
+              <div 
+                className={`overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:scale-102 transition-all ${logoSettings.borderRadius}`}
+                style={{
+                  height: `${logoSettings.displayHeight}px`,
+                  width: `${logoSettings.displayHeight}px`
+                }}
+              >
+                <img 
+                  src={logoUrl} 
+                  alt={logoSettings.altText || 'ISEZERANO ONLINE – GS GITUMBA Logo'} 
+                  className={`w-full h-full object-${logoSettings.displayFit}`}
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            )}
             <div className="flex flex-col justify-center">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 group-hover:text-teal-800 transition-colors leading-tight">
+              <span 
+                className="font-bold tracking-tight transition-colors leading-tight"
+                style={{
+                  fontSize: `${typography.websiteTitleSize}px`,
+                  color: colors.headerText
+                }}
+              >
                 ISEZERANO ONLINE
               </span>
-              <span className="text-[11px] sm:text-xs font-semibold text-teal-700 tracking-wider uppercase leading-none mt-0.5">
+              <span 
+                className="font-semibold tracking-wider uppercase leading-none mt-0.5"
+                style={{
+                  fontSize: `${typography.websiteSubtitleSize}px`,
+                  color: colors.navLinkActive
+                }}
+              >
                 GS GITUMBA
               </span>
             </div>
@@ -111,10 +140,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               <button
                 key={link.id}
                 onClick={() => handleNavClick(link.id)}
-                className={`px-3 py-2 rounded-lg text-xs lg:text-sm font-medium transition-all relative cursor-pointer ${
+                style={{
+                  fontSize: `${typography.navMenuSize}px`,
+                  color: link.active ? colors.navLinkActive : colors.headerText
+                }}
+                className={`px-3 py-2 rounded-lg font-medium transition-all relative cursor-pointer ${
                   link.active
-                    ? 'text-teal-900 bg-teal-50 font-bold border border-teal-200/80 shadow-2xs'
-                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'font-bold shadow-2xs'
+                    : 'hover:opacity-80'
                 }`}
               >
                 <span>{link.label}</span>
@@ -124,7 +157,10 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   </span>
                 )}
                 {link.active && (
-                  <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-teal-600 rounded-full" />
+                  <span 
+                    className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
+                    style={{ backgroundColor: colors.navLinkActive }}
+                  />
                 )}
               </button>
             ))}
@@ -147,44 +183,40 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               </select>
             </div>
 
-            {/* Admin Manage Photos Button (Visible only to authorized administrator) */}
-            {isAdmin && (
-              <button
-                onClick={() => handleNavClick('admin')}
-                className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-bold border transition-all cursor-pointer ${
-                  currentPage === 'admin'
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
-                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                }`}
-                title="Manage Homepage Photos (Admin)"
-              >
-                <ShieldCheck className="w-4 h-4 text-amber-700" />
-                <span>Manage Photos</span>
-              </button>
-            )}
+            {/* Single Professional Admin Option */}
+            <button
+              onClick={() => handleNavClick('admin')}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                currentPage === 'admin'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                  : 'bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 hover:text-slate-900 border-slate-200'
+              }`}
+              title={isAdmin ? "Administrator Portal (Logged In)" : "Administrator Portal"}
+            >
+              <ShieldCheck className={`w-3.5 h-3.5 ${currentPage === 'admin' ? 'text-teal-400' : isAdmin ? 'text-teal-600' : 'text-slate-500'}`} />
+              <span>Admin</span>
+              {isAdmin && (
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 ring-2 ring-white ml-0.5" title="Logged in as Administrator" />
+              )}
+            </button>
 
             {/* Quick Action Button: Go to Dashboard */}
             <button
               onClick={() => handleNavClick('dashboard')}
-              className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition-all active:scale-98 cursor-pointer border border-slate-800"
+              style={{
+                backgroundColor: colors.primaryButtonBg,
+                color: colors.primaryButtonText,
+                fontSize: `${typography.buttonSize}px`
+              }}
+              className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold shadow-sm transition-all active:scale-98 cursor-pointer"
             >
-              <LayoutDashboard className="w-4 h-4 text-teal-400" />
+              <LayoutDashboard className="w-4 h-4" />
               <span>Go to Dashboard</span>
             </button>
           </div>
 
-          {/* Mobile Hamburger Button */}
+          {/* Mobile Bar: Dashboard & Hamburger (Single clean action bar, no duplicate Admin) */}
           <div className="flex items-center space-x-2 md:hidden">
-            {isAdmin && (
-              <button
-                onClick={() => handleNavClick('admin')}
-                className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 shadow-2xs"
-                title="Manage Homepage Photos"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-900" />
-                <span>Photos</span>
-              </button>
-            )}
 
             <button
               onClick={() => handleNavClick('dashboard')}
@@ -210,23 +242,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 shadow-lg">
           <div className="flex flex-col space-y-1">
-            {isAdmin && (
-              <button
-                onClick={() => handleNavClick('admin')}
-                className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg text-sm font-bold transition-colors ${
-                  currentPage === 'admin'
-                    ? 'bg-amber-100 text-amber-950 border border-amber-400'
-                    : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-600" />
-                  <span>Manage Homepage Photos (Admin)</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-amber-600" />
-              </button>
-            )}
-
             {navLinks.map((link) => (
               <button
                 key={link.id}
@@ -248,6 +263,30 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 <ChevronRight className={`w-4 h-4 ${link.active ? 'text-teal-600' : 'text-slate-400'}`} />
               </button>
             ))}
+
+            {/* Single Admin Option in Mobile Navigation */}
+            <div className="pt-2 border-t border-slate-100">
+              <button
+                onClick={() => handleNavClick('admin')}
+                className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                  currentPage === 'admin'
+                    ? 'bg-slate-900 text-white font-bold'
+                    : 'text-slate-700 hover:bg-slate-50 border border-slate-200/80 bg-slate-50/40'
+                }`}
+                title={isAdmin ? "Administrator Portal (Logged In)" : "Administrator Portal"}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <ShieldCheck className={`w-4 h-4 ${currentPage === 'admin' ? 'text-teal-400' : isAdmin ? 'text-teal-600' : 'text-slate-500'}`} />
+                  <span>Admin Portal</span>
+                  {isAdmin && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                      Verified
+                    </span>
+                  )}
+                </div>
+                <ChevronRight className={`w-4 h-4 ${currentPage === 'admin' ? 'text-teal-400' : 'text-slate-400'}`} />
+              </button>
+            </div>
           </div>
 
           {/* Mobile Language and Primary Action */}

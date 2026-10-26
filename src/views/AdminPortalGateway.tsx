@@ -14,6 +14,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { WebsitePage } from '../components/WebsiteHeader';
 import { 
   getFirebaseConfig, 
@@ -31,6 +32,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   onNavigate 
 }) => {
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
+  const { logoUrl, logoSettings } = useWebsiteDesign();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   // Firebase Web Config Connection State
   const [firebaseReady, setFirebaseReady] = useState<boolean>(() => isFirebaseConfigured());
   const [showConfigHelper, setShowConfigHelper] = useState<boolean>(() => !isFirebaseConfigured());
+  const [unauthorizedDomainHost, setUnauthorizedDomainHost] = useState<string | null>(null);
   const [configInput, setConfigInput] = useState<string>('');
   const [configFeedback, setConfigFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -155,6 +158,11 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
           }, 2500);
         }
       } else {
+        if (res.code === 'auth/unauthorized-domain') {
+          setUnauthorizedDomainHost(typeof window !== 'undefined' ? window.location.hostname : 'this domain');
+        } else {
+          setUnauthorizedDomainHost(null);
+        }
         if (res.code === 'MISSING_API_KEY' || res.code === 'AUTH_UNAVAILABLE') {
           setShowConfigHelper(true);
         }
@@ -191,14 +199,16 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         {/* Brand Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-teal-950 p-6 sm:p-8 text-white relative">
           <div className="flex items-center space-x-3.5 mb-3">
-            <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0">
-              <img 
-                src="/isezerano-online-logo.jpg" 
-                alt="ISEZERANO ONLINE Logo" 
-                className="w-full h-full object-cover" 
-                referrerPolicy="no-referrer"
-              />
-            </div>
+            {logoSettings.showInAdminGateway && (
+              <div className={`w-12 h-12 overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 ${logoSettings.borderRadius}`}>
+                <img 
+                  src={logoUrl} 
+                  alt={logoSettings.altText || "ISEZERANO ONLINE Logo"} 
+                  className={`w-full h-full object-${logoSettings.displayFit}`} 
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            )}
             <div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
                 ISEZERANO ONLINE
@@ -239,6 +249,32 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
             <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
               <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
               <span className="font-medium leading-relaxed">{errorMsg}</span>
+            </div>
+          )}
+
+          {unauthorizedDomainHost && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2 animate-in fade-in">
+              <div className="flex items-center space-x-2 font-bold text-amber-950">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>1-Step Action in Firebase Console:</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                To enable Google Sign-In on this browser URL, add the hostname below to your authorized domains in project <strong className="font-mono">isezerano-news</strong>:
+              </p>
+              <div className="flex items-center space-x-2 bg-white/80 p-2 rounded-lg border border-amber-200 font-mono text-[11px] select-all">
+                <span>{unauthorizedDomainHost}</span>
+              </div>
+              <div className="pt-1">
+                <a
+                  href="https://console.firebase.google.com/project/isezerano-news/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-[11px] transition-colors"
+                >
+                  <span>Open Firebase Authorized Domains Settings</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
           )}
 

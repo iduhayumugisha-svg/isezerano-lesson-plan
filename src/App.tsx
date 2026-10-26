@@ -41,6 +41,7 @@ import { AuthModal } from './components/AuthModal';
 
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { WebsiteDesignProvider } from './context/WebsiteDesignContext';
 import { FEATURE_FLAGS } from './config/features';
 
 export type AppPage = WebsitePage | 'students' | 'admin';
@@ -484,7 +485,9 @@ export default function App() {
   return (
     <AuthProvider>
       <LanguageProvider>
-        <AppContent />
+        <WebsiteDesignProvider>
+          <AppContent />
+        </WebsiteDesignProvider>
       </LanguageProvider>
     </AuthProvider>
   );

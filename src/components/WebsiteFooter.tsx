@@ -2,7 +2,7 @@ import React from 'react';
 import { GraduationCap, ShieldCheck, LayoutDashboard } from 'lucide-react';
 import { WebsitePage } from './WebsiteHeader';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 
 interface WebsiteFooterProps {
   onNavigate: (page: any) => void;
@@ -11,7 +11,7 @@ interface WebsiteFooterProps {
 
 export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpenAuth }) => {
   const { t } = useLanguage();
-  const { user, isAdmin } = useAuth();
+  const { logoUrl, logoSettings, colors, typography } = useWebsiteDesign();
 
   const handleLink = (page: WebsitePage) => {
     onNavigate(page);
@@ -19,9 +19,16 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
   };
 
   return (
-    <footer className="no-print bg-slate-900 text-slate-300 border-t border-slate-800 pt-12 pb-8 mt-auto">
+    <footer 
+      className="no-print border-t pt-12 pb-8 mt-auto transition-colors"
+      style={{
+        backgroundColor: colors.footerBg,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        color: colors.footerBodyText
+      }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-slate-800">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
           
           {/* Column 1: Brand & Purpose */}
           <div className="md:col-span-2 space-y-4">
@@ -29,19 +36,39 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
               onClick={() => handleLink('home')} 
               className="flex items-center space-x-3 cursor-pointer group"
             >
-              <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md group-hover:border-teal-400 transition-all">
-                <img 
-                  src="/isezerano-online-logo.jpg" 
-                  alt="ISEZERANO ONLINE – GS GITUMBA Logo" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
+              {logoSettings.showInFooter && (
+                <div 
+                  className={`overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md transition-all ${logoSettings.borderRadius}`}
+                  style={{
+                    height: `${Math.min(logoSettings.displayHeight, 44)}px`,
+                    width: `${Math.min(logoSettings.displayHeight, 44)}px`
+                  }}
+                >
+                  <img 
+                    src={logoUrl} 
+                    alt={logoSettings.altText || 'ISEZERANO ONLINE – GS GITUMBA Logo'} 
+                    className={`w-full h-full object-${logoSettings.displayFit}`}
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
               <div className="flex flex-col justify-center">
-                <span className="text-lg font-bold text-white tracking-tight leading-tight">
+                <span 
+                  className="font-bold tracking-tight leading-tight"
+                  style={{
+                    fontSize: `${typography.websiteTitleSize - 2}px`,
+                    color: colors.footerHeadingText
+                  }}
+                >
                   ISEZERANO ONLINE
                 </span>
-                <span className="text-xs text-teal-400 font-semibold tracking-wider uppercase mt-0.5">
+                <span 
+                  className="font-semibold tracking-wider uppercase mt-0.5"
+                  style={{
+                    fontSize: `${typography.websiteSubtitleSize}px`,
+                    color: colors.footerLinkColor
+                  }}
+                >
                   GS GITUMBA
                 </span>
               </div>
@@ -112,22 +139,6 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                   {t.navPrivacy || 'Privacy Policy'}
                 </button>
               </li>
-              <li className="pt-2 border-t border-slate-800/80">
-                <button
-                  onClick={() => {
-                    onNavigate('admin');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer inline-flex items-center space-x-1.5 group"
-                  title="Administrator Management Portal"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                  <span>Admin Portal</span>
-                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                    Staff
-                  </span>
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -188,18 +199,6 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
               className="hover:text-slate-300 transition-colors cursor-pointer"
             >
               Contact Support
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => {
-                onNavigate('admin');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="hover:text-amber-300 transition-colors cursor-pointer text-amber-400/90 font-medium inline-flex items-center space-x-1"
-              title="Administrator Management Access"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>Admin Portal</span>
             </button>
           </div>
         </div>
