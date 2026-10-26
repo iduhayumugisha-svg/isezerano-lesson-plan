@@ -24,7 +24,8 @@ import {
   UserCheck,
   Sparkles, 
   Palette,
-  ArrowLeft
+  ArrowLeft,
+  LogOut
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
 import { getAppSettings, saveAppSettings } from '../services/appSettingsService';
@@ -37,15 +38,17 @@ import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 interface AdminDashboardViewProps {
   lessonPlans: LessonPlan[];
   onNavigate: (page: SaasNavPage) => void;
+  onLogout?: () => void;
 }
 
 type AdminTab = 'design' | 'slider' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
-  onNavigate
+  onNavigate,
+  onLogout
 }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, signOutUser } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('slider');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
@@ -260,6 +263,15 @@ promoteToAdmin('admin@example.com');`;
     );
   }
 
+  const handleLogoutClick = async () => {
+    if (onLogout) {
+      onLogout();
+    } else {
+      await signOutUser();
+      onNavigate('home' as SaasNavPage);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-16">
       {/* Top Banner */}
@@ -293,6 +305,14 @@ promoteToAdmin('admin@example.com');`;
           >
             <Save className="w-4 h-4" />
             <span>{isSaving ? 'Saving...' : 'Save All Settings'}</span>
+          </button>
+          <button
+            onClick={handleLogoutClick}
+            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95 cursor-pointer ml-1"
+            title="Terminate administrator session and return to public website"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Log Out</span>
           </button>
         </div>
       </div>

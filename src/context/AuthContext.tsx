@@ -8,7 +8,8 @@ import {
   getUserProfile,
   sendPasswordReset as apiSendPasswordReset,
   signInWithGoogle as apiSignInWithGoogle,
-  isAuthorizedAdminEmail
+  isAuthorizedAdminEmail,
+  getFirebaseAuth
 } from '../services/authService';
 
 interface AuthContextType {
@@ -91,12 +92,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const auth = getFirebaseAuth();
+  const hasActiveFirebaseAuth = Boolean(auth?.currentUser && user && auth.currentUser.uid === user.uid);
+
   const isAdmin = Boolean(
+    hasActiveFirebaseAuth && 
     user && 
     (user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && 
     user.status === 'active'
   );
-  const isTeacher = Boolean(user && (user.role === 'teacher' || user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && user.status === 'active');
+  const isTeacher = Boolean(
+    user && 
+    (user.role === 'teacher' || user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && 
+    user.status === 'active'
+  );
 
   return (
     <AuthContext.Provider

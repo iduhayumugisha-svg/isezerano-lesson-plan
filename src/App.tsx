@@ -77,7 +77,7 @@ const getPageFromUrl = (): AppPage => {
 
 function AppContent() {
   const { t } = useLanguage();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, signOutUser } = useAuth();
 
   // Route state initialized from browser URL (/admin, /manage, #admin, etc.)
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -257,10 +257,10 @@ function AppContent() {
           />
         )}
 
-        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin, /manage, or footer link */}
+        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or Header Admin button */}
         {currentPage === 'admin' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            {isAdmin ? (
+            {isAdmin && user ? (
               <AdminDashboardView
                 lessonPlans={lessonPlans}
                 onNavigate={(page) => {
@@ -269,6 +269,10 @@ function AppContent() {
                   } else {
                     handleNavigate('dashboard');
                   }
+                }}
+                onLogout={async () => {
+                  await signOutUser();
+                  handleNavigate('home');
                 }}
               />
             ) : (

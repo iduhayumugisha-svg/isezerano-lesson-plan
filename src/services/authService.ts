@@ -66,15 +66,21 @@ export const getFirebaseAuth = () => {
  */
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   const auth = getFirebaseAuth();
-  let hasAdminClaim = false;
-  if (auth?.currentUser && auth.currentUser.uid === uid) {
-    try {
-      const tokenResult = await auth.currentUser.getIdTokenResult();
-      hasAdminClaim = Boolean(tokenResult.claims && tokenResult.claims.admin === true);
-    } catch {
-      // ignore
-    }
+  // Strictly require an active authenticated Firebase user matching this uid
+  if (!auth?.currentUser || auth.currentUser.uid !== uid) {
+    return null;
   }
+
+  let hasAdminClaim = false;
+  try {
+    const tokenResult = await auth.currentUser.getIdTokenResult();
+    hasAdminClaim = Boolean(tokenResult.claims && tokenResult.claims.admin === true);
+  } catch {
+    // ignore
+  }
+
+  const userEmail = auth.currentUser.email || '';
+  const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
 
   const db = initFirestoreIfConfigured();
   if (db) {
@@ -82,8 +88,6 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
-        const userEmail = data.email || auth?.currentUser?.email || '';
-        const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
         const resolvedRole: UserRole = (isSuperAdmin || data.role === 'admin') ? 'admin' : 'teacher';
 
         // Self-heal Firestore document if authorized admin was previously stored as teacher
@@ -100,9 +104,9 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
         }
 
         return {
-          uid: data.uid || uid,
+          uid,
           email: userEmail,
-          displayName: data.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+          displayName: data.displayName || auth.currentUser.displayName || (isSuperAdmin ? 'Administrator' : 'Teacher'),
           role: resolvedRole,
           status: (data.status === 'inactive' && !isSuperAdmin ? 'inactive' : 'active') as UserStatus,
           schoolName: data.schoolName || '',
@@ -111,38 +115,21 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
         };
       }
     } catch (err) {
-      console.warn('Could not read user profile from Firestore, checking local storage:', err);
+      console.warn('Could not read user profile from Firestore:', err);
     }
   }
 
-  // Local fallback
-  const localUsers = getLocalUsers();
-  const found = localUsers.find(u => u.uid === uid);
-  if (found) {
-    if (isAuthorizedAdminEmail(found.email)) {
-      found.role = 'admin';
-      found.status = 'active';
-    }
-    return found;
-  }
-
-  const rawSession = localStorage.getItem(LOCAL_USER_KEY);
-  if (rawSession) {
-    try {
-      const session = JSON.parse(rawSession);
-      if (session && session.uid === uid) {
-        if (isAuthorizedAdminEmail(session.email)) {
-          session.role = 'admin';
-          session.status = 'active';
-        }
-        return session;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  return null;
+  // Fallback to verified profile from active Firebase Auth session
+  return {
+    uid,
+    email: userEmail,
+    displayName: auth.currentUser.displayName || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+    role: isSuperAdmin ? 'admin' : 'teacher',
+    status: 'active',
+    schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
 };
 
 /**
@@ -279,19 +266,17 @@ export const signIn = async (
     }
   }
 
-  // Local fallback sign in
+  // Local fallback sign in for offline teachers
   const localUsers = getLocalUsers();
   const found = localUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
   if (found) {
-    if (isAuthorizedAdminEmail(found.email)) {
-      found.role = 'admin';
-      found.status = 'active';
-    }
     if (found.status === 'inactive') {
       return { success: false, error: 'Your account has been deactivated by an Administrator.' };
     }
-    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(found));
-    return { success: true, user: found, isAdmin: found.role === 'admin' };
+    // Security: Local mock fallback accounts are strictly teacher role; admin requires verified Firebase Authentication
+    const safeTeacherUser: UserProfile = { ...found, role: 'teacher' };
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(safeTeacherUser));
+    return { success: true, user: safeTeacherUser, isAdmin: false };
   }
 
   return { success: false, error: 'Invalid credentials or user not found. Please sign up or configure Firebase.' };
@@ -545,6 +530,7 @@ export const listUsers = async (): Promise<UserProfile[]> => {
 
 /**
  * Subscribe to Auth State changes
+ * Strictly authenticated: Never returns an admin user unless authenticated in Firebase
  */
 export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (() => void) => {
   const auth = getFirebaseAuth();
@@ -558,32 +544,15 @@ export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (
           return;
         }
       }
-      // Check local storage session
-      const raw = localStorage.getItem(LOCAL_USER_KEY);
-      if (raw) {
-        try {
-          callback(JSON.parse(raw));
-          return;
-        } catch {
-          // ignore
-        }
-      }
+      // When Firebase user is null, ALWAYS purge any local admin session and signal null
+      localStorage.removeItem(LOCAL_USER_KEY);
       callback(null);
     });
   }
 
-  // If no Firebase Auth yet, check local storage
-  const raw = localStorage.getItem(LOCAL_USER_KEY);
-  if (raw) {
-    try {
-      callback(JSON.parse(raw));
-    } catch {
-      callback(null);
-    }
-  } else {
-    callback(null);
-  }
-
+  // If Firebase Auth instance is not initialized, session is unauthenticated
+  localStorage.removeItem(LOCAL_USER_KEY);
+  callback(null);
   return () => {};
 };
 
