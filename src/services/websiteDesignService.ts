@@ -1,19 +1,70 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { 
+  getStorage, 
+  ref, 
+  uploadBytesResumable, 
+  getDownloadURL 
+} from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
 import { 
   WebsiteDesignSettings, 
   DEFAULT_WEBSITE_DESIGN 
 } from '../types/websiteDesign';
-import { initFirestoreIfConfigured, getFirebaseApp } from './storageService';
+import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 
 const DESIGN_STORAGE_KEY = 'isezerano_website_design';
 
+export interface LogoUploadProgress {
+  percent: number;
+  stage: 'validating' | 'uploading' | 'saving_database' | 'complete' | 'error';
+  message: string;
+}
+
+export interface LogoUploadResult {
+  success: boolean;
+  url?: string;
+  storageBucket?: string;
+  sizeBytes?: number;
+  error?: string;
+}
+
+/**
+ * Validates a logo file before attempting upload
+ */
+export const validateLogoFile = (file: File): { valid: boolean; error?: string } => {
+  if (!file) {
+    return { valid: false, error: 'No file selected.' };
+  }
+
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'image/gif'];
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const validExts = ['png', 'jpg', 'jpeg', 'webp', 'svg', 'gif'];
+
+  if (!validTypes.includes(file.type) && (!ext || !validExts.includes(ext))) {
+    return { 
+      valid: false, 
+      error: `Invalid file format (${file.type || ext}). Please upload a valid PNG, JPG, WebP, or SVG image.` 
+    };
+  }
+
+  // 5MB max logo size
+  const maxBytes = 5 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+    return { 
+      valid: false, 
+      error: `File is too large (${sizeMb} MB). Maximum allowed logo file size is 5.0 MB.` 
+    };
+  }
+
+  return { valid: true };
+};
+
 /**
  * Fetch published website appearance, typography & logo settings.
- * Public visitors can read without an account.
+ * Checks Cloud Firestore first as source of truth, then falls back to local cache.
  */
 export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
-  // 1. Check Cloud Firestore appSettings/website_design
   const db = initFirestoreIfConfigured();
   if (db) {
     try {
@@ -28,7 +79,11 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
-        localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
+        try {
+          localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
+        } catch {
+          // ignore cache error
+        }
         return merged;
       }
     } catch (err) {
@@ -36,7 +91,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
     }
   }
 
-  // 2. LocalStorage Cache fallback
+  // LocalStorage Cache fallback
   try {
     const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
     if (cached) {
@@ -57,7 +112,47 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
 };
 
 /**
- * Save published website design settings.
+ * Real-time subscription to published website design settings.
+ * Ensures every visitor and admin device receives changes immediately.
+ */
+export const subscribeToWebsiteDesign = (
+  onUpdate: (settings: WebsiteDesignSettings) => void
+): (() => void) => {
+  const db = initFirestoreIfConfigured();
+  if (!db) return () => {};
+
+  try {
+    const docRef = doc(db, 'appSettings', 'website_design');
+    const unsubscribe = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as Partial<WebsiteDesignSettings>;
+        const merged: WebsiteDesignSettings = {
+          colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
+          typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
+          logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
+          updatedAt: data.updatedAt || new Date().toISOString(),
+          updatedBy: data.updatedBy || 'admin'
+        };
+        try {
+          localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
+        } catch {
+          // ignore
+        }
+        onUpdate(merged);
+      }
+    }, (error) => {
+      console.warn('website_design real-time subscription error:', error);
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Failed to attach website_design snapshot listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Save published website design settings to Firestore as the shared source of truth.
  * Restricted to verified administrator in Firestore Security Rules.
  */
 export const saveWebsiteDesignSettings = async (
@@ -70,7 +165,7 @@ export const saveWebsiteDesignSettings = async (
     updatedBy: adminUid
   };
 
-  // Always save locally so client updates immediately
+  // Always update local cache immediately
   try {
     localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(payload));
   } catch (err) {
@@ -81,7 +176,7 @@ export const saveWebsiteDesignSettings = async (
   if (db) {
     try {
       const docRef = doc(db, 'appSettings', 'website_design');
-      await setDoc(docRef, payload);
+      await setDoc(docRef, payload, { merge: true });
       return { success: true };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to publish design settings to Firestore';
@@ -93,117 +188,216 @@ export const saveWebsiteDesignSettings = async (
 };
 
 /**
- * Optimize image file on client canvas (Phone / Desktop friendly).
- * Preserves transparency for PNGs and compresses to lightweight Data URI.
+ * Upload a logo file to Firebase Storage and save its permanent URL in Firestore.
+ * Traces actual progress, handles bucket discovery, and waits for database confirmation.
  */
-export const compressLogoImage = (
+export const uploadAndSaveWebsiteLogo = async (
   file: File,
-  maxDimension = 512,
-  quality = 0.90
-): Promise<{ dataUrl: string; sizeKb: number; mimeType: string }> => {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Selected file must be an image (PNG, JPG, WebP, SVG).'));
-      return;
-    }
-
-    const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Unable to create canvas rendering context'));
-          return;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        // If PNG, keep transparent background; else fill white
-        if (!isPng) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, width, height);
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const mime = isPng ? 'image/png' : 'image/jpeg';
-        const dataUrl = canvas.toDataURL(mime, quality);
-        const approxSizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-
-        resolve({ dataUrl, sizeKb: approxSizeKb, mimeType: mime });
-      };
-
-      img.onerror = () => {
-        reject(new Error('Failed to load logo image file.'));
-      };
-
-      img.src = e.target?.result as string;
-    };
-
-    reader.onerror = () => {
-      reject(new Error('Failed to read logo image file from storage.'));
-    };
-
-    reader.readAsDataURL(file);
+  adminUid: string,
+  onProgress?: (progress: LogoUploadProgress) => void
+): Promise<LogoUploadResult> => {
+  // 1. Validation
+  onProgress?.({
+    percent: 5,
+    stage: 'validating',
+    message: 'Validating image file format and dimensions...'
   });
-};
 
-/**
- * Upload logo file:
- * 1. Checks Firebase Storage first. If active and accessible, uploads to storage bucket.
- * 2. If Firebase Storage is unavailable (Spark free tier or unconfigured bucket),
- *    falls back to client-side compressed Data URL stored directly in Firestore/LocalStorage.
- * Returns the final URL or Data URL.
- */
-export const uploadWebsiteLogo = async (
-  file: File
-): Promise<{ url: string; storageType: 'firebase-storage' | 'base64-firestore'; sizeKb: number }> => {
-  const { dataUrl, sizeKb } = await compressLogoImage(file, 512, 0.9);
+  const validation = validateLogoFile(file);
+  if (!validation.valid) {
+    const errorMsg = validation.error || 'Invalid file.';
+    onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+
+  // 2. Authentication check
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    const errorMsg = 'Authentication required: You must be signed in with the authorized administrator account (twizerefelix90@gmail.com) to upload logos.';
+    onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
+    return { success: false, error: errorMsg };
+  }
 
   const app = getFirebaseApp();
-  if (app) {
+  if (!app) {
+    const errorMsg = 'Firebase App is not initialized. Please verify your internet connection.';
+    onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+
+  // Candidate storage buckets for project isezerano-news
+  const candidateBuckets = [
+    CANONICAL_FIREBASE_CONFIG.storageBucket || 'isezerano-news.firebasestorage.app',
+    'isezerano-news.appspot.com',
+    'isezerano-news.firebasestorage.app'
+  ];
+
+  // Remove duplicates while preserving order
+  const uniqueBuckets = Array.from(new Set(candidateBuckets));
+
+  let lastError: Error | null = null;
+  let finalDownloadUrl: string | null = null;
+  let usedBucket: string | null = null;
+
+  const rawExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+  const cleanExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
+  const fileName = `logo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${cleanExt}`;
+  const storagePath = `website_assets/logos/${fileName}`;
+
+  // Try each bucket candidate
+  for (const bucket of uniqueBuckets) {
     try {
-      const storage = getStorage(app);
-      const ext = file.name.split('.').pop() || 'png';
-      const storageRef = ref(storage, `website_assets/logos/logo_${Date.now()}.${ext}`);
-      
-      await uploadString(storageRef, dataUrl, 'data_url');
-      const downloadUrl = await getDownloadURL(storageRef);
-      return {
-        url: downloadUrl,
-        storageType: 'firebase-storage',
-        sizeKb
+      onProgress?.({
+        percent: 15,
+        stage: 'uploading',
+        message: `Connecting to Firebase Storage bucket (${bucket})...`
+      });
+
+      const storage = getStorage(app, `gs://${bucket}`);
+      const storageRef = ref(storage, storagePath);
+
+      const metadata = {
+        contentType: file.type || `image/${cleanExt}`,
+        customMetadata: {
+          uploadedBy: currentUser.email || adminUid,
+          uploadedAt: new Date().toISOString(),
+          originalName: file.name
+        }
       };
-    } catch (storageErr) {
-      console.warn('Firebase Storage upload failed, utilizing direct optimized storage:', storageErr);
+
+      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+
+      // Track actual byte upload progress
+      finalDownloadUrl = await new Promise<string>((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            if (snapshot.totalBytes > 0) {
+              const uploadPercent = Math.min(
+                85,
+                Math.round(15 + (snapshot.bytesTransferred / snapshot.totalBytes) * 70)
+              );
+              onProgress?.({
+                percent: uploadPercent,
+                stage: 'uploading',
+                message: `Uploading logo to Firebase Storage: ${uploadPercent}% (${Math.round(snapshot.bytesTransferred / 1024)} KB / ${Math.round(snapshot.totalBytes / 1024)} KB)...`
+              });
+            }
+          },
+          (uploadError) => {
+            reject(uploadError);
+          },
+          async () => {
+            try {
+              const url = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(url);
+            } catch (urlErr) {
+              reject(urlErr);
+            }
+          }
+        );
+      });
+
+      usedBucket = bucket;
+      break; // Upload succeeded, exit bucket loop
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Storage attempt on bucket "${bucket}" failed:`, err?.code || err?.message);
+      // If error is not a bucket-not-found / project configuration error, break early
+      if (err?.code === 'storage/unauthorized') {
+        break;
+      }
     }
   }
 
-  // Practical 100% free fallback: Store optimized dataUrl in Firestore document
+  // If Firebase Storage failed
+  if (!finalDownloadUrl) {
+    let errorDetail = lastError?.message || 'Firebase Storage upload failed.';
+    if ((lastError as any)?.code === 'storage/unauthorized') {
+      errorDetail = 'Firebase Storage permission denied. Please verify that your account (twizerefelix90@gmail.com) is logged in and authorized.';
+    } else if ((lastError as any)?.code === 'storage/bucket-not-found') {
+      errorDetail = 'Storage bucket was not found in project isezerano-news. Please ensure Cloud Storage is activated in Firebase Console.';
+    }
+
+    onProgress?.({
+      percent: 0,
+      stage: 'error',
+      message: errorDetail
+    });
+    return { success: false, error: errorDetail };
+  }
+
+  // 4. Save permanent URL to Firestore appSettings/website_design
+  onProgress?.({
+    percent: 90,
+    stage: 'saving_database',
+    message: 'Saving permanent logo URL to Cloud Firestore database...'
+  });
+
+  const db = initFirestoreIfConfigured();
+  if (db) {
+    try {
+      const currentSettings = await getWebsiteDesignSettings();
+      const updatedSettings: WebsiteDesignSettings = {
+        ...currentSettings,
+        logo: {
+          ...currentSettings.logo,
+          logoUrl: finalDownloadUrl,
+          isCustomLogo: true
+        },
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.email || adminUid
+      };
+
+      const docRef = doc(db, 'appSettings', 'website_design');
+      await setDoc(docRef, updatedSettings, { merge: true });
+
+      // Cache locally
+      try {
+        localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
+      } catch {
+        // ignore
+      }
+
+      if (updatedSettings.logo.updateFavicon) {
+        updateBrowserFavicon(finalDownloadUrl);
+      }
+
+      onProgress?.({
+        percent: 100,
+        stage: 'complete',
+        message: 'Logo successfully uploaded to Firebase Storage and published across the website!'
+      });
+
+      return {
+        success: true,
+        url: finalDownloadUrl,
+        storageBucket: usedBucket || undefined,
+        sizeBytes: file.size
+      };
+    } catch (dbErr: any) {
+      const dbErrorMsg = `Logo was uploaded to Storage, but failed to save in Firestore: ${dbErr?.message || 'Database error'}`;
+      onProgress?.({
+        percent: 0,
+        stage: 'error',
+        message: dbErrorMsg
+      });
+      return { success: false, error: dbErrorMsg, url: finalDownloadUrl };
+    }
+  }
+
+  onProgress?.({
+    percent: 100,
+    stage: 'complete',
+    message: 'Logo uploaded successfully.'
+  });
+
   return {
-    url: dataUrl,
-    storageType: 'base64-firestore',
-    sizeKb
+    success: true,
+    url: finalDownloadUrl,
+    storageBucket: usedBucket || undefined,
+    sizeBytes: file.size
   };
 };
 
@@ -333,7 +527,6 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
     }
   `;
 
-  // Update favicon if requested
   if (logo.updateFavicon && logo.logoUrl) {
     updateBrowserFavicon(logo.logoUrl);
   }

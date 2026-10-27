@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Mail, 
   Send, 
@@ -6,19 +6,25 @@ import {
   AlertCircle, 
   MapPin, 
   HelpCircle, 
-  MessageSquare,
-  Sparkles,
-  School,
-  LayoutDashboard,
-  GraduationCap
+  MessageSquare, 
+  Sparkles, 
+  School, 
+  LayoutDashboard, 
+  GraduationCap,
+  Phone,
+  Clock
 } from 'lucide-react';
 import { WebsitePage } from '../components/WebsiteHeader';
+import { WebsitePageContent } from '../types/websitePages';
+import { getPageContent, subscribeToPageContent, DEFAULT_PAGES_CONTENT } from '../services/websitePagesService';
 
 interface ContactViewProps {
   onNavigate: (page: WebsitePage) => void;
 }
 
 export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
+  const [content, setContent] = useState<WebsitePageContent>(DEFAULT_PAGES_CONTENT.contact);
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -31,6 +37,40 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadContent();
+
+    // Attach real-time Firestore listener for cross-device updates
+    const unsubscribe = subscribeToPageContent('contact', (page) => {
+      setContent(page);
+    });
+
+    const handleUpdate = (e: any) => {
+      if (e.detail?.pageId === 'contact') {
+        if (e.detail.page) {
+          setContent(e.detail.page);
+        } else {
+          loadContent();
+        }
+      }
+    };
+
+    window.addEventListener('website_pages_updated', handleUpdate);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('website_pages_updated', handleUpdate);
+    };
+  }, []);
+
+  const loadContent = async () => {
+    try {
+      const data = await getPageContent('contact');
+      setContent(data);
+    } catch {
+      // keep default
+    }
+  };
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -61,7 +101,6 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
 
     setIsSubmitting(true);
 
-    // Save feedback locally in browser log so no submission is lost
     try {
       const existing = JSON.parse(localStorage.getItem('isezerano_feedback_log') || '[]');
       existing.push({
@@ -87,26 +126,57 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
     }, 500);
   };
 
+  const contactData = content.contactData || {
+    schoolName: 'GS GITUMBA',
+    address: 'Buyoga Sector, Rulindo District, Northern Province, Rwanda',
+    email: 'twizerefelix90@gmail.com',
+    phone: '0782971258',
+    whatsapp: '250782971258',
+    workingHours: 'Monday – Friday: 7:30 AM – 5:00 PM CAT'
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
       
       {/* 1. Header */}
       <div className="text-center space-y-3 max-w-2xl mx-auto">
-        <div className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
-          <MessageSquare className="w-3.5 h-3.5 text-teal-700" />
-          <span>Teacher Inquiries & Support</span>
-        </div>
+        {content.badge && (
+          <div className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
+            <MessageSquare className="w-3.5 h-3.5 text-teal-700" />
+            <span>{content.badge}</span>
+          </div>
+        )}
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-          Contact Us & Share Feedback
+          {content.title}
         </h1>
-        <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-normal">
-          Have a question about Rwanda CBC lesson planning, a feature suggestion, or need technical assistance? Let us know below.
-        </p>
+        {content.subtitle && (
+          <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-normal">
+            {content.subtitle}
+          </p>
+        )}
       </div>
+
+      {/* Highlight Box if enabled */}
+      {content.highlightBox?.enabled && (
+        <div className="bg-slate-900 rounded-2xl p-6 sm:p-8 border border-slate-800 text-white shadow-sm space-y-3">
+          {content.highlightBox.badge && (
+            <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-teal-400" />
+              <span>{content.highlightBox.badge}</span>
+            </div>
+          )}
+          <h2 className="text-lg sm:text-xl font-bold text-white">
+            {content.highlightBox.title}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+            {content.highlightBox.content}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* 2. Left Information Column (Configurable, honest, no fake data) */}
+        {/* 2. Left Information Column */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-5">
             <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
@@ -118,7 +188,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
                 <School className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-slate-900 block">Origin & School</span>
-                  <span>GS GITUMBA, Buyoga Sector, Rulindo District, Northern Province, Rwanda</span>
+                  <span>{contactData.schoolName}</span>
                 </div>
               </div>
 
@@ -126,9 +196,43 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
                 <MapPin className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-slate-900 block">Location</span>
-                  <span>Northern Province / Kigali, Rwanda</span>
+                  <span>{contactData.address}</span>
                 </div>
               </div>
+
+              {contactData.phone && (
+                <div className="flex items-start space-x-3">
+                  <Phone className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-900 block">Phone Support</span>
+                    <a href={`tel:${contactData.phone}`} className="hover:text-teal-700 font-semibold">
+                      {contactData.phone}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {contactData.email && (
+                <div className="flex items-start space-x-3">
+                  <Mail className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-900 block">Email Inquiry</span>
+                    <a href={`mailto:${contactData.email}`} className="hover:text-teal-700 font-medium truncate block">
+                      {contactData.email}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {contactData.workingHours && (
+                <div className="flex items-start space-x-3">
+                  <Clock className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-900 block">Service Hours</span>
+                    <span>{contactData.workingHours}</span>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-start space-x-3">
                 <GraduationCap className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
@@ -149,7 +253,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
 
             <div className="pt-4 border-t border-slate-100 bg-slate-50 p-3.5 rounded-xl text-[11px] text-slate-600 leading-relaxed">
               <strong className="text-slate-800 block mb-1">Administrative Note:</strong>
-              Direct telephone and email support lines can be configured by the platform administrator as verified official communication channels are established.
+              Direct telephone and email support lines can be updated anytime by the platform administrator via the Admin Portal.
             </div>
           </div>
 
@@ -171,7 +275,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
         </div>
 
         {/* 3. Right Message Form */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-2xs space-y-6">
             
             {/* Feedback Alert if successfully submitted */}
@@ -330,6 +434,30 @@ export const ContactView: React.FC<ContactViewProps> = ({ onNavigate }) => {
             </form>
 
           </div>
+
+          {/* Any Additional Configured Sections (e.g. FAQs) */}
+          {content.sections && content.sections.length > 0 && (
+            <div className="space-y-4">
+              {content.sections.map((section, idx) => (
+                <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-teal-700" />
+                    <span>{section.title}</span>
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                    {section.content}
+                  </p>
+                  {section.bullets && section.bullets.length > 0 && (
+                    <ul className="list-disc pl-5 space-y-1.5 text-xs text-slate-600 pt-1">
+                      {section.bullets.map((b, bIdx) => (
+                        <li key={bIdx} className="leading-relaxed">{b}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

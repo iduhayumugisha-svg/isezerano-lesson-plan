@@ -32,7 +32,8 @@ import {
   MessageCircle,
   Activity,
   TrendingUp,
-  Globe
+  Globe,
+  FileText
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
 import { getAppSettings, saveAppSettings } from '../services/appSettingsService';
@@ -41,9 +42,10 @@ import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
 import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
+import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { 
   getAnalyticsSummary, 
-  resetLocalTelemetry, 
+  subscribeToSharedAnalytics, 
   AnalyticsSummary, 
   GA_MEASUREMENT_ID 
 } from '../services/analyticsService';
@@ -54,7 +56,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'design' | 'slider' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'slider' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -62,7 +64,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onLogout
 }) => {
   const { user, isAdmin, signOutUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('slider');
+  const [activeTab, setActiveTab] = useState<AdminTab>('pages');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,6 +81,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   useEffect(() => {
     loadAdminData();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      const unsubscribe = subscribeToSharedAnalytics((fresh) => {
+        setAnalyticsData(fresh);
+      });
+      return () => unsubscribe();
+    }
+  }, [activeTab]);
 
   const loadAdminData = async () => {
     setIsLoading(true);
@@ -351,6 +362,21 @@ promoteToAdmin('admin@example.com');`;
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm flex flex-wrap gap-1">
         <button
+          onClick={() => setActiveTab('pages')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'pages'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-amber-300" />
+          <span>Website Pages</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'pages' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            About, Contact, Privacy, Terms
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('design')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'design'
@@ -459,6 +485,11 @@ promoteToAdmin('admin@example.com');`;
         </button>
       </div>
 
+      {/* ================= TAB: WEBSITE PAGES MANAGEMENT (About, Contact, Privacy, Terms) ================= */}
+      {activeTab === 'pages' && (
+        <WebsitePagesManager />
+      )}
+
       {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}
       {activeTab === 'design' && (
         <WebsiteDesignManager />
@@ -493,10 +524,10 @@ promoteToAdmin('admin@example.com');`;
                   type="button"
                   onClick={() => setAnalyticsData(getAnalyticsSummary())}
                   className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  title="Refresh live metrics"
+                  title="Refresh live metrics from Cloud Firestore and local session"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Refresh</span>
+                  <span>Refresh Metrics</span>
                 </button>
 
                 <a
@@ -509,21 +540,6 @@ promoteToAdmin('admin@example.com');`;
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Open GA4 Console</span>
                 </a>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to reset local session analytics counters?')) {
-                      const fresh = resetLocalTelemetry();
-                      setAnalyticsData(fresh);
-                    }
-                  }}
-                  className="inline-flex items-center space-x-1 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 transition-all cursor-pointer"
-                  title="Reset local telemetry counters"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Reset Counters</span>
-                </button>
               </div>
             </div>
 
@@ -736,22 +752,32 @@ promoteToAdmin('admin@example.com');`;
           </div>
 
           {/* Architectural Transparency & Security Disclosure */}
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-xs text-slate-600 space-y-3">
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-xs text-slate-600 space-y-4">
             <div className="font-bold text-slate-900 flex items-center space-x-2 text-sm">
               <Globe className="w-4 h-4 text-teal-600" />
-              <span>Google Analytics 4 Architecture & Admin Security</span>
+              <span>Google Analytics 4 & Shared Cloud Firestore Telemetry</span>
             </div>
             <p className="leading-relaxed">
-              <strong>Measurement ID {analyticsData.measurementId || GA_MEASUREMENT_ID}</strong> is embedded via the official Google tag (gtag.js) script, transmitting telemetry directly to Google Cloud's Analytics infrastructure for long-term cohort, geographical, and demographic reports.
+              Traffic and user interactions are tracked with dual-layer integrity for <span className="font-semibold text-slate-900">ISEZERANO ONLINE – GS GITUMBA</span>:
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <span className="font-bold text-slate-800 block mb-1">Strict Administrator Isolation:</span>
-                This analytics dashboard is accessible strictly to the authorized administrator account (<code className="text-emerald-700 font-mono font-semibold">twizerefelix90@gmail.com</code>). General visitors and unauthenticated users cannot see or access these metrics.
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 block text-xs">Google Analytics 4 Property</span>
+                <p className="text-[11px] text-slate-600 leading-normal">
+                  Official stream (<code className="text-emerald-700 font-mono font-semibold">{analyticsData.measurementId || GA_MEASUREMENT_ID}</code>) transmits telemetry to Google Cloud for official reports and geographical demographics.
+                </p>
               </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <span className="font-bold text-slate-800 block mb-1">Direct Console Access:</span>
-                To view deep historical reports, bounce rates, and Rwanda geographic distributions, click the <strong>Open GA4 Console</strong> button above to access Google Analytics directly with your authorized Google account.
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 block text-xs">Shared Cloud Counters</span>
+                <p className="text-[11px] text-slate-600 leading-normal">
+                  All page views, lesson plan generations, and WhatsApp clicks synchronize to Firestore (<code className="text-teal-700 font-mono font-semibold">site_stats/counters</code>) in real time across every visitor device.
+                </p>
+              </div>
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 block text-xs">Data Preservation</span>
+                <p className="text-[11px] text-slate-600 leading-normal">
+                  Reset buttons have been completely removed. Existing view counts and historical metrics are permanently preserved in the shared database.
+                </p>
               </div>
             </div>
           </div>

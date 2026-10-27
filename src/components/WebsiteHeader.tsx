@@ -17,7 +17,7 @@ import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'admin';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin';
 
 interface WebsiteHeaderProps {
   currentPage: string;

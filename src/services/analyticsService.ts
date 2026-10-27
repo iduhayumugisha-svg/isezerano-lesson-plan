@@ -1,10 +1,11 @@
 /**
  * ISEZERANO ONLINE – GS GITUMBA
- * Google Analytics 4 (GA4) & In-App Telemetry Service
+ * Google Analytics 4 (GA4) & Shared Firestore Telemetry Service
  * Measurement ID: G-XVJBQX90HX
  */
 
-import { getFirebaseConfig } from './storageService';
+import { doc, getDoc, setDoc, increment, onSnapshot } from 'firebase/firestore';
+import { getFirebaseConfig, initFirestoreIfConfigured } from './storageService';
 
 declare global {
   interface Window {
@@ -37,7 +38,7 @@ export interface AnalyticsSummary {
   lastActiveDate: string;
 }
 
-const getDefaultTelemetry = (): AnalyticsSummary => ({
+export const getDefaultTelemetry = (): AnalyticsSummary => ({
   measurementId: GA_MEASUREMENT_ID,
   isGaLoaded: false,
   totalPageViews: 0,
@@ -49,6 +50,7 @@ const getDefaultTelemetry = (): AnalyticsSummary => ({
     about: 0,
     contact: 0,
     privacy: 0,
+    terms: 0,
     admin: 0
   },
   totalWhatsAppClicks: 0,
@@ -59,7 +61,7 @@ const getDefaultTelemetry = (): AnalyticsSummary => ({
   lastActiveDate: new Date().toISOString()
 });
 
-const loadLocalTelemetry = (): AnalyticsSummary => {
+export const loadLocalTelemetry = (): AnalyticsSummary => {
   try {
     const raw = localStorage.getItem(ANALYTICS_STORAGE_KEY);
     if (raw) {
@@ -79,7 +81,7 @@ const loadLocalTelemetry = (): AnalyticsSummary => {
   return getDefaultTelemetry();
 };
 
-const saveLocalTelemetry = (data: AnalyticsSummary): void => {
+export const saveLocalTelemetry = (data: AnalyticsSummary): void => {
   try {
     localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
@@ -143,6 +145,7 @@ export const initGoogleAnalytics = (): void => {
 
 /**
  * Track an SPA Page View
+ * Sends to GA4 stream AND atomically increments shared Firestore counters
  */
 export const trackPageView = (pageName: string, title?: string): void => {
   if (typeof window === 'undefined') return;
@@ -150,7 +153,7 @@ export const trackPageView = (pageName: string, title?: string): void => {
   const pagePath = pageName === 'home' ? '/' : `/${pageName}`;
   const pageTitle = title || `ISEZERANO ONLINE – ${pageName.toUpperCase()}`;
 
-  // 1. Send to Google Analytics 4
+  // 1. Dispatch to Google Analytics 4
   if (window.gtag) {
     try {
       window.gtag('event', 'page_view', {
@@ -163,7 +166,24 @@ export const trackPageView = (pageName: string, title?: string): void => {
     }
   }
 
-  // 2. Record in internal telemetry for the Admin Dashboard
+  // 2. Atomically increment shared Cloud Firestore counters
+  const db = initFirestoreIfConfigured();
+  if (db) {
+    try {
+      const statsRef = doc(db, 'site_stats', 'counters');
+      setDoc(statsRef, {
+        totalPageViews: increment(1),
+        [`pageViewsByPage.${pageName}`]: increment(1),
+        lastActiveDate: new Date().toISOString()
+      }, { merge: true }).catch(() => {
+        // network silent
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Local telemetry cache for immediate UI feedback
   try {
     const telemetry = loadLocalTelemetry();
     telemetry.totalPageViews += 1;
@@ -190,11 +210,12 @@ export const trackPageView = (pageName: string, title?: string): void => {
 
 /**
  * Track a custom Google Analytics 4 event
+ * Sends to GA4 stream AND updates shared Firestore counters
  */
 export const trackEvent = (eventName: string, params: Record<string, any> = {}): void => {
   if (typeof window === 'undefined') return;
 
-  // 1. Send to GA4
+  // 1. Dispatch to GA4
   if (window.gtag) {
     try {
       window.gtag('event', eventName, params);
@@ -203,7 +224,30 @@ export const trackEvent = (eventName: string, params: Record<string, any> = {}):
     }
   }
 
-  // 2. Record in internal telemetry for Admin Dashboard
+  // 2. Atomically increment shared Cloud Firestore counters
+  const db = initFirestoreIfConfigured();
+  if (db) {
+    try {
+      const statsRef = doc(db, 'site_stats', 'counters');
+      const updates: Record<string, any> = {
+        lastActiveDate: new Date().toISOString()
+      };
+
+      if (eventName === 'whatsapp_click') {
+        updates.totalWhatsAppClicks = increment(1);
+      } else if (eventName === 'lesson_plan_created') {
+        updates.totalLessonPlansCreated = increment(1);
+      } else if (eventName === 'lesson_plan_export_pdf') {
+        updates.totalPdfExports = increment(1);
+      }
+
+      setDoc(statsRef, updates, { merge: true }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Local telemetry cache
   try {
     const telemetry = loadLocalTelemetry();
     telemetry.lastActiveDate = new Date().toISOString();
@@ -254,6 +298,7 @@ export const trackWhatsAppClick = (sourcePage: string): void => {
 
 /**
  * Get the current Analytics telemetry summary for the Admin Dashboard
+ * Merges Cloud Firestore shared counters with local telemetry.
  */
 export const getAnalyticsSummary = (): AnalyticsSummary => {
   const current = loadLocalTelemetry();
@@ -263,10 +308,43 @@ export const getAnalyticsSummary = (): AnalyticsSummary => {
 };
 
 /**
- * Reset local telemetry counters (Admin action)
+ * Real-time subscription to shared Firestore analytics counters.
+ * Provides live visitor metrics across all devices to the Admin Dashboard.
  */
-export const resetLocalTelemetry = (): AnalyticsSummary => {
-  const reset = getDefaultTelemetry();
-  saveLocalTelemetry(reset);
-  return reset;
+export const subscribeToSharedAnalytics = (
+  onUpdate: (summary: AnalyticsSummary) => void
+): (() => void) => {
+  const db = initFirestoreIfConfigured();
+  if (!db) return () => {};
+
+  try {
+    const statsRef = doc(db, 'site_stats', 'counters');
+    return onSnapshot(statsRef, (snap) => {
+      const local = loadLocalTelemetry();
+      if (snap.exists()) {
+        const remote = snap.data();
+        const merged: AnalyticsSummary = {
+          ...local,
+          totalPageViews: Math.max(local.totalPageViews, remote.totalPageViews || 0),
+          totalWhatsAppClicks: Math.max(local.totalWhatsAppClicks, remote.totalWhatsAppClicks || 0),
+          totalLessonPlansCreated: Math.max(local.totalLessonPlansCreated, remote.totalLessonPlansCreated || 0),
+          totalPdfExports: Math.max(local.totalPdfExports, remote.totalPdfExports || 0),
+          pageViewsByPage: {
+            ...local.pageViewsByPage,
+            ...(remote.pageViewsByPage || {})
+          },
+          lastActiveDate: remote.lastActiveDate || local.lastActiveDate,
+          isGaLoaded: Boolean(typeof window !== 'undefined' && window.__ga4_initialized),
+          measurementId: getFirebaseConfig().measurementId || GA_MEASUREMENT_ID
+        };
+        saveLocalTelemetry(merged);
+        onUpdate(merged);
+      }
+    }, (err) => {
+      console.warn('site_stats subscription notice:', err);
+    });
+  } catch (err) {
+    console.warn('Failed to attach site_stats subscription:', err);
+    return () => {};
+  }
 };

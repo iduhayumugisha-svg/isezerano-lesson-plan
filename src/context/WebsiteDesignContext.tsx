@@ -13,7 +13,11 @@ import {
   getWebsiteDesignSettings, 
   saveWebsiteDesignSettings, 
   applyDesignCssVariables,
-  updateBrowserFavicon
+  updateBrowserFavicon,
+  subscribeToWebsiteDesign,
+  uploadAndSaveWebsiteLogo,
+  LogoUploadProgress,
+  LogoUploadResult
 } from '../services/websiteDesignService';
 import { useAuth } from './AuthContext';
 
@@ -35,6 +39,7 @@ interface WebsiteDesignContextType {
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   publishSettings: () => Promise<{ success: boolean; error?: string }>;
+  uploadLogoFile: (file: File, onProgress?: (progress: LogoUploadProgress) => void) => Promise<LogoUploadResult>;
   reloadSettings: () => Promise<void>;
 
   // Convenience Getters
@@ -55,10 +60,30 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
 
-  // Load published settings on mount
+  // Initial load and real-time Firestore synchronization
   useEffect(() => {
     loadSettings();
-  }, []);
+
+    // Attach real-time snapshot listener
+    const unsubscribe = subscribeToWebsiteDesign((remoteSettings) => {
+      setPublishedSettings(remoteSettings);
+      
+      // If the admin does not have uncommitted local draft changes, keep draft in sync
+      setDraftSettings((currentDraft) => {
+        if (!isDraftDirty) {
+          return remoteSettings;
+        }
+        return currentDraft;
+      });
+
+      // Apply CSS variables across document
+      applyDesignCssVariables(remoteSettings);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isDraftDirty]);
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -172,6 +197,41 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const uploadLogoFile = async (
+    file: File,
+    onProgress?: (progress: LogoUploadProgress) => void
+  ): Promise<LogoUploadResult> => {
+    const adminUid = user?.uid || user?.email || 'admin';
+    const result = await uploadAndSaveWebsiteLogo(file, adminUid, onProgress);
+
+    if (result.success && result.url) {
+      // Immediately reflect published logo
+      setPublishedSettings(prev => ({
+        ...prev,
+        logo: {
+          ...prev.logo,
+          logoUrl: result.url!,
+          isCustomLogo: true
+        }
+      }));
+
+      // Also update draft
+      setDraftSettings(prev => ({
+        ...prev,
+        logo: {
+          ...prev.logo,
+          logoUrl: result.url!,
+          isCustomLogo: true
+        }
+      }));
+
+      setIsDraftDirty(false);
+      updateBrowserFavicon(result.url);
+    }
+
+    return result;
+  };
+
   const activeSettings = isPreviewingDraft ? draftSettings : publishedSettings;
 
   return (
@@ -192,6 +252,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         setPreviewingDraft: setIsPreviewingDraft,
         cancelDraft,
         publishSettings,
+        uploadLogoFile,
         reloadSettings: loadSettings,
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,

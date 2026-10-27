@@ -139,6 +139,14 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                   {t.navPrivacy || 'Privacy Policy'}
                 </button>
               </li>
+              <li>
+                <button
+                  onClick={() => handleLink('terms')}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Terms & Conditions
+                </button>
+              </li>
             </ul>
           </div>
 

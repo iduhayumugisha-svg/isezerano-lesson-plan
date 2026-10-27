@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { AppSettings } from '../types/lessonPlan';
 import { initFirestoreIfConfigured } from './storageService';
 import { PRIMARY_GRADES, SECONDARY_GRADES } from '../data/rwandaCbcData';
@@ -101,4 +101,37 @@ export const saveAppSettings = async (
   // Local fallback
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
   return { success: true };
+};
+
+/**
+ * Real-time subscription to platform settings.
+ */
+export const subscribeToAppSettings = (
+  onUpdate: (settings: AppSettings) => void
+): (() => void) => {
+  const db = initFirestoreIfConfigured();
+  if (!db) return () => {};
+
+  try {
+    const docRef = doc(db, 'appSettings', 'general');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          const remoteData = snap.data() as AppSettings;
+          const merged = { ...defaultAppSettings, ...remoteData };
+          try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          onUpdate(merged);
+        }
+      },
+      (err) => {
+        console.warn('appSettings subscription error:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('Failed to attach appSettings subscription:', err);
+    return () => {};
+  }
 };

@@ -5,7 +5,8 @@ import {
   getDocs, 
   setDoc, 
   deleteDoc, 
-  writeBatch 
+  writeBatch,
+  onSnapshot 
 } from 'firebase/firestore';
 import { initFirestoreIfConfigured } from './storageService';
 
@@ -224,6 +225,42 @@ export const getPublishedSlides = async (): Promise<HeroSlide[]> => {
 };
 
 /**
+ * Real-time subscription to published homepage slides.
+ * Synchronizes slides across all devices immediately.
+ */
+export const subscribeToPublishedSlides = (
+  onUpdate: (slides: HeroSlide[]) => void
+): (() => void) => {
+  const db = initFirestoreIfConfigured();
+  if (!db) return () => {};
+
+  try {
+    const colRef = collection(db, 'homepage_slides');
+    return onSnapshot(
+      colRef,
+      (snap) => {
+        if (!snap.empty) {
+          const remoteSlides: HeroSlide[] = [];
+          snap.forEach((docSnap) => {
+            remoteSlides.push(docSnap.data() as HeroSlide);
+          });
+          remoteSlides.sort((a, b) => (a.order || 0) - (b.order || 0));
+          setLocalSlides(remoteSlides);
+          const published = remoteSlides.filter(s => s.published);
+          onUpdate(published.length > 0 ? published : DEFAULT_HERO_SLIDES);
+        }
+      },
+      (err) => {
+        console.warn('homepage_slides real-time subscription notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('Failed to attach homepage_slides subscription:', err);
+    return () => {};
+  }
+};
+
+/**
  * Fetch all slides for the Admin management panel (both published and draft).
  */
 export const getAllSlidesAdmin = async (): Promise<HeroSlide[]> => {
@@ -289,7 +326,8 @@ export const saveSlideAdmin = async (
         const docRef = doc(db, 'homepage_slides', normalizedSlide.id);
         await setDoc(docRef, normalizedSlide, { merge: true });
       } catch (firestoreErr: unknown) {
-        console.warn('Firestore sync warning for slide:', firestoreErr);
+        const msg = firestoreErr instanceof Error ? firestoreErr.message : 'Firestore permission or network error';
+        return { success: false, error: `Failed to save slide to cloud database: ${msg}` };
       }
     }
 
@@ -316,8 +354,9 @@ export const deleteSlideAdmin = async (
       try {
         const docRef = doc(db, 'homepage_slides', slideId);
         await deleteDoc(docRef);
-      } catch (firestoreErr) {
-        console.warn('Firestore delete warning for slide:', firestoreErr);
+      } catch (firestoreErr: unknown) {
+        const msg = firestoreErr instanceof Error ? firestoreErr.message : 'Firestore error';
+        return { success: false, error: `Failed to delete slide from database: ${msg}` };
       }
     }
 
@@ -352,8 +391,9 @@ export const saveSlidesOrderAdmin = async (
           batch.set(docRef, slide, { merge: true });
         });
         await batch.commit();
-      } catch (firestoreErr) {
-        console.warn('Firestore batch order sync warning:', firestoreErr);
+      } catch (firestoreErr: unknown) {
+        const msg = firestoreErr instanceof Error ? firestoreErr.message : 'Firestore batch error';
+        return { success: false, error: `Failed to save order to database: ${msg}` };
       }
     }
 

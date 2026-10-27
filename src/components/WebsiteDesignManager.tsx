@@ -33,7 +33,7 @@ import {
   WebsiteTypographySettings,
   WebsiteLogoSettings
 } from '../types/websiteDesign';
-import { uploadWebsiteLogo } from '../services/websiteDesignService';
+import { LogoUploadProgress } from '../services/websiteDesignService';
 
 // Preset educational palettes for 1-click theme switching
 const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
@@ -154,6 +154,7 @@ export const WebsiteDesignManager: React.FC = () => {
     resetSingleField,
     cancelDraft,
     publishSettings,
+    uploadLogoFile,
     setPreviewingDraft,
     isPreviewingDraft
   } = useWebsiteDesign();
@@ -164,6 +165,7 @@ export const WebsiteDesignManager: React.FC = () => {
 
   // Logo upload state
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<LogoUploadProgress | null>(null);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
   const [confirmResetLogo, setConfirmResetLogo] = useState(false);
@@ -174,33 +176,42 @@ export const WebsiteDesignManager: React.FC = () => {
 
   const showStatus = (type: 'success' | 'error', text: string) => {
     setStatusMessage({ type, text });
-    setTimeout(() => setStatusMessage(null), 4500);
+    setTimeout(() => setStatusMessage(null), 5500);
   };
 
-  // Handle Logo Upload from Phone or Computer
+  // Handle Logo Upload to Firebase Storage and Cloud Firestore
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      showStatus('error', 'Please choose a valid image file (PNG, JPG, WebP, or SVG).');
-      return;
-    }
-
     setIsUploading(true);
-    setUploadNote('Optimizing and uploading logo image...');
+    setUploadProgress({
+      percent: 5,
+      stage: 'validating',
+      message: 'Validating image file...'
+    });
+    setUploadNote(null);
+
     try {
-      const result = await uploadWebsiteLogo(file);
-      updateDraftLogo({
-        logoUrl: result.url,
-        isCustomLogo: true
+      const result = await uploadLogoFile(file, (progress) => {
+        setUploadProgress(progress);
       });
-      setUploadNote(`Logo uploaded successfully (${result.sizeKb} KB via ${result.storageType === 'firebase-storage' ? 'Firebase Storage' : 'Fast Firestore Direct Storage'}).`);
-      showStatus('success', 'Logo image uploaded! Preview it below and click "Publish Changes" to make it live.');
+
+      if (result.success && result.url) {
+        setUploadNote(`Permanent Storage URL: ${result.url}`);
+        showStatus('success', '🎉 Logo uploaded to Firebase Storage and published live across the website!');
+      } else {
+        const errorText = result.error || 'Upload failed.';
+        showStatus('error', errorText);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload failed';
+      setUploadProgress({
+        percent: 0,
+        stage: 'error',
+        message
+      });
       showStatus('error', message);
-      setUploadNote(null);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -208,24 +219,26 @@ export const WebsiteDesignManager: React.FC = () => {
   };
 
   // Handle setting custom HTTPS URL
-  const handleApplyCustomUrl = (e: React.FormEvent) => {
+  const handleApplyCustomUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customUrlInput.trim()) return;
     if (!customUrlInput.startsWith('http://') && !customUrlInput.startsWith('https://') && !customUrlInput.startsWith('/')) {
       showStatus('error', 'Please enter a valid HTTPS URL (e.g. https://example.com/logo.png)');
       return;
     }
+
+    const trimmedUrl = customUrlInput.trim();
     updateDraftLogo({
-      logoUrl: customUrlInput.trim(),
+      logoUrl: trimmedUrl,
       isCustomLogo: true
     });
     setCustomUrlInput('');
     setShowCustomUrlBox(false);
-    showStatus('success', 'Custom logo URL applied to draft!');
+    showStatus('success', 'Custom logo URL applied to draft. Click "Publish Changes" to make it live across all devices.');
   };
 
-  // Restore Default Logo with Confirmation
-  const handleRestoreDefaultLogo = () => {
+  // Restore Default Logo and immediately publish to Firestore
+  const handleRestoreDefaultLogo = async () => {
     updateDraftLogo({
       logoUrl: DEFAULT_WEBSITE_LOGO.logoUrl,
       isCustomLogo: false,
@@ -234,7 +247,14 @@ export const WebsiteDesignManager: React.FC = () => {
       borderRadius: DEFAULT_WEBSITE_LOGO.borderRadius
     });
     setConfirmResetLogo(false);
-    showStatus('success', 'Original default ISEZERANO ONLINE logo restored to draft.');
+
+    // Also publish directly so the database is updated immediately
+    const res = await publishSettings();
+    if (res.success) {
+      showStatus('success', 'Original default ISEZERANO ONLINE logo restored and published live!');
+    } else {
+      showStatus('success', 'Original default logo applied to draft.');
+    }
   };
 
   // Handle Publish All Draft Changes
@@ -561,7 +581,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   {isUploading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Processing Image...</span>
+                      <span>Uploading to Firebase Storage...</span>
                     </>
                   ) : (
                     <>
@@ -581,7 +601,67 @@ export const WebsiteDesignManager: React.FC = () => {
                 </button>
               </div>
 
-              {uploadNote && (
+              {/* Upload Progress Bar & Live Status */}
+              {uploadProgress && (
+                <div className={`p-4 rounded-xl border space-y-2.5 transition-all ${
+                  uploadProgress.stage === 'error'
+                    ? 'bg-rose-50 border-rose-300 text-rose-800'
+                    : uploadProgress.stage === 'complete'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : 'bg-teal-50 border-teal-200 text-teal-900'
+                }`}>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <div className="flex items-center space-x-2">
+                      {uploadProgress.stage === 'error' ? (
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      ) : uploadProgress.stage === 'complete' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 text-teal-600 animate-spin shrink-0" />
+                      )}
+                      <span>
+                        {uploadProgress.stage === 'validating' && '1. Validating Image File'}
+                        {uploadProgress.stage === 'uploading' && `2. Uploading to Firebase Storage (${uploadProgress.percent}%)`}
+                        {uploadProgress.stage === 'saving_database' && '3. Saving to Cloud Firestore Database'}
+                        {uploadProgress.stage === 'complete' && 'Upload & Database Save Complete'}
+                        {uploadProgress.stage === 'error' && 'Upload Failed'}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[11px]">{uploadProgress.percent}%</span>
+                  </div>
+
+                  {/* Progress Bar Track */}
+                  <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        uploadProgress.stage === 'error'
+                          ? 'bg-rose-500'
+                          : uploadProgress.stage === 'complete'
+                          ? 'bg-emerald-600'
+                          : 'bg-teal-600'
+                      }`}
+                      style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
+                    />
+                  </div>
+
+                  <p className="text-xs leading-relaxed">
+                    {uploadProgress.message}
+                  </p>
+
+                  {uploadProgress.stage === 'error' && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 cursor-pointer shadow-xs"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Retry Logo Upload</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {uploadNote && !uploadProgress && (
                 <p className="text-xs text-teal-700 font-medium">
                   {uploadNote}
                 </p>

@@ -83,6 +83,27 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 5. Website Editable Pages (About Us, Contact Us, Privacy Policy, Terms & Conditions)
+    match /website_pages/{pageId} {
+      // Public visitors can read published content without signing in
+      allow read: if true;
+
+      // Only the explicitly authorized administrator can create, edit, publish, or delete page content
+      allow write: if isAdmin();
+    }
+
+    // 6. Shared Website Statistics and Activity Counters
+    match /site_stats/{statId} {
+      // Anyone can read statistics counters
+      allow read: if true;
+
+      // Allow recording page views, WhatsApp inquiries, and lesson plan generation counts
+      allow create, update: if true;
+
+      // Only authorized administrator can delete analytics records
+      allow delete: if isAdmin();
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;

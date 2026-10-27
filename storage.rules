@@ -9,20 +9,27 @@ service firebase.storage {
     function isAdmin() {
       return isAuthenticated() && (
         (request.auth.token.admin == true) ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'twizerefelix90@gmail.com')
+        (request.auth.token.email != null && (
+          request.auth.token.email == 'twizerefelix90@gmail.com' ||
+          request.auth.token.email.matches('(?i)^twizerefelix90@gmail\\.com$')
+        ))
       );
     }
 
-    // Publicly viewable homepage photos
+    // Publicly viewable homepage photos (Max 10MB, Images only)
     match /homepage_photos/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() && 
+        request.resource.size < 10 * 1024 * 1024 && 
+        request.resource.contentType.matches('image/.*');
     }
 
-    // Publicly viewable website assets and branding logos
+    // Publicly viewable website assets and branding logos (Max 5MB, Images only)
     match /website_assets/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() && 
+        request.resource.size < 5 * 1024 * 1024 && 
+        request.resource.contentType.matches('image/.*');
     }
 
     // Default deny

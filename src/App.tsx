@@ -23,6 +23,7 @@ import { HomeView } from './views/HomeView';
 import { AboutView } from './views/AboutView';
 import { ContactView } from './views/ContactView';
 import { PrivacyPolicyView } from './views/PrivacyPolicyView';
+import { TermsConditionsView } from './views/TermsConditionsView';
 
 // Central Application Views
 import { DashboardView } from './views/DashboardView';
@@ -73,6 +74,7 @@ const getPageFromUrl = (): AppPage => {
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
+  if (pathname === '/terms' || hash === '#terms' || search.get('page') === 'terms') return 'terms';
 
   return 'home';
 };
@@ -317,6 +319,11 @@ function AppContent() {
         {/* PUBLIC PAGE 4: Privacy Policy View */}
         {currentPage === 'privacy' && (
           <PrivacyPolicyView onNavigate={handleNavigate} />
+        )}
+
+        {/* PUBLIC PAGE 5: Terms and Conditions View */}
+        {currentPage === 'terms' && (
+          <TermsConditionsView onNavigate={handleNavigate} />
         )}
 
         {/* PRIMARY FUNCTIONAL APPLICATION SECTION: Lesson Plan Workspace */}

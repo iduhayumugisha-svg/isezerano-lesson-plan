@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ArrowRight, LayoutDashboard, PlusCircle, BookOpen, Sparkles } from 'lucide-react';
 import { HeroSlide } from '../types/slider';
-import { getPublishedSlides, DEFAULT_HERO_SLIDES } from '../services/sliderService';
+import { getPublishedSlides, subscribeToPublishedSlides, DEFAULT_HERO_SLIDES } from '../services/sliderService';
 import { WebsitePage } from './WebsiteHeader';
 
 interface HeroSliderProps {
@@ -15,7 +15,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ onNavigate }) => {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
-  // Load published slides
+  // Load published slides and attach real-time listener
   useEffect(() => {
     let isMounted = true;
     const fetchSlides = async () => {
@@ -29,8 +29,16 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ onNavigate }) => {
       }
     };
     fetchSlides();
+
+    const unsubscribe = subscribeToPublishedSlides((remoteSlides) => {
+      if (isMounted && remoteSlides && remoteSlides.length > 0) {
+        setSlides(remoteSlides);
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 

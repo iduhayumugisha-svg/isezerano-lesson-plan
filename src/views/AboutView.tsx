@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   GraduationCap, 
   BookOpen, 
@@ -12,108 +12,123 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 import { WebsitePage } from '../components/WebsiteHeader';
+import { WebsitePageContent } from '../types/websitePages';
+import { getPageContent, subscribeToPageContent, DEFAULT_PAGES_CONTENT } from '../services/websitePagesService';
 
 interface AboutViewProps {
   onNavigate: (page: WebsitePage) => void;
 }
 
 export const AboutView: React.FC<AboutViewProps> = ({ onNavigate }) => {
+  const [content, setContent] = useState<WebsitePageContent>(DEFAULT_PAGES_CONTENT.about);
+
+  useEffect(() => {
+    loadContent();
+
+    // Attach real-time Firestore listener for cross-device updates
+    const unsubscribe = subscribeToPageContent('about', (page) => {
+      setContent(page);
+    });
+
+    // In-tab event listener
+    const handleUpdate = (e: any) => {
+      if (e.detail?.pageId === 'about') {
+        if (e.detail.page) {
+          setContent(e.detail.page);
+        } else {
+          loadContent();
+        }
+      }
+    };
+
+    window.addEventListener('website_pages_updated', handleUpdate);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('website_pages_updated', handleUpdate);
+    };
+  }, []);
+
+  const loadContent = async () => {
+    try {
+      const data = await getPageContent('about');
+      setContent(data);
+    } catch {
+      // retain default
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-14">
       
       {/* 1. Header Section */}
       <div className="text-center space-y-4 max-w-3xl mx-auto">
-        <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
-          <BookOpen className="w-3.5 h-3.5 text-teal-700" />
-          <span>About ISEZERANO ONLINE</span>
-        </div>
+        {content.badge && (
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
+            <BookOpen className="w-3.5 h-3.5 text-teal-700" />
+            <span>{content.badge}</span>
+          </div>
+        )}
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight">
-          Supporting Rwandan Educators in Standardized Lesson Planning
+          {content.title}
         </h1>
-        <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-normal">
-          ISEZERANO ONLINE is a specialized educational web platform built to help primary and secondary school teachers in Rwanda prepare thorough, pedagogical, and officially aligned Competence-Based Curriculum (CBC) lesson plans.
-        </p>
+        {content.subtitle && (
+          <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-normal">
+            {content.subtitle}
+          </p>
+        )}
       </div>
 
-      {/* Built by a Rwandan Teacher Feature Section */}
-      <div className="bg-slate-900 rounded-2xl p-6 sm:p-10 border border-slate-800 text-white shadow-sm space-y-4">
-        <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
-          <GraduationCap className="w-5 h-5 text-teal-400" />
-          <span>Built by a Rwandan Teacher</span>
-        </div>
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-          From the Classroom of GS GITUMBA to Rwandan Educators Everywhere
-        </h2>
-        <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-          This platform was developed by a Rwandan teacher serving at <strong className="text-white font-bold">GS GITUMBA</strong>, a school located in <strong className="text-white font-bold">Buyoga Sector, Rulindo District, Northern Province, Rwanda</strong>. It was created to support fellow educators in preparing well-structured lesson plans aligned with Rwanda’s Competence-Based Curriculum (CBC) and to make lesson preparation easier, more organized, and more efficient.
-        </p>
-      </div>
-
-      {/* 2. Purpose & Context */}
-      <div className="bg-white rounded-2xl p-6 sm:p-10 border border-slate-200 shadow-2xs space-y-5">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center space-x-2.5">
-          <Target className="w-6 h-6 text-teal-700" />
-          <span>Our Purpose</span>
-        </h2>
-        
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-          In Rwanda, the introduction of the Competence-Based Curriculum (CBC) by the Ministry of Education (MINEDUC) and the Rwanda Basic Education Board (REB) represented a transformative shift from rote memorization toward learner-centered competence development.
-        </p>
-
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-          However, drafting detailed 8-column lesson plans by hand or in generic text editors requires extensive repetitive formatting each week. Teachers must balance instructional objectives across Bloom's Taxonomy, integrate generic competences and cross-cutting issues, and detail concrete teacher activities and learner tasks.
-        </p>
-
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-          ISEZERANO ONLINE eliminates this mechanical friction by providing a structured, guided digital workspace tailored specifically to the official Rwandan CBC format.
-        </p>
-      </div>
-
-      {/* 3. Core Principles (Honest & Transparent) */}
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Guiding Principles
+      {/* 2. Built by a Rwandan Teacher / Highlight Section */}
+      {content.highlightBox?.enabled && (
+        <div className="bg-slate-900 rounded-2xl p-6 sm:p-10 border border-slate-800 text-white shadow-sm space-y-4">
+          {content.highlightBox.badge && (
+            <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
+              <GraduationCap className="w-5 h-5 text-teal-400" />
+              <span>{content.highlightBox.badge}</span>
+            </div>
+          )}
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            {content.highlightBox.title}
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Built with respect for teachers' time, privacy, and pedagogical autonomy.
+          <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal whitespace-pre-line">
+            {content.highlightBox.content}
           </p>
         </div>
+      )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3 hover:border-teal-300 transition-all">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold">
-              <ShieldCheck className="w-5 h-5 text-teal-700" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">REB Standards Fidelity</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              We adhere strictly to official national guidelines without modifying the mandated 8-column structure or introducing non-standard requirements.
+      {/* 3. Dynamic Structured Sections */}
+      <div className="space-y-8">
+        {content.sections.map((section, idx) => (
+          <div 
+            key={section.id || idx}
+            className="bg-white rounded-2xl p-6 sm:p-10 border border-slate-200 shadow-2xs space-y-5"
+          >
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center space-x-2.5">
+              <span className="w-7 h-7 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center text-xs font-bold shrink-0">
+                {idx + 1}
+              </span>
+              <span>{section.title}</span>
+            </h2>
+            
+            <p className="text-sm sm:text-base text-slate-600 leading-relaxed whitespace-pre-line">
+              {section.content}
             </p>
-          </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3 hover:border-teal-300 transition-all">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center font-bold">
-              <Users className="w-5 h-5 text-teal-700" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">Zero-Barrier Access</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Teachers can start drafting immediately. There is no forced sign-in wall, mandatory personal data collection, or paywall to use the core lesson plan generator.
-            </p>
+            {section.bullets && section.bullets.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
+                {section.bullets.map((bullet, bIdx) => (
+                  <div key={bIdx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start space-x-2.5 text-xs sm:text-sm text-slate-700">
+                    <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{bullet}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3 hover:border-teal-300 transition-all">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold">
-              <Layers className="w-5 h-5 text-teal-700" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">Offline & In-Browser Resilience</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              We understand classroom connectivity in various districts may be intermittent. Data is stored safely within your device's browser local database.
-            </p>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* 4. Supported Framework Details */}
+      {/* 4. Supported Framework Details (MINEDUC & REB Standards) */}
       <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-2xs space-y-4">
         <h3 className="text-base font-bold text-slate-900">
           Curriculum Standards Supported:
