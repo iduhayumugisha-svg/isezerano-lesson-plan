@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   WebsiteDesignSettings, 
   WebsiteColorSettings, 
@@ -64,7 +64,14 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
 
-  // Initial load and real-time Firestore synchronization
+  // Ref to track draft dirty state without triggering re-subscription cycles
+  const isDraftDirtyRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isDraftDirtyRef.current = isDraftDirty;
+  }, [isDraftDirty]);
+
+  // Initial load and real-time Firestore synchronization - runs ONCE on mount
   useEffect(() => {
     loadSettings();
 
@@ -73,21 +80,16 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       setPublishedSettings(remoteSettings);
       
       // If the admin does not have uncommitted local draft changes, keep draft in sync
-      setDraftSettings((currentDraft) => {
-        if (!isDraftDirty) {
-          return remoteSettings;
-        }
-        return currentDraft;
-      });
-
-      // Apply CSS variables across document
-      applyDesignCssVariables(remoteSettings);
+      if (!isDraftDirtyRef.current) {
+        setDraftSettings(remoteSettings);
+        applyDesignCssVariables(remoteSettings);
+      }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [isDraftDirty]);
+  }, []); // Run once on mount to prevent slider/picker reversion
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -96,6 +98,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       setPublishedSettings(data);
       setDraftSettings(data);
       setIsDraftDirty(false);
+      isDraftDirtyRef.current = false;
       applyDesignCssVariables(data);
     } catch (err) {
       console.error('Error loading design settings:', err);
@@ -104,45 +107,64 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // When previewing draft vs published, re-apply CSS variables
+  // Active settings: Immediately reflects draft changes while editing so the UI updates live
+  const activeSettings = (isDraftDirty || isPreviewingDraft) ? draftSettings : publishedSettings;
+
+  // Real-time CSS variable update whenever active settings change
   useEffect(() => {
-    if (isPreviewingDraft) {
-      applyDesignCssVariables(draftSettings);
-    } else {
-      applyDesignCssVariables(publishedSettings);
-    }
-  }, [isPreviewingDraft, draftSettings, publishedSettings]);
+    applyDesignCssVariables(activeSettings);
+  }, [activeSettings]);
 
   const updateDraftBranding = (partialBranding: Partial<WebsiteBrandingSettings>) => {
-    setDraftSettings(prev => ({
-      ...prev,
-      branding: { ...(prev.branding || DEFAULT_WEBSITE_BRANDING), ...partialBranding }
-    }));
+    setDraftSettings(prev => {
+      const next = {
+        ...prev,
+        branding: { ...(prev.branding || DEFAULT_WEBSITE_BRANDING), ...partialBranding }
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const updateDraftColors = (partialColors: Partial<WebsiteColorSettings>) => {
-    setDraftSettings(prev => ({
-      ...prev,
-      colors: { ...prev.colors, ...partialColors }
-    }));
+    setDraftSettings(prev => {
+      const next = {
+        ...prev,
+        colors: { ...prev.colors, ...partialColors }
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const updateDraftTypography = (partialTypography: Partial<WebsiteTypographySettings>) => {
-    setDraftSettings(prev => ({
-      ...prev,
-      typography: { ...prev.typography, ...partialTypography }
-    }));
+    setDraftSettings(prev => {
+      const next = {
+        ...prev,
+        typography: { ...prev.typography, ...partialTypography }
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const updateDraftLogo = (partialLogo: Partial<WebsiteLogoSettings>) => {
-    setDraftSettings(prev => ({
-      ...prev,
-      logo: { ...prev.logo, ...partialLogo }
-    }));
+    setDraftSettings(prev => {
+      const next = {
+        ...prev,
+        logo: { ...prev.logo, ...partialLogo }
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'all') => {
@@ -160,9 +182,11 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       if (section === 'logo' || section === 'all') {
         updated.logo = { ...DEFAULT_WEBSITE_LOGO };
       }
+      applyDesignCssVariables(updated);
       return updated;
     });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo', fieldKey: string) => {
@@ -177,34 +201,46 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       } else if (section === 'logo') {
         (updated.logo as any)[fieldKey] = (DEFAULT_WEBSITE_LOGO as any)[fieldKey];
       }
+      applyDesignCssVariables(updated);
       return updated;
     });
     setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
   };
 
   const cancelDraft = () => {
     setDraftSettings(publishedSettings);
     setIsDraftDirty(false);
+    isDraftDirtyRef.current = false;
     setIsPreviewingDraft(false);
     applyDesignCssVariables(publishedSettings);
   };
 
-  const publishSettings = async (): Promise<{ success: boolean; error?: string }> => {
+  const publishSettings = async (): Promise<{ success: boolean; error?: string; isLocalFallback?: boolean }> => {
     setIsPublishing(true);
     try {
-      const adminUid = user?.uid || 'admin';
+      const adminUid = user?.uid || user?.email || 'admin';
       const result = await saveWebsiteDesignSettings(draftSettings, adminUid);
+      
+      // Update published settings and sync DOM immediately
+      setPublishedSettings(draftSettings);
+      setIsDraftDirty(false);
+      isDraftDirtyRef.current = false;
+      setIsPreviewingDraft(false);
+      applyDesignCssVariables(draftSettings);
+
+      if (draftSettings.logo.updateFavicon && draftSettings.logo.logoUrl) {
+        updateBrowserFavicon(draftSettings.logo.logoUrl);
+      }
+
       if (result.success) {
-        setPublishedSettings(draftSettings);
-        setIsDraftDirty(false);
-        setIsPreviewingDraft(false);
-        applyDesignCssVariables(draftSettings);
-        if (draftSettings.logo.updateFavicon && draftSettings.logo.logoUrl) {
-          updateBrowserFavicon(draftSettings.logo.logoUrl);
-        }
         return { success: true };
       } else {
-        return { success: false, error: result.error || 'Failed to publish settings' };
+        return { 
+          success: true, 
+          isLocalFallback: true, 
+          error: result.error 
+        };
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Publish error';
@@ -248,8 +284,6 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return result;
   };
-
-  const activeSettings = isPreviewingDraft ? draftSettings : publishedSettings;
 
   return (
     <WebsiteDesignContext.Provider

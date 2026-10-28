@@ -65,42 +65,15 @@ export const validateLogoFile = (file: File): { valid: boolean; error?: string }
 
 /**
  * Fetch published website appearance, typography & logo settings.
- * Checks Cloud Firestore first as source of truth, then falls back to local cache.
+ * Checks local cache and Cloud Firestore, keeping whichever revision is newer.
  */
 export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
-  const db = initFirestoreIfConfigured();
-  if (db) {
-    try {
-      const docRef = doc(db, 'appSettings', 'website_design');
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as Partial<WebsiteDesignSettings>;
-        const merged: WebsiteDesignSettings = {
-          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
-          colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
-          typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
-          logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
-          updatedAt: data.updatedAt || new Date().toISOString(),
-          updatedBy: data.updatedBy || 'admin'
-        };
-        try {
-          localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
-        } catch {
-          // ignore cache error
-        }
-        return merged;
-      }
-    } catch (err) {
-      console.warn('Could not read website_design from Firestore, falling back to local cache:', err);
-    }
-  }
-
-  // LocalStorage Cache fallback
+  let localData: WebsiteDesignSettings | null = null;
   try {
     const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      return {
+      localData = {
         branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(parsed.branding || {}) },
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
         typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(parsed.typography || {}) },
@@ -113,6 +86,44 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
     // fallback
   }
 
+  const db = initFirestoreIfConfigured();
+  if (db) {
+    try {
+      const docRef = doc(db, 'appSettings', 'website_design');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data() as Partial<WebsiteDesignSettings>;
+        const remoteMerged: WebsiteDesignSettings = {
+          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
+          colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
+          typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
+          logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
+          updatedAt: data.updatedAt || new Date().toISOString(),
+          updatedBy: data.updatedBy || 'admin'
+        };
+
+        // If local cache has newer saved changes than cloud document, prioritize local cache
+        if (localData && localData.updatedAt && remoteMerged.updatedAt) {
+          const localTime = new Date(localData.updatedAt).getTime();
+          const remoteTime = new Date(remoteMerged.updatedAt).getTime();
+          if (localTime > remoteTime) {
+            return localData;
+          }
+        }
+
+        try {
+          localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(remoteMerged));
+        } catch {
+          // ignore cache error
+        }
+        return remoteMerged;
+      }
+    } catch (err) {
+      console.warn('Could not read website_design from Firestore, using local cache:', err);
+    }
+  }
+
+  if (localData) return localData;
   return DEFAULT_WEBSITE_DESIGN;
 };
 
@@ -139,6 +150,24 @@ export const subscribeToWebsiteDesign = (
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
+        // Prevent stale remote snapshot from overwriting newer locally saved settings
+        try {
+          const localRaw = localStorage.getItem(DESIGN_STORAGE_KEY);
+          if (localRaw) {
+            const localData = JSON.parse(localRaw);
+            if (localData?.updatedAt && merged.updatedAt) {
+              const localTime = new Date(localData.updatedAt).getTime();
+              const remoteTime = new Date(merged.updatedAt).getTime();
+              if (localTime > remoteTime) {
+                // Local version is newer than the remote snapshot, do not overwrite
+                return;
+              }
+            }
+          }
+        } catch {
+          // ignore cache parse error
+        }
+
         try {
           localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
         } catch {
@@ -177,6 +206,9 @@ export const saveWebsiteDesignSettings = async (
   } catch (err) {
     console.error('Failed to save design settings locally:', err);
   }
+
+  // Apply CSS variables to active document immediately
+  applyDesignCssVariables(payload);
 
   const db = initFirestoreIfConfigured();
   if (db) {

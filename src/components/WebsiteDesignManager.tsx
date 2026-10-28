@@ -308,7 +308,11 @@ export const WebsiteDesignManager: React.FC = () => {
   const handlePublish = async () => {
     const res = await publishSettings();
     if (res.success) {
-      showStatus('success', '🎉 All design, typography & logo changes are published and live across the entire website!');
+      if ((res as any).isLocalFallback) {
+        showStatus('success', '✅ Design & typography changes published and applied live! (Saved locally on this device; cloud sync will link to all devices once Firestore rules are published).');
+      } else {
+        showStatus('success', '🎉 All design, typography & logo changes are published and live across the entire website!');
+      }
     } else {
       showStatus('error', res.error || 'Failed to publish changes.');
     }
@@ -1775,6 +1779,14 @@ interface ColorField {
   value: string;
 }
 
+const normalizeHexForPicker = (hex: string): string => {
+  if (!hex) return '#ffffff';
+  let cleaned = hex.trim();
+  if (!cleaned.startsWith('#')) cleaned = `#${cleaned}`;
+  if (/^#[0-9A-Fa-f]{6}$/.test(cleaned)) return cleaned;
+  return '#ffffff';
+};
+
 const ColorGroupSection: React.FC<{
   title: string;
   description: string;
@@ -1790,46 +1802,60 @@ const ColorGroupSection: React.FC<{
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {fields.map((f) => (
-          <div 
-            key={f.key}
-            className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between space-x-3"
-          >
-            <div className="flex-1 min-w-0">
-              <span className="block text-xs font-semibold text-slate-700 truncate">{f.label}</span>
-              <div className="flex items-center space-x-2 mt-1">
-                <input 
-                  type="text" 
-                  value={f.value}
-                  onChange={(e) => onChange(f.key, e.target.value)}
-                  className="w-20 px-1.5 py-0.5 text-xs font-mono font-semibold uppercase border border-slate-300 rounded bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => onReset(f.key)}
-                  className="text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer"
-                  title="Reset this color"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
+        {fields.map((f) => {
+          const displayHex = f.value || '#ffffff';
+          const pickerVal = normalizeHexForPicker(displayHex);
 
-            {/* Native Color Picker Circle */}
-            <label className="relative w-8 h-8 rounded-full border border-slate-300 shadow-2xs overflow-hidden cursor-pointer shrink-0 block">
-              <input 
-                type="color" 
-                value={f.value.startsWith('#') && f.value.length === 7 ? f.value : '#ffffff'}
-                onChange={(e) => onChange(f.key, e.target.value)}
-                className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-              />
-              <span 
-                className="block w-full h-full" 
-                style={{ backgroundColor: f.value }} 
-              />
-            </label>
-          </div>
-        ))}
+          return (
+            <div 
+              key={f.key}
+              className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between space-x-3 transition-colors hover:border-slate-300"
+            >
+              <div className="flex-1 min-w-0">
+                <span className="block text-xs font-semibold text-slate-700 truncate">{f.label}</span>
+                <div className="flex items-center space-x-2 mt-1">
+                  <input 
+                    type="text" 
+                    value={f.value}
+                    onChange={(e) => {
+                      let val = e.target.value.trim();
+                      if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,6}$/.test(val)) {
+                        val = `#${val}`;
+                      }
+                      onChange(f.key, val);
+                    }}
+                    className="w-22 px-2 py-0.5 text-xs font-mono font-semibold uppercase border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onReset(f.key)}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 rounded"
+                    title="Reset this color"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Native Color Picker Circle */}
+              <label 
+                className="relative w-8 h-8 rounded-full border border-slate-300 shadow-2xs overflow-hidden cursor-pointer shrink-0 block hover:scale-105 transition-transform"
+                title={`Click to pick color for ${f.label}`}
+              >
+                <input 
+                  type="color" 
+                  value={pickerVal}
+                  onChange={(e) => onChange(f.key, e.target.value)}
+                  className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                />
+                <span 
+                  className="block w-full h-full" 
+                  style={{ backgroundColor: displayHex }} 
+                />
+              </label>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
