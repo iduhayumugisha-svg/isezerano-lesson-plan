@@ -320,7 +320,7 @@ export const savePageContent = async (
   page: WebsitePageContent,
   adminUid: string,
   publish: boolean = true
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; isLocalOnly?: boolean; warning?: string }> => {
   const updatedPage: WebsitePageContent = {
     ...page,
     isPublished: publish,
@@ -328,51 +328,50 @@ export const savePageContent = async (
     updatedBy: adminUid
   };
 
+  // Always update local storage first so user edits are NEVER lost
+  try {
+    localStorage.setItem(`${PAGE_STORAGE_PREFIX}${page.id}`, JSON.stringify(updatedPage));
+  } catch (cacheErr) {
+    console.warn('Failed to cache page in localStorage:', cacheErr);
+  }
+
+  // Notify public views of live update immediately on this browser
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('website_pages_updated', {
+        detail: { pageId: page.id, page: updatedPage }
+      })
+    );
+  }
+
   const db = initFirestoreIfConfigured();
   if (db) {
     try {
       const docRef = doc(db, 'website_pages', page.id);
       await setDoc(docRef, updatedPage);
-
-      // Update local cache
-      try {
-        localStorage.setItem(`${PAGE_STORAGE_PREFIX}${page.id}`, JSON.stringify(updatedPage));
-      } catch {
-        // ignore
-      }
-
-      // Notify public views of live update
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('website_pages_updated', {
-            detail: { pageId: page.id, page: updatedPage }
-          })
-        );
-      }
-
       return { success: true };
-    } catch (err: unknown) {
-      console.error(`Error saving page "${page.id}":`, err);
-      const message = err instanceof Error ? err.message : 'Failed to save page to Firestore';
-      return { success: false, error: message };
+    } catch (err: any) {
+      console.warn(`Firestore write warning for page "${page.id}":`, err?.code || err?.message);
+      const isPermissionDenied = err?.code === 'permission-denied' || 
+        (err?.message && (err.message.includes('permission') || err.message.includes('Permission')));
+
+      if (isPermissionDenied) {
+        return {
+          success: true,
+          isLocalOnly: true,
+          warning: 'Saved locally on this device. (Cloud sync requires publishing the updated firestore.rules in Firebase Console).'
+        };
+      }
+
+      return {
+        success: true,
+        isLocalOnly: true,
+        warning: `Saved locally on this device. (Cloud sync notice: ${err?.message || 'Server connection error'})`
+      };
     }
   }
 
-  // Offline / fallback save
-  try {
-    localStorage.setItem(`${PAGE_STORAGE_PREFIX}${page.id}`, JSON.stringify(updatedPage));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('website_pages_updated', {
-          detail: { pageId: page.id, page: updatedPage }
-        })
-      );
-    }
-    return { success: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to cache page';
-    return { success: false, error: message };
-  }
+  return { success: true, isLocalOnly: true };
 };
 
 /**

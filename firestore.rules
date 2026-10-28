@@ -7,14 +7,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Only the authorized administrator (Custom Claims admin == true, verified administrator email, or active admin role)
+    // Only the authorized administrator (Custom Claims admin == true, or verified administrator email)
+    // Avoids trusting user-controlled Firestore profile fields for administrative authorization
     function isAdmin() {
       return isAuthenticated() && (
         (request.auth.token.admin == true) ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'twizerefelix90@gmail.com') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active')
+        (request.auth.token.email != null && (
+          request.auth.token.email == 'twizerefelix90@gmail.com' ||
+          request.auth.token.email.matches('(?i)^twizerefelix90@gmail\\.com$')
+        ))
       );
     }
 
@@ -44,7 +45,7 @@ service cloud.firestore {
 
     // 2. Application Configurable Settings (Curriculum & Platform Parameters)
     match /appSettings/{settingId} {
-      // General curriculum settings can be read publicly without an account
+      // General curriculum and design settings can be read publicly without an account
       allow read: if true;
 
       // Only verified Admin can modify platform settings
@@ -79,7 +80,7 @@ service cloud.firestore {
       // Anyone (including ordinary website visitors) can read published slides
       allow read: if true;
 
-      // Only the authorized administrator (twizerefelix90@gmail.com or verified admin role) can add, replace, delete, reorder, and publish photos
+      // Only the authorized administrator can add, replace, delete, reorder, and publish photos
       allow write: if isAdmin();
     }
 
@@ -97,14 +98,68 @@ service cloud.firestore {
       // Anyone can read statistics counters
       allow read: if true;
 
-      // Allow recording page views, WhatsApp inquiries, and lesson plan generation counts
-      allow create, update: if true;
+      // Only administrator can modify or reset analytics counters (eliminates arbitrary user writes)
+      allow write: if isAdmin();
+    }
 
-      // Only authorized administrator can delete analytics records
+    // 7. News Platform: Posts with atomic view-counter increment support
+    match /posts/{postId} {
+      // Public (including unauthenticated visitors) can read news posts
+      allow read: if true;
+
+      // Only admin can create or delete posts
+      allow create, delete: if isAdmin();
+
+      // Admin can update all post fields; anonymous or non-admin visitors can only increment views with a valid non-decreasing integer
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
+        request.resource.data.views is int &&
+        request.resource.data.views >= resource.data.views
+      );
+    }
+
+    // 8. Site Settings & Branding (Preserves exact logoData size validation for ISEZERANO NEWS)
+    match /siteSettings/branding {
+      allow read: if true;
+      allow create, update: if isAdmin() &&
+        request.resource.data.logoData is string &&
+        request.resource.data.logoData.size() <= 700000;
       allow delete: if isAdmin();
     }
 
-    // Default deny for everything else
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 9. Preserved News Website Collections
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /news/{newsId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 10. Default deny for all other documents
     match /{document=**} {
       allow read, write: if false;
     }

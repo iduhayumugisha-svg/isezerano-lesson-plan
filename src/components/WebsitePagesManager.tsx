@@ -222,11 +222,15 @@ export const WebsitePagesManager: React.FC = () => {
     setIsSaving(true);
     setStatusMessage(null);
 
-    const adminUid = user?.uid || 'admin-user';
+    const adminUid = user?.uid || user?.email || 'admin-user';
     try {
       const res = await savePageContent(editingPage, adminUid, publish);
       if (res.success) {
-        showMessage('success', `"${editingPage.pageName}" published live successfully! Public visitors can now see your latest content.`);
+        if (res.warning) {
+          showMessage('success', `"${editingPage.pageName}" saved! ${res.warning}`);
+        } else {
+          showMessage('success', `"${editingPage.pageName}" published live successfully! Public visitors can now see your latest content.`);
+        }
         setHasUnsavedChanges(false);
         // Refresh local cache representation
         setPages(prev => prev ? { ...prev, [editingPage.id]: editingPage } : null);

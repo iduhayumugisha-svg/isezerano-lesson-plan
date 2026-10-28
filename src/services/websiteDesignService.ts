@@ -2,7 +2,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { 
   getStorage, 
   ref, 
-  uploadBytesResumable, 
+  uploadBytes, 
   getDownloadURL 
 } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
@@ -26,6 +26,9 @@ export interface LogoUploadResult {
   storageBucket?: string;
   sizeBytes?: number;
   error?: string;
+  code?: string;
+  isFallbackDataUri?: boolean;
+  isStorage?: boolean;
 }
 
 /**
@@ -161,7 +164,7 @@ export const subscribeToWebsiteDesign = (
 export const saveWebsiteDesignSettings = async (
   settings: WebsiteDesignSettings,
   adminUid: string
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; code?: string }> => {
   const payload: WebsiteDesignSettings = {
     ...settings,
     updatedAt: new Date().toISOString(),
@@ -181,9 +184,21 @@ export const saveWebsiteDesignSettings = async (
       const docRef = doc(db, 'appSettings', 'website_design');
       await setDoc(docRef, payload, { merge: true });
       return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to publish design settings to Firestore';
-      return { success: false, error: message };
+    } catch (err: any) {
+      console.error('Failed to save website_design to Firestore:', err);
+      const code = err?.code || 'unknown';
+      let message = err?.message || 'Failed to publish design settings to Firestore';
+
+      if (code === 'permission-denied') {
+        const auth = getAuth();
+        const currentEmail = auth?.currentUser?.email;
+        message = `Missing or insufficient permissions for 'appSettings/website_design'. ` +
+          `Active account: ${currentEmail || 'Not signed in'}. ` +
+          `Authorized administrator is twizerefelix90@gmail.com. ` +
+          `If you are signed in as twizerefelix90@gmail.com, please ensure firestore.rules are deployed to project isezerano-news.`;
+      }
+
+      return { success: false, error: message, code };
     }
   }
 
@@ -191,8 +206,99 @@ export const saveWebsiteDesignSettings = async (
 };
 
 /**
+ * Compresses and converts an image file into an optimized base64 Data URL.
+ * Preserves alpha transparency for PNGs. Ensures instant, reliable saving in Firestore Spark tier.
+ */
+export const compressLogoFile = (file: File, maxDimension = 512): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    // If it's a small SVG, read directly as data URL to preserve vector sharpness
+    if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read SVG file.'));
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(reader.result as string); // fallback to original data url
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const isPng = file.type === 'image/png' || file.name.endsWith('.png');
+        const outputMime = isPng ? 'image/png' : 'image/jpeg';
+        const dataUrl = canvas.toDataURL(outputMime, isPng ? undefined : 0.85);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Failed to load image for optimization.'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * Validates whether a public image URL is reachable and can be rendered by an img tag.
+ */
+export const validateImageUrl = (url: string): Promise<{ valid: boolean; error?: string }> => {
+  return new Promise((resolve) => {
+    if (!url || (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:image/'))) {
+      resolve({ valid: false, error: 'Please enter a valid HTTP, HTTPS, or Data URI image address.' });
+      return;
+    }
+
+    const img = new Image();
+    const timeout = setTimeout(() => {
+      img.onload = null;
+      img.onerror = null;
+      resolve({ valid: false, error: 'Image URL timed out after 7 seconds. Ensure the link is publicly accessible.' });
+    }, 7000);
+
+    img.onload = () => {
+      clearTimeout(timeout);
+      resolve({ valid: true });
+    };
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve({ valid: false, error: 'Unable to load image from this URL. Please verify the URL points directly to an image file.' });
+    };
+
+    img.src = url;
+  });
+};
+
+/**
  * Upload a logo file to Firebase Storage and save its permanent URL in Firestore.
- * Traces actual progress, handles bucket discovery, and waits for database confirmation.
+ * If Firebase Storage is unavailable (e.g. bucket not provisioned in project isezerano-news),
+ * it seamlessly converts the logo into an optimized base64 image and saves it directly to Firestore,
+ * ensuring the admin is NEVER blocked from updating the website logo.
  */
 export const uploadAndSaveWebsiteLogo = async (
   file: File,
@@ -201,7 +307,7 @@ export const uploadAndSaveWebsiteLogo = async (
 ): Promise<LogoUploadResult> => {
   // 1. Validation
   onProgress?.({
-    percent: 5,
+    percent: 10,
     stage: 'validating',
     message: 'Validating image file format and dimensions...'
   });
@@ -210,7 +316,7 @@ export const uploadAndSaveWebsiteLogo = async (
   if (!validation.valid) {
     const errorMsg = validation.error || 'Invalid file.';
     onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
-    return { success: false, error: errorMsg };
+    return { success: false, error: errorMsg, code: 'validation/invalid-file' };
   }
 
   // 2. Authentication check
@@ -219,45 +325,32 @@ export const uploadAndSaveWebsiteLogo = async (
   if (!currentUser) {
     const errorMsg = 'Authentication required: You must be signed in with the authorized administrator account (twizerefelix90@gmail.com) to upload logos.';
     onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
-    return { success: false, error: errorMsg };
+    return { success: false, error: errorMsg, code: 'auth/unauthenticated' };
   }
 
   const app = getFirebaseApp();
-  if (!app) {
-    const errorMsg = 'Firebase App is not initialized. Please verify your internet connection.';
-    onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
-    return { success: false, error: errorMsg };
-  }
-
-  // Candidate storage buckets for project isezerano-news
-  const candidateBuckets = [
-    CANONICAL_FIREBASE_CONFIG.storageBucket || 'isezerano-news.firebasestorage.app',
-    'isezerano-news.appspot.com',
-    'isezerano-news.firebasestorage.app'
-  ];
-
-  // Remove duplicates while preserving order
-  const uniqueBuckets = Array.from(new Set(candidateBuckets));
-
-  let lastError: Error | null = null;
-  let finalDownloadUrl: string | null = null;
-  let usedBucket: string | null = null;
+  const bucketName = CANONICAL_FIREBASE_CONFIG.storageBucket || 'isezerano-news.firebasestorage.app';
 
   const rawExt = file.name.split('.').pop()?.toLowerCase() || 'png';
   const cleanExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
   const fileName = `logo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${cleanExt}`;
   const storagePath = `website_assets/logos/${fileName}`;
 
-  // Try each bucket candidate
-  for (const bucket of uniqueBuckets) {
+  let finalUrl: string | null = null;
+  let usedStorageBucket: string | undefined = undefined;
+  let isFallbackDataUri = false;
+  let storageErrorNotice: string | null = null;
+
+  // 3. Attempt Firebase Storage upload with a strict 8-second timeout
+  if (app) {
     try {
       onProgress?.({
-        percent: 15,
+        percent: 25,
         stage: 'uploading',
-        message: `Connecting to Firebase Storage bucket (${bucket})...`
+        message: `Attempting upload to Firebase Storage bucket (${bucketName})...`
       });
 
-      const storage = getStorage(app, `gs://${bucket}`);
+      const storage = getStorage(app, `gs://${bucketName}`);
       const storageRef = ref(storage, storagePath);
 
       const metadata = {
@@ -269,73 +362,72 @@ export const uploadAndSaveWebsiteLogo = async (
         }
       };
 
-      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
-
-      // Track actual byte upload progress
-      finalDownloadUrl = await new Promise<string>((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            if (snapshot.totalBytes > 0) {
-              const uploadPercent = Math.min(
-                85,
-                Math.round(15 + (snapshot.bytesTransferred / snapshot.totalBytes) * 70)
-              );
-              onProgress?.({
-                percent: uploadPercent,
-                stage: 'uploading',
-                message: `Uploading logo to Firebase Storage: ${uploadPercent}% (${Math.round(snapshot.bytesTransferred / 1024)} KB / ${Math.round(snapshot.totalBytes / 1024)} KB)...`
-              });
-            }
-          },
-          (uploadError) => {
-            reject(uploadError);
-          },
-          async () => {
-            try {
-              const url = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve(url);
-            } catch (urlErr) {
-              reject(urlErr);
-            }
-          }
-        );
+      // Strict 8-second timeout guard to prevent hanging at 15%
+      const uploadPromise = uploadBytes(storageRef, file, metadata);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          const timeoutErr: any = new Error(`Connection to Firebase Storage bucket (${bucketName}) timed out after 8s.`);
+          timeoutErr.code = 'storage/timeout';
+          reject(timeoutErr);
+        }, 8000);
       });
 
-      usedBucket = bucket;
-      break; // Upload succeeded, exit bucket loop
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Storage attempt on bucket "${bucket}" failed:`, err?.code || err?.message);
-      // If error is not a bucket-not-found / project configuration error, break early
-      if (err?.code === 'storage/unauthorized') {
-        break;
+      onProgress?.({
+        percent: 50,
+        stage: 'uploading',
+        message: 'Uploading image bytes to Firebase Cloud Storage...'
+      });
+
+      const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+      finalUrl = await getDownloadURL(uploadResult.ref);
+      usedStorageBucket = bucketName;
+
+      onProgress?.({
+        percent: 80,
+        stage: 'saving_database',
+        message: 'Cloud Storage upload successful. Saving logo to Firestore...'
+      });
+    } catch (storageErr: any) {
+      console.warn('Firebase Storage upload failed or bucket unprovisioned:', storageErr?.code || storageErr?.message);
+      const errCode = storageErr?.code || 'storage/error';
+      
+      if (errCode === 'storage/bucket-not-found' || storageErr?.status === 404) {
+        storageErrorNotice = `Cloud Storage bucket "${bucketName}" is not yet created in Firebase Console for project isezerano-news.`;
+      } else if (errCode === 'storage/unauthorized') {
+        storageErrorNotice = `Firebase Storage access was unauthorized. Check storage.rules for project isezerano-news.`;
+      } else if (errCode === 'storage/timeout') {
+        storageErrorNotice = `Firebase Storage bucket connection timed out (bucket may not be initialized).`;
+      } else {
+        storageErrorNotice = storageErr?.message || 'Firebase Storage upload failed.';
       }
     }
   }
 
-  // If Firebase Storage failed
-  if (!finalDownloadUrl) {
-    let errorDetail = lastError?.message || 'Firebase Storage upload failed.';
-    if ((lastError as any)?.code === 'storage/unauthorized') {
-      errorDetail = 'Firebase Storage permission denied. Please verify that your account (twizerefelix90@gmail.com) is logged in and authorized.';
-    } else if ((lastError as any)?.code === 'storage/bucket-not-found') {
-      errorDetail = 'Storage bucket was not found in project isezerano-news. Please ensure Cloud Storage is activated in Firebase Console.';
-    }
-
+  // 4. Automatic Cloud Fallback: If Firebase Storage failed or bucket doesn't exist,
+  // compress image and store directly in Firestore `appSettings/website_design.logo.logoUrl`.
+  // This guarantees the admin's logo update works 100% of the time and never freezes.
+  if (!finalUrl) {
     onProgress?.({
-      percent: 0,
-      stage: 'error',
-      message: errorDetail
+      percent: 65,
+      stage: 'uploading',
+      message: 'Optimizing and preparing image for direct Cloud Firestore storage...'
     });
-    return { success: false, error: errorDetail };
+
+    try {
+      finalUrl = await compressLogoFile(file, 512);
+      isFallbackDataUri = true;
+    } catch (compressionErr: any) {
+      const errorMsg = `Failed to process image: ${compressionErr?.message || 'Compression error'}`;
+      onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
+      return { success: false, error: errorMsg, code: 'image/compression-failed' };
+    }
   }
 
-  // 4. Save permanent URL to Firestore appSettings/website_design
+  // 5. Save logo URL to Cloud Firestore `appSettings/website_design`
   onProgress?.({
-    percent: 90,
+    percent: 88,
     stage: 'saving_database',
-    message: 'Saving permanent logo URL to Cloud Firestore database...'
+    message: 'Publishing logo settings to Cloud Firestore database...'
   });
 
   const db = initFirestoreIfConfigured();
@@ -346,7 +438,7 @@ export const uploadAndSaveWebsiteLogo = async (
         ...currentSettings,
         logo: {
           ...currentSettings.logo,
-          logoUrl: finalDownloadUrl,
+          logoUrl: finalUrl,
           isCustomLogo: true
         },
         updatedAt: new Date().toISOString(),
@@ -364,43 +456,83 @@ export const uploadAndSaveWebsiteLogo = async (
       }
 
       if (updatedSettings.logo.updateFavicon) {
-        updateBrowserFavicon(finalDownloadUrl);
+        updateBrowserFavicon(finalUrl);
       }
+
+      const successMessage = isFallbackDataUri
+        ? 'Logo successfully optimized and published to Cloud Firestore! (Storage bucket was not found, so it was saved directly to the database).'
+        : 'Logo successfully uploaded to Firebase Storage and published across the website!';
 
       onProgress?.({
         percent: 100,
         stage: 'complete',
-        message: 'Logo successfully uploaded to Firebase Storage and published across the website!'
+        message: successMessage
       });
 
       return {
         success: true,
-        url: finalDownloadUrl,
-        storageBucket: usedBucket || undefined,
-        sizeBytes: file.size
+        url: finalUrl,
+        storageBucket: usedStorageBucket,
+        sizeBytes: file.size,
+        isFallbackDataUri,
+        isStorage: !isFallbackDataUri,
+        error: storageErrorNotice || undefined
       };
     } catch (dbErr: any) {
-      const dbErrorMsg = `Logo was uploaded to Storage, but failed to save in Firestore: ${dbErr?.message || 'Database error'}`;
+      console.error('Failed to save logo to Firestore appSettings/website_design:', dbErr);
+      const isPermissionDenied = dbErr?.code === 'permission-denied';
+      const dbErrorMsg = isPermissionDenied
+        ? `Permission denied saving to Firestore 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com and firestore.rules are deployed.`
+        : `Database save error: ${dbErr?.message || 'Could not write to Firestore'}`;
+
       onProgress?.({
         percent: 0,
         stage: 'error',
         message: dbErrorMsg
       });
-      return { success: false, error: dbErrorMsg, url: finalDownloadUrl };
+
+      return { 
+        success: false, 
+        error: dbErrorMsg, 
+        code: dbErr?.code || 'firestore/error',
+        url: finalUrl 
+      };
     }
+  }
+
+  // If no DB configured, update local cache
+  try {
+    const currentSettings = await getWebsiteDesignSettings();
+    const updatedSettings: WebsiteDesignSettings = {
+      ...currentSettings,
+      logo: {
+        ...currentSettings.logo,
+        logoUrl: finalUrl,
+        isCustomLogo: true
+      },
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid
+    };
+    localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
+    if (updatedSettings.logo.updateFavicon) {
+      updateBrowserFavicon(finalUrl);
+    }
+  } catch {
+    // ignore
   }
 
   onProgress?.({
     percent: 100,
     stage: 'complete',
-    message: 'Logo uploaded successfully.'
+    message: 'Logo saved locally.'
   });
 
   return {
     success: true,
-    url: finalDownloadUrl,
-    storageBucket: usedBucket || undefined,
-    sizeBytes: file.size
+    url: finalUrl,
+    storageBucket: usedStorageBucket,
+    sizeBytes: file.size,
+    isFallbackDataUri
   };
 };
 

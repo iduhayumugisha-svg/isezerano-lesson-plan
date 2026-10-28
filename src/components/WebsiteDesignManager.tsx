@@ -33,7 +33,7 @@ import {
   WebsiteTypographySettings,
   WebsiteLogoSettings
 } from '../types/websiteDesign';
-import { LogoUploadProgress } from '../services/websiteDesignService';
+import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
 
 // Preset educational palettes for 1-click theme switching
 const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
@@ -171,23 +171,25 @@ export const WebsiteDesignManager: React.FC = () => {
   const [confirmResetAll, setConfirmResetAll] = useState(false);
   const [confirmResetLogo, setConfirmResetLogo] = useState(false);
   const [customUrlInput, setCustomUrlInput] = useState('');
-  const [showCustomUrlBox, setShowCustomUrlBox] = useState(false);
+  const [isTestingUrl, setIsTestingUrl] = useState(false);
+  const [urlTestStatus, setUrlTestStatus] = useState<{ status: 'idle' | 'testing' | 'valid' | 'invalid'; message?: string; previewUrl?: string }>({ status: 'idle' });
+  const [activeUploadMethod, setActiveUploadMethod] = useState<'upload' | 'url'>('upload');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showStatus = (type: 'success' | 'error', text: string) => {
     setStatusMessage({ type, text });
-    setTimeout(() => setStatusMessage(null), 5500);
+    setTimeout(() => setStatusMessage(null), 6000);
   };
 
-  // Handle Logo Upload to Firebase Storage and Cloud Firestore
+  // Handle Logo Upload to Firebase Storage with Cloud Firestore fallback
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     setUploadProgress({
-      percent: 5,
+      percent: 10,
       stage: 'validating',
       message: 'Validating image file...'
     });
@@ -199,8 +201,13 @@ export const WebsiteDesignManager: React.FC = () => {
       });
 
       if (result.success && result.url) {
-        setUploadNote(`Permanent Storage URL: ${result.url}`);
-        showStatus('success', '🎉 Logo uploaded to Firebase Storage and published live across the website!');
+        if (result.isFallbackDataUri) {
+          setUploadNote('Logo saved directly to Cloud Firestore. Live across all visitor devices!');
+          showStatus('success', '🎉 Logo optimized and published to Cloud Firestore! Visible live across the entire website.');
+        } else {
+          setUploadNote(`Firebase Storage Permanent URL: ${result.url}`);
+          showStatus('success', '🎉 Logo uploaded to Firebase Storage and published live across the website!');
+        }
       } else {
         const errorText = result.error || 'Upload failed.';
         showStatus('error', errorText);
@@ -219,23 +226,62 @@ export const WebsiteDesignManager: React.FC = () => {
     }
   };
 
+  // Test custom public image URL
+  const handleTestCustomUrl = async () => {
+    if (!customUrlInput.trim()) {
+      setUrlTestStatus({ status: 'invalid', message: 'Please enter an image URL to test.' });
+      return;
+    }
+
+    setIsTestingUrl(true);
+    setUrlTestStatus({ status: 'testing', message: 'Testing image accessibility...' });
+
+    const trimmedUrl = customUrlInput.trim();
+    const result = await validateImageUrl(trimmedUrl);
+
+    setIsTestingUrl(false);
+    if (result.valid) {
+      setUrlTestStatus({ 
+        status: 'valid', 
+        message: 'Image verified successfully! Link is public and ready to apply.',
+        previewUrl: trimmedUrl 
+      });
+    } else {
+      setUrlTestStatus({ 
+        status: 'invalid', 
+        message: result.error || 'Failed to load image from this URL.' 
+      });
+    }
+  };
+
   // Handle setting custom HTTPS URL
-  const handleApplyCustomUrl = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customUrlInput.trim()) return;
-    if (!customUrlInput.startsWith('http://') && !customUrlInput.startsWith('https://') && !customUrlInput.startsWith('/')) {
-      showStatus('error', 'Please enter a valid HTTPS URL (e.g. https://example.com/logo.png)');
+  const handleApplyCustomUrl = async (publishImmediately: boolean = false) => {
+    if (!customUrlInput.trim()) {
+      showStatus('error', 'Please enter an image URL.');
       return;
     }
 
     const trimmedUrl = customUrlInput.trim();
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://') && !trimmedUrl.startsWith('data:image/')) {
+      showStatus('error', 'Please enter a valid HTTP or HTTPS image URL (e.g. https://example.com/logo.png)');
+      return;
+    }
+
     updateDraftLogo({
       logoUrl: trimmedUrl,
       isCustomLogo: true
     });
-    setCustomUrlInput('');
-    setShowCustomUrlBox(false);
-    showStatus('success', 'Custom logo URL applied to draft. Click "Publish Changes" to make it live across all devices.');
+
+    if (publishImmediately) {
+      const publishRes = await publishSettings();
+      if (publishRes.success) {
+        showStatus('success', '🎉 Custom logo URL published live to Cloud Firestore across all devices!');
+      } else {
+        showStatus('error', publishRes.error || 'Failed to publish to Cloud Firestore.');
+      }
+    } else {
+      showStatus('success', 'Custom logo URL applied to draft. Click "Publish Changes" to make it live across all devices.');
+    }
   };
 
   // Restore Default Logo and immediately publish to Firestore
@@ -723,138 +769,274 @@ export const WebsiteDesignManager: React.FC = () => {
             </div>
 
             {/* Upload & Replacement Controls */}
-            <div className="md:col-span-7 space-y-4">
-              <h4 className="text-sm font-bold text-slate-800">Upload or Replace Website Logo</h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Choose an image from your device. Supported formats: PNG (with transparency), JPEG, WebP, or SVG. The image is optimized automatically for desktop and mobile screens.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleLogoFileChange}
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="hidden" 
-                />
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  {isUploading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Uploading to Firebase Storage...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      <span>Choose Image from Device</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCustomUrlBox(prev => !prev)}
-                  className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Use Public Image URL</span>
-                </button>
+            <div className="md:col-span-7 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h4 className="text-sm font-bold text-slate-800">Choose Logo Source</h4>
+                <div className="flex items-center space-x-1 p-0.5 bg-slate-200/70 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setActiveUploadMethod('upload')}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      activeUploadMethod === 'upload'
+                        ? 'bg-white text-teal-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Upload from Device
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveUploadMethod('url')}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      activeUploadMethod === 'url'
+                        ? 'bg-white text-teal-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Public Image URL
+                  </button>
+                </div>
               </div>
 
-              {/* Upload Progress Bar & Live Status */}
-              {uploadProgress && (
-                <div className={`p-4 rounded-xl border space-y-2.5 transition-all ${
-                  uploadProgress.stage === 'error'
-                    ? 'bg-rose-50 border-rose-300 text-rose-800'
-                    : uploadProgress.stage === 'complete'
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                    : 'bg-teal-50 border-teal-200 text-teal-900'
-                }`}>
-                  <div className="flex items-center justify-between text-xs font-bold">
-                    <div className="flex items-center space-x-2">
-                      {uploadProgress.stage === 'error' ? (
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      ) : uploadProgress.stage === 'complete' ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 text-teal-600 animate-spin shrink-0" />
-                      )}
-                      <span>
-                        {uploadProgress.stage === 'validating' && '1. Validating Image File'}
-                        {uploadProgress.stage === 'uploading' && `2. Uploading to Firebase Storage (${uploadProgress.percent}%)`}
-                        {uploadProgress.stage === 'saving_database' && '3. Saving to Cloud Firestore Database'}
-                        {uploadProgress.stage === 'complete' && 'Upload & Database Save Complete'}
-                        {uploadProgress.stage === 'error' && 'Upload Failed'}
-                      </span>
-                    </div>
-                    <span className="font-mono text-[11px]">{uploadProgress.percent}%</span>
-                  </div>
-
-                  {/* Progress Bar Track */}
-                  <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        uploadProgress.stage === 'error'
-                          ? 'bg-rose-500'
-                          : uploadProgress.stage === 'complete'
-                          ? 'bg-emerald-600'
-                          : 'bg-teal-600'
-                      }`}
-                      style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
-                    />
-                  </div>
-
-                  <p className="text-xs leading-relaxed">
-                    {uploadProgress.message}
+              {/* METHOD 1: UPLOAD FROM DEVICE */}
+              {activeUploadMethod === 'upload' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Choose an image from your device. Supported formats: PNG (with transparency), JPEG, WebP, or SVG (max 5 MB). The logo is saved permanently to Firebase and updates across the entire website.
                   </p>
 
-                  {uploadProgress.stage === 'error' && (
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleLogoFileChange}
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden" 
+                  />
+
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 cursor-pointer shadow-xs"
+                      disabled={isUploading}
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Retry Logo Upload</span>
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Uploading & Processing Logo...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Choose Image from Device</span>
+                        </>
+                      )}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveUploadMethod('url')}
+                      className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Switch to Public Image URL</span>
+                    </button>
+                  </div>
+
+                  {/* Upload Progress Bar & Live Status */}
+                  {uploadProgress && (
+                    <div className={`p-4 rounded-xl border space-y-2.5 transition-all ${
+                      uploadProgress.stage === 'error'
+                        ? 'bg-rose-50 border-rose-300 text-rose-800'
+                        : uploadProgress.stage === 'complete'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-teal-50 border-teal-200 text-teal-900'
+                    }`}>
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <div className="flex items-center space-x-2">
+                          {uploadProgress.stage === 'error' ? (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          ) : uploadProgress.stage === 'complete' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4 text-teal-600 animate-spin shrink-0" />
+                          )}
+                          <span>
+                            {uploadProgress.stage === 'validating' && '1. Validating Logo Format'}
+                            {uploadProgress.stage === 'uploading' && `2. Cloud Upload (${uploadProgress.percent}%)`}
+                            {uploadProgress.stage === 'saving_database' && '3. Saving to Cloud Firestore Database'}
+                            {uploadProgress.stage === 'complete' && 'Logo Published Successfully'}
+                            {uploadProgress.stage === 'error' && 'Upload Failed'}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[11px]">{uploadProgress.percent}%</span>
+                      </div>
+
+                      {/* Progress Bar Track */}
+                      <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            uploadProgress.stage === 'error'
+                              ? 'bg-rose-500'
+                              : uploadProgress.stage === 'complete'
+                              ? 'bg-emerald-600'
+                              : 'bg-teal-600'
+                          }`}
+                          style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
+                        />
+                      </div>
+
+                      <p className="text-xs leading-relaxed">
+                        {uploadProgress.message}
+                      </p>
+
+                      {uploadProgress.stage === 'error' && (
+                        <div className="pt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 cursor-pointer shadow-xs"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Retry Logo Upload</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveUploadMethod('url')}
+                            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 text-xs font-semibold hover:bg-rose-100 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Use Public Image URL Instead</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {uploadNote && !uploadProgress && (
+                    <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-xs text-teal-800 flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold">Logo Status: </span>
+                        <span>{uploadNote}</span>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
 
-              {uploadNote && !uploadProgress && (
-                <p className="text-xs text-teal-700 font-medium">
-                  {uploadNote}
-                </p>
-              )}
+              {/* METHOD 2: USE PUBLIC IMAGE URL (SEPARATE VALIDATED OPTION) */}
+              {activeUploadMethod === 'url' && (
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Use Public Image URL (Direct Web Address)
+                      </h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Link any publicly hosted image URL (HTTPS) for the school crest or institution logo.
+                      </p>
+                    </div>
+                    <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-md border border-teal-200">
+                      Validated Link Option
+                    </span>
+                  </div>
 
-              {/* Custom Image URL Form */}
-              {showCustomUrlBox && (
-                <form onSubmit={handleApplyCustomUrl} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
-                  <label className="block text-[11px] font-semibold text-slate-700">
-                    Paste Direct HTTPS Image URL:
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="url" 
-                      value={customUrlInput}
-                      onChange={(e) => setCustomUrlInput(e.target.value)}
-                      placeholder="https://example.com/logo.png"
-                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                    />
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Direct Image URL (PNG, JPG, WebP, SVG):
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input 
+                        type="url" 
+                        value={customUrlInput}
+                        onChange={(e) => {
+                          setCustomUrlInput(e.target.value);
+                          if (urlTestStatus.status !== 'idle') {
+                            setUrlTestStatus({ status: 'idle' });
+                          }
+                        }}
+                        placeholder="https://example.com/images/school-logo.png"
+                        className="flex-1 px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestCustomUrl}
+                        disabled={isTestingUrl || !customUrlInput.trim()}
+                        className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {isTestingUrl ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Testing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Test Image</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* URL Test Feedback & Preview */}
+                  {urlTestStatus.status !== 'idle' && (
+                    <div className={`p-3 rounded-xl border text-xs flex items-start space-x-2.5 ${
+                      urlTestStatus.status === 'valid'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : urlTestStatus.status === 'invalid'
+                        ? 'bg-rose-50 border-rose-300 text-rose-800'
+                        : 'bg-sky-50 border-sky-300 text-sky-800'
+                    }`}>
+                      {urlTestStatus.status === 'valid' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : urlTestStatus.status === 'invalid' ? (
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 text-sky-600 animate-spin shrink-0 mt-0.5" />
+                      )}
+
+                      <div className="flex-1">
+                        <p className="font-semibold">{urlTestStatus.message}</p>
+                        {urlTestStatus.status === 'valid' && urlTestStatus.previewUrl && (
+                          <div className="mt-2 flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-white rounded-lg border border-slate-200 p-1 flex items-center justify-center overflow-hidden">
+                              <img 
+                                src={urlTestStatus.previewUrl} 
+                                alt="Tested Logo" 
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                            <span className="text-[11px] text-emerald-700">Preview renders clearly</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Apply Actions */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">
                     <button
-                      type="submit"
-                      className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+                      type="button"
+                      onClick={() => handleApplyCustomUrl(true)}
+                      disabled={!customUrlInput.trim() || isPublishing}
+                      className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
                     >
-                      Apply
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Apply & Publish Live Immediately</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCustomUrl(false)}
+                      disabled={!customUrlInput.trim()}
+                      className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>Apply to Draft Only</span>
                     </button>
                   </div>
-                </form>
+                </div>
               )}
             </div>
           </div>
