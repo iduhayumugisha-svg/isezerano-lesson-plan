@@ -1,19 +1,27 @@
 @import "tailwindcss";
 
+:root {
+  --app-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
+  --app-heading-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
+  --app-body-bg: #f8fafc;
+  --app-body-text: #1e293b;
+}
+
 @layer base {
-  *, ::before, ::after {
-    font-family: 'Times New Roman', Times, Baskerville, Georgia, serif !important;
-  }
-
-  html, body, input, button, select, textarea, [class*="font-"] {
-    font-family: 'Times New Roman', Times, Baskerville, Georgia, serif !important;
-  }
-
-  body {
-    color: #0f172a;
-    background-color: #f8fafc;
+  html, body {
+    font-family: var(--app-font-family);
+    color: var(--app-body-text);
+    background-color: var(--app-body-bg);
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--app-heading-font-family);
+  }
+
+  input, button, select, textarea {
+    font-family: inherit;
   }
 }
 

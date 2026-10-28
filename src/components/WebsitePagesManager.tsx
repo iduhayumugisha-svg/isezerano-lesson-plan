@@ -314,7 +314,7 @@ export const WebsitePagesManager: React.FC = () => {
             Website Pages & Content Manager
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            Edit and publish content for <span className="text-teal-300 font-semibold">About Us, Contact Us, Privacy Policy</span>, and <span className="text-teal-300 font-semibold">Terms & Conditions</span>. Changes take effect on the public website immediately upon publishing.
+            Edit and publish content for <span className="text-teal-300 font-semibold">Homepage & Hero, About Us, Contact Us, Privacy Policy</span>, and <span className="text-teal-300 font-semibold">Terms & Conditions</span>. Changes take effect on the public website immediately upon publishing.
           </p>
         </div>
 
@@ -386,6 +386,7 @@ export const WebsitePagesManager: React.FC = () => {
       {/* Page Selection Tab Bar */}
       <div className="bg-white rounded-2xl p-2 border border-slate-200 shadow-2xs flex flex-wrap gap-2">
         {[
+          { id: 'home', label: 'Homepage & Hero', icon: Sparkles, desc: 'Headline, CBC description & classroom about card' },
           { id: 'about', label: 'About Us', icon: BookOpen, desc: 'School background, mission & CBC purpose' },
           { id: 'contact', label: 'Contact Us', icon: Phone, desc: 'Address, phone, hours & inquiry form intro' },
           { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck, desc: 'Local storage, offline safety & teacher data' },

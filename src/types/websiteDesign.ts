@@ -78,13 +78,36 @@ export interface WebsiteLogoSettings {
   updateFavicon: boolean;     // Dynamically sync browser tab favicon
 }
 
+export interface WebsiteBrandingSettings {
+  platformTitle: string;          // Main platform title in header, footer, meta
+  platformSubtitle: string;       // Subtitle (e.g. GS GITUMBA)
+  schoolName: string;             // School name
+  schoolLocation: string;         // School location (Sector, District, Province)
+  headerAnnouncement: string;     // Top banner announcement text
+  headerAnnouncementEnabled: boolean; // Whether top announcement is active
+  footerTagline: string;          // Footer description/tagline
+  footerCopyright: string;        // Copyright statement in footer
+}
+
 export interface WebsiteDesignSettings {
+  branding: WebsiteBrandingSettings;
   colors: WebsiteColorSettings;
   typography: WebsiteTypographySettings;
   logo: WebsiteLogoSettings;
   updatedAt: string;
   updatedBy: string;
 }
+
+export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
+  platformTitle: 'ISEZERANO ONLINE',
+  platformSubtitle: 'GS GITUMBA',
+  schoolName: 'GS GITUMBA',
+  schoolLocation: 'Buyoga Sector, Rulindo District, Northern Province, Rwanda',
+  headerAnnouncement: 'Welcome to Term 2! Prepare official Rwanda CBC Lesson Plans with confidence.',
+  headerAnnouncementEnabled: false,
+  footerTagline: 'Developed by a Rwandan teacher serving at GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province) to support fellow educators in preparing well-structured CBC lesson plans aligned with REB & MINEDUC standards.',
+  footerCopyright: '© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved.'
+};
 
 export const DEFAULT_WEBSITE_COLORS: WebsiteColorSettings = {
   headerBg: '#ffffff',
@@ -155,6 +178,7 @@ export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
 };
 
 export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
+  branding: DEFAULT_WEBSITE_BRANDING,
   colors: DEFAULT_WEBSITE_COLORS,
   typography: DEFAULT_WEBSITE_TYPOGRAPHY,
   logo: DEFAULT_WEBSITE_LOGO,

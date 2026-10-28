@@ -32,8 +32,9 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { isAdmin } = useAuth();
-  const { logoUrl, logoSettings, colors, typography } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [dismissAnnouncement, setDismissAnnouncement] = useState(false);
 
   const isLessonPlanActive = ['create', 'saved', 'settings'].includes(currentPage);
 
@@ -77,62 +78,88 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const showAnnouncement = branding?.headerAnnouncementEnabled && branding?.headerAnnouncement && !dismissAnnouncement;
+
   return (
-    <header 
-      className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
-      style={{
-        backgroundColor: colors.headerBg,
-        borderColor: colors.headerBorder,
-        color: colors.headerText
-      }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
-          
-          {/* Logo & Platform Name: ISEZERANO ONLINE – GS GITUMBA */}
-          <div 
-            onClick={() => handleNavClick('home')}
-            className="flex items-center space-x-3 cursor-pointer group select-none shrink-0"
-            title="ISEZERANO ONLINE – GS GITUMBA"
-          >
-            {/* Dynamic Custom or Default Logo */}
-            {logoSettings.showInHeader && (
-              <div 
-                className={`overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:scale-102 transition-all ${logoSettings.borderRadius}`}
-                style={{
-                  height: `${logoSettings.displayHeight}px`,
-                  width: `${logoSettings.displayHeight}px`
-                }}
-              >
-                <img 
-                  src={logoUrl} 
-                  alt={logoSettings.altText || 'ISEZERANO ONLINE – GS GITUMBA Logo'} 
-                  className={`w-full h-full object-${logoSettings.displayFit}`}
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            )}
-            <div className="flex flex-col justify-center">
-              <span 
-                className="font-bold tracking-tight transition-colors leading-tight"
-                style={{
-                  fontSize: `${typography.websiteTitleSize}px`,
-                  color: colors.headerText
-                }}
-              >
-                ISEZERANO ONLINE
-              </span>
-              <span 
-                className="font-semibold tracking-wider uppercase leading-none mt-0.5"
-                style={{
-                  fontSize: `${typography.websiteSubtitleSize}px`,
-                  color: colors.navLinkActive
-                }}
-              >
-                GS GITUMBA
-              </span>
-            </div>
+    <>
+      {showAnnouncement && (
+        <div 
+          className="no-print w-full py-1.5 px-4 text-xs font-semibold flex items-center justify-between transition-colors z-50 border-b"
+          style={{
+            backgroundColor: colors.accentBg,
+            borderColor: colors.cardBorder,
+            color: colors.primaryButtonBg
+          }}
+        >
+          <div className="max-w-7xl mx-auto flex items-center justify-center space-x-2 w-full text-center">
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span>{branding.headerAnnouncement}</span>
           </div>
+          <button 
+            type="button" 
+            onClick={() => setDismissAnnouncement(true)}
+            className="text-slate-400 hover:text-slate-700 ml-2 p-0.5 cursor-pointer"
+            aria-label="Dismiss banner"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+      <header 
+        className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
+        style={{
+          backgroundColor: colors.headerBg,
+          borderColor: colors.headerBorder,
+          color: colors.headerText
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16 sm:h-20">
+            
+            {/* Logo & Platform Name: Dynamic from Admin Branding */}
+            <div 
+              onClick={() => handleNavClick('home')}
+              className="flex items-center space-x-3 cursor-pointer group select-none shrink-0"
+              title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
+            >
+              {/* Dynamic Custom or Default Logo */}
+              {logoSettings.showInHeader && (
+                <div 
+                  className={`overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:scale-102 transition-all ${logoSettings.borderRadius}`}
+                  style={{
+                    height: `${logoSettings.displayHeight}px`,
+                    width: `${logoSettings.displayHeight}px`
+                  }}
+                >
+                  <img 
+                    src={logoUrl} 
+                    alt={logoSettings.altText || `${branding?.platformTitle || 'ISEZERANO ONLINE'} Logo`} 
+                    className={`w-full h-full object-${logoSettings.displayFit}`}
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              <div className="flex flex-col justify-center">
+                <span 
+                  className="font-bold tracking-tight transition-colors leading-tight"
+                  style={{
+                    fontSize: `${typography.websiteTitleSize}px`,
+                    color: colors.headerText
+                  }}
+                >
+                  {branding?.platformTitle || 'ISEZERANO ONLINE'}
+                </span>
+                <span 
+                  className="font-semibold tracking-wider uppercase leading-none mt-0.5"
+                  style={{
+                    fontSize: `${typography.websiteSubtitleSize}px`,
+                    color: colors.navLinkActive
+                  }}
+                >
+                  {branding?.platformSubtitle || 'GS GITUMBA'}
+                </span>
+              </div>
+            </div>
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center space-x-1 lg:space-x-1.5">
@@ -315,5 +342,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         </div>
       )}
     </header>
+    </>
   );
 };

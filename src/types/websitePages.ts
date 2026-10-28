@@ -1,4 +1,4 @@
-export type EditablePageId = 'about' | 'contact' | 'privacy' | 'terms';
+export type EditablePageId = 'home' | 'about' | 'contact' | 'privacy' | 'terms';
 
 export interface PageSection {
   id: string;

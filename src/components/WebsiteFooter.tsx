@@ -11,7 +11,7 @@ interface WebsiteFooterProps {
 
 export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpenAuth }) => {
   const { t } = useLanguage();
-  const { logoUrl, logoSettings, colors, typography } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
 
   const handleLink = (page: WebsitePage) => {
     onNavigate(page);
@@ -46,7 +46,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                 >
                   <img 
                     src={logoUrl} 
-                    alt={logoSettings.altText || 'ISEZERANO ONLINE – GS GITUMBA Logo'} 
+                    alt={logoSettings.altText || `${branding?.platformTitle || 'ISEZERANO ONLINE'} Logo`} 
                     className={`w-full h-full object-${logoSettings.displayFit}`}
                     referrerPolicy="no-referrer"
                   />
@@ -60,7 +60,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                     color: colors.footerHeadingText
                   }}
                 >
-                  ISEZERANO ONLINE
+                  {branding?.platformTitle || 'ISEZERANO ONLINE'}
                 </span>
                 <span 
                   className="font-semibold tracking-wider uppercase mt-0.5"
@@ -69,13 +69,13 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
                     color: colors.footerLinkColor
                   }}
                 >
-                  GS GITUMBA
+                  {branding?.platformSubtitle || 'GS GITUMBA'}
                 </span>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md">
-              Developed by a Rwandan teacher serving at <strong className="text-white">GS GITUMBA</strong> (Buyoga Sector, Rulindo District, Northern Province) to support fellow educators in preparing well-structured CBC lesson plans aligned with REB & MINEDUC standards.
+              {branding?.footerTagline || 'Developed by a Rwandan teacher serving at GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province) to support fellow educators in preparing well-structured CBC lesson plans aligned with REB & MINEDUC standards.'}
             </p>
 
             <div className="flex items-center space-x-2 text-xs text-slate-400">
@@ -184,7 +184,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
         {/* Bottom Bar: Copyright & Attribution */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div>
-            <span>© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved.</span>
+            <span>{branding?.footerCopyright || '© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved.'}</span>
           </div>
 
           <div className="flex items-center space-x-4">

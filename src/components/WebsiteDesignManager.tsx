@@ -147,6 +147,7 @@ export const WebsiteDesignManager: React.FC = () => {
     publishedSettings,
     isDraftDirty,
     isPublishing,
+    updateDraftBranding,
     updateDraftColors,
     updateDraftTypography,
     updateDraftLogo,
@@ -159,7 +160,7 @@ export const WebsiteDesignManager: React.FC = () => {
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'logo' | 'colors' | 'typography' | 'preview'>('logo');
+  const [activeTab, setActiveTab] = useState<'branding' | 'logo' | 'colors' | 'typography' | 'preview'>('branding');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -355,6 +356,19 @@ export const WebsiteDesignManager: React.FC = () => {
         <div className="flex space-x-2 shrink-0">
           <button
             type="button"
+            onClick={() => setActiveTab('branding')}
+            className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'branding'
+                ? 'border-teal-600 text-teal-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>1. Branding & Identity</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('logo')}
             className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'logo'
@@ -363,7 +377,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>1. Website Logo</span>
+            <span>2. Website Logo</span>
             {draftSettings.logo.isCustomLogo && (
               <span className="w-2 h-2 rounded-full bg-teal-500" />
             )}
@@ -379,7 +393,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Palette className="w-4 h-4" />
-            <span>2. Colors & Appearance</span>
+            <span>3. Colors & Appearance</span>
           </button>
 
           <button
@@ -392,7 +406,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Type className="w-4 h-4" />
-            <span>3. Typography & Sizing</span>
+            <span>4. Typography & Sizing</span>
           </button>
 
           <button
@@ -405,7 +419,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Eye className="w-4 h-4" />
-            <span>4. Live Preview</span>
+            <span>5. Live Preview</span>
           </button>
         </div>
 
@@ -495,7 +509,159 @@ export const WebsiteDesignManager: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 1: WEBSITE LOGO MANAGER */}
+      {/* TAB 1: BRANDING & IDENTITY */}
+      {activeTab === 'branding' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Platform Branding & School Identity</h3>
+              <p className="text-xs text-slate-500">
+                Manage platform titles, official school names, announcement banners, and footer attributions displayed to public visitors and educators.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => resetSectionToDefault('branding')}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Restore Default Branding</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Platform Title */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                Platform Name (Main Header Title)
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.platformTitle || ''}
+                onChange={(e) => updateDraftBranding({ platformTitle: e.target.value })}
+                placeholder="ISEZERANO ONLINE"
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold"
+              />
+              <p className="text-[11px] text-slate-500">Primary headline appearing in header, tabs, and footer.</p>
+            </div>
+
+            {/* Platform Subtitle */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                Platform Subtitle (School Label)
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.platformSubtitle || ''}
+                onChange={(e) => updateDraftBranding({ platformSubtitle: e.target.value })}
+                placeholder="GS GITUMBA"
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
+              />
+              <p className="text-[11px] text-slate-500">Sub-brand label displayed below the platform name.</p>
+            </div>
+
+            {/* School Name */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                Official School Name
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.schoolName || ''}
+                onChange={(e) => updateDraftBranding({ schoolName: e.target.value })}
+                placeholder="GS GITUMBA"
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+              />
+              <p className="text-[11px] text-slate-500">Official name of the school institution.</p>
+            </div>
+
+            {/* School Location */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                School Geographical Location
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.schoolLocation || ''}
+                onChange={(e) => updateDraftBranding({ schoolLocation: e.target.value })}
+                placeholder="Buyoga Sector, Rulindo District, Northern Province, Rwanda"
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+              />
+              <p className="text-[11px] text-slate-500">District, sector, and province in Rwanda.</p>
+            </div>
+          </div>
+
+          {/* Announcement Banner Box */}
+          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Top Announcement Strip
+                </h4>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draftSettings.branding?.headerAnnouncementEnabled ?? false}
+                  onChange={(e) => updateDraftBranding({ headerAnnouncementEnabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
+                <span className="ml-2 text-xs font-semibold text-slate-600">
+                  {draftSettings.branding?.headerAnnouncementEnabled ? 'Visible' : 'Hidden'}
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Announcement Message
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.headerAnnouncement || ''}
+                onChange={(e) => updateDraftBranding({ headerAnnouncement: e.target.value })}
+                placeholder="e.g. Welcome to Term 2! Prepare official Rwanda CBC Lesson Plans with confidence."
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">Appears as a clean top notification strip above the header on public pages.</p>
+            </div>
+          </div>
+
+          {/* Footer Copy */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Footer Tagline & Mission Narrative
+              </label>
+              <textarea
+                rows={3}
+                value={draftSettings.branding?.footerTagline || ''}
+                onChange={(e) => updateDraftBranding({ footerTagline: e.target.value })}
+                placeholder="Brief description about the platform origin at GS GITUMBA"
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Footer Copyright Statement
+              </label>
+              <input
+                type="text"
+                value={draftSettings.branding?.footerCopyright || ''}
+                onChange={(e) => updateDraftBranding({ footerCopyright: e.target.value })}
+                placeholder="© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved."
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-mono text-[11px]"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: WEBSITE LOGO MANAGER */}
       {activeTab === 'logo' && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8">
           

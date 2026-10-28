@@ -4,10 +4,12 @@ import {
   WebsiteColorSettings, 
   WebsiteTypographySettings, 
   WebsiteLogoSettings,
+  WebsiteBrandingSettings,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
-  DEFAULT_WEBSITE_LOGO
+  DEFAULT_WEBSITE_LOGO,
+  DEFAULT_WEBSITE_BRANDING
 } from '../types/websiteDesign';
 import { 
   getWebsiteDesignSettings, 
@@ -31,11 +33,12 @@ interface WebsiteDesignContextType {
   isPublishing: boolean;
 
   // Actions
+  updateDraftBranding: (branding: Partial<WebsiteBrandingSettings>) => void;
   updateDraftColors: (colors: Partial<WebsiteColorSettings>) => void;
   updateDraftTypography: (typography: Partial<WebsiteTypographySettings>) => void;
   updateDraftLogo: (logo: Partial<WebsiteLogoSettings>) => void;
-  resetSectionToDefault: (section: 'colors' | 'typography' | 'logo' | 'all') => void;
-  resetSingleField: (section: 'colors' | 'typography' | 'logo', fieldKey: string) => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'all') => void;
+  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   publishSettings: () => Promise<{ success: boolean; error?: string }>;
@@ -43,6 +46,7 @@ interface WebsiteDesignContextType {
   reloadSettings: () => Promise<void>;
 
   // Convenience Getters
+  branding: WebsiteBrandingSettings;
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
   colors: WebsiteColorSettings;
@@ -109,6 +113,14 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [isPreviewingDraft, draftSettings, publishedSettings]);
 
+  const updateDraftBranding = (partialBranding: Partial<WebsiteBrandingSettings>) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      branding: { ...(prev.branding || DEFAULT_WEBSITE_BRANDING), ...partialBranding }
+    }));
+    setIsDraftDirty(true);
+  };
+
   const updateDraftColors = (partialColors: Partial<WebsiteColorSettings>) => {
     setDraftSettings(prev => ({
       ...prev,
@@ -133,9 +145,12 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsDraftDirty(true);
   };
 
-  const resetSectionToDefault = (section: 'colors' | 'typography' | 'logo' | 'all') => {
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
+      if (section === 'branding' || section === 'all') {
+        updated.branding = { ...DEFAULT_WEBSITE_BRANDING };
+      }
       if (section === 'colors' || section === 'all') {
         updated.colors = { ...DEFAULT_WEBSITE_COLORS };
       }
@@ -150,10 +165,12 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsDraftDirty(true);
   };
 
-  const resetSingleField = (section: 'colors' | 'typography' | 'logo', fieldKey: string) => {
+  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo', fieldKey: string) => {
     setDraftSettings(prev => {
       const updated = { ...prev };
-      if (section === 'colors') {
+      if (section === 'branding') {
+        (updated.branding as any)[fieldKey] = (DEFAULT_WEBSITE_BRANDING as any)[fieldKey];
+      } else if (section === 'colors') {
         (updated.colors as any)[fieldKey] = (DEFAULT_WEBSITE_COLORS as any)[fieldKey];
       } else if (section === 'typography') {
         (updated.typography as any)[fieldKey] = (DEFAULT_WEBSITE_TYPOGRAPHY as any)[fieldKey];
@@ -244,6 +261,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         isPreviewingDraft,
         isLoading,
         isPublishing,
+        updateDraftBranding,
         updateDraftColors,
         updateDraftTypography,
         updateDraftLogo,
@@ -254,6 +272,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         publishSettings,
         uploadLogoFile,
         reloadSettings: loadSettings,
+        branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,
         colors: activeSettings.colors,

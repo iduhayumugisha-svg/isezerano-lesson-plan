@@ -5,6 +5,49 @@ import { initFirestoreIfConfigured } from './storageService';
 const PAGE_STORAGE_PREFIX = 'isezerano_page_v1_';
 
 export const DEFAULT_PAGES_CONTENT: Record<EditablePageId, WebsitePageContent> = {
+  home: {
+    id: 'home',
+    pageName: 'Homepage & Hero',
+    badge: 'Rwanda Competence-Based Curriculum (CBC) Standard',
+    title: 'Prepare Official Rwanda CBC Lesson Plans with Confidence',
+    subtitle: 'ISEZERANO ONLINE is a specialized pedagogical platform designed to help primary and secondary school educators in Rwanda prepare structured, REB-compliant 8-column lesson plans with ease. Access your tools, saved records, and clean printable A4 exports directly from the dashboard.',
+    highlightBox: {
+      enabled: true,
+      badge: 'About the Platform',
+      title: 'From the Classroom of GS GITUMBA to Rwandan Educators Everywhere',
+      content: 'Built by a Rwandan teacher serving at GS GITUMBA, located in Buyoga Sector, Rulindo District, Northern Province, Rwanda, this platform supports educators in preparing well-structured lesson plans aligned with Rwanda’s Competence-Based Curriculum (CBC).'
+    },
+    sections: [
+      {
+        id: 'format',
+        title: 'Official 8-Column CBC Standard',
+        content: 'Follows the national format mandated by the Rwanda Basic Education Board (REB) with Timing, Teacher Activities, Learner Activities, Competences, and Assessment.',
+        bullets: ['MINEDUC Aligned', 'Full 8 columns', 'Step-by-step guidance']
+      },
+      {
+        id: 'bloom',
+        title: "Bloom's Taxonomy Objectives",
+        content: 'Structured fields for Knowledge & Understanding, Skills, and Attitudes & Values, keeping lesson aims clear, measurable, and learner-centered.',
+        bullets: ['Cognitive Domain', 'Affective Domain', 'Psychomotor Domain']
+      },
+      {
+        id: 'pdf',
+        title: 'Clean Printable A4 PDF Export',
+        content: 'Generates crisp, selectable-text PDFs formatted specifically for standard A4 paper in Portrait or Landscape, with zero awkward text clipping or URL watermarks.',
+        bullets: ['A4 Landscape & Portrait', 'Inspection Ready', 'Clean Margins']
+      },
+      {
+        id: 'offline',
+        title: 'Offline Auto-Save & Privacy',
+        content: "Plans are securely saved directly in your device's browser memory. Draft plans in your staffroom even when the internet is intermittent.",
+        bullets: ['Local Browser Storage', 'Zero Forced Login', 'No Student Tracking']
+      }
+    ],
+    isPublished: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'system'
+  },
+
   about: {
     id: 'about',
     pageName: 'About Us',
@@ -216,14 +259,15 @@ export const getPageContent = async (pageId: EditablePageId): Promise<WebsitePag
  * Fetch all editable pages content
  */
 export const getAllPagesContent = async (): Promise<Record<EditablePageId, WebsitePageContent>> => {
-  const pageIds: EditablePageId[] = ['about', 'contact', 'privacy', 'terms'];
+  const pageIds: EditablePageId[] = ['home', 'about', 'contact', 'privacy', 'terms'];
   const results = await Promise.all(pageIds.map(id => getPageContent(id)));
   
   return {
-    about: results[0],
-    contact: results[1],
-    privacy: results[2],
-    terms: results[3]
+    home: results[0],
+    about: results[1],
+    contact: results[2],
+    privacy: results[3],
+    terms: results[4]
   };
 };
 

@@ -73,6 +73,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
         const merged: WebsiteDesignSettings = {
+          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
@@ -97,6 +98,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
     if (cached) {
       const parsed = JSON.parse(cached);
       return {
+        branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(parsed.branding || {}) },
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
         typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(parsed.typography || {}) },
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
@@ -127,6 +129,7 @@ export const subscribeToWebsiteDesign = (
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
         const merged: WebsiteDesignSettings = {
+          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },

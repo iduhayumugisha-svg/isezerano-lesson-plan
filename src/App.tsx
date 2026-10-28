@@ -42,7 +42,7 @@ import { AuthModal } from './components/AuthModal';
 
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { WebsiteDesignProvider } from './context/WebsiteDesignContext';
+import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
 import { FEATURE_FLAGS } from './config/features';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
@@ -82,6 +82,7 @@ const getPageFromUrl = (): AppPage => {
 function AppContent() {
   const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
+  const { colors, typography } = useWebsiteDesign();
 
   // Route state initialized from browser URL (/admin, /manage, #admin, etc.)
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -239,7 +240,13 @@ function AppContent() {
   const isLessonPlanWorkspace = ['create', 'saved', 'settings'].includes(currentPage);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-serif antialiased selection:bg-teal-700 selection:text-white">
+    <div 
+      className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors"
+      style={{
+        backgroundColor: colors.bodyBg,
+        color: colors.bodyText
+      }}
+    >
       
       {/* 1. Global Professional Public Website Header */}
       <WebsiteHeader
