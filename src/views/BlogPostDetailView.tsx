@@ -17,6 +17,8 @@ import { BlogPost } from '../types/blog';
 import { getBlogPostBySlug, getBlogPosts, incrementPostViews } from '../services/blogService';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { useAuth } from '../context/AuthContext';
+import { formatPublicationDate } from '../utils/dateUtils';
 
 interface BlogPostDetailViewProps {
   slug: string;
@@ -30,38 +32,78 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
   onSelectPost
 }) => {
   const { colors, typography } = useWebsiteDesign();
+  const { isAdmin } = useAuth();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     setIsLoading(true);
-    getBlogPostBySlug(slug).then((found) => {
+
+    const loadArticle = async () => {
+      const found = await getBlogPostBySlug(slug, isAdmin);
+      if (!isMounted) return;
+
       setPost(found);
       setIsLoading(false);
 
       if (found) {
         // 1. Update dynamic SEO, OpenGraph, Twitter Cards, and Schema.org
         updateBlogPostSeo(found);
-        // 2. Increment view counter atomically
-        incrementPostViews(found.id);
+
+        // 2. Increment view counter with session debounce to prevent duplicate render increments
+        const sessionKey = `isezerano_viewed_post_${found.id}`;
+        let shouldIncrement = false;
+        try {
+          if (typeof sessionStorage !== 'undefined') {
+            if (!sessionStorage.getItem(sessionKey)) {
+              sessionStorage.setItem(sessionKey, Date.now().toString());
+              shouldIncrement = true;
+            }
+          }
+        } catch {
+          shouldIncrement = true;
+        }
+
+        if (shouldIncrement) {
+          incrementPostViews(found.id).then((freshCount) => {
+            if (isMounted && typeof freshCount === 'number') {
+              setPost(prev => prev && prev.id === found.id ? { ...prev, views: freshCount } : prev);
+            }
+          });
+        }
 
         // 3. Load related posts from same category
         getBlogPosts(false).then((all) => {
+          if (!isMounted) return;
           const related = all.filter(p => p.id !== found.id && (p.category === found.category || true)).slice(0, 3);
           setRelatedPosts(related);
         });
       }
-    });
+    };
 
+    loadArticle();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
+    // Listen to sync updates from admin editor
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent<{ post?: BlogPost; deletedId?: string }>;
+      if (customEvent.detail?.deletedId && post?.id === customEvent.detail.deletedId) {
+        setPost(null);
+      } else if (customEvent.detail?.post && customEvent.detail.post.slug === slug) {
+        setPost(customEvent.detail.post);
+      }
+    };
+    window.addEventListener('blog_posts_updated', handleSync);
+
     return () => {
-      // Restore default website SEO when navigating away
+      isMounted = false;
+      window.removeEventListener('blog_posts_updated', handleSync);
       resetDefaultSeo();
     };
-  }, [slug]);
+  }, [slug, isAdmin]);
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
   const postUrl = `${originUrl}/blog/${slug}`;
@@ -122,11 +164,27 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
             {post.category}
           </span>
-          <span>•</span>
-          <span className="flex items-center space-x-1">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>{new Date(post.publishedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-          </span>
+          {(() => {
+            const dateInfo = formatPublicationDate(post.publishedAt);
+            if (!dateInfo) {
+              return post.status === 'draft' ? (
+                <>
+                  <span>•</span>
+                  <span className="italic text-amber-600 font-semibold">Draft Preview</span>
+                </>
+              ) : null;
+            }
+            return (
+              <>
+                <span>•</span>
+                <span className="flex items-center space-x-1" title={`${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}`}>
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{dateInfo.formattedDate}</span>
+                  <span className="text-teal-700 font-medium">({dateInfo.relativeTime})</span>
+                </span>
+              </>
+            );
+          })()}
           <span>•</span>
           <span className="flex items-center space-x-1">
             <Clock className="w-3.5 h-3.5" />
@@ -135,7 +193,7 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
           <span>•</span>
           <span className="flex items-center space-x-1">
             <Eye className="w-3.5 h-3.5" />
-            <span>{post.views || 1} views</span>
+            <span>{post.views || 0} views</span>
           </span>
         </div>
 

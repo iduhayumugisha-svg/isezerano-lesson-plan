@@ -26,6 +26,7 @@ import {
 import { WebsitePageContent } from '../types/websitePages';
 import { getBlogPosts } from '../services/blogService';
 import { BlogPost } from '../types/blog';
+import { formatPublicationDate } from '../utils/dateUtils';
 
 interface HomeViewProps {
   onNavigate: (page: WebsitePage) => void;
@@ -51,9 +52,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount,
     });
 
     // 3. Load published blog posts for recent articles showcase
-    getBlogPosts(false).then((posts) => {
-      setRecentPosts(posts.slice(0, 3));
-    });
+    const loadRecentPosts = () => {
+      getBlogPosts(false).then((posts) => {
+        setRecentPosts(posts.slice(0, 3));
+      });
+    };
+    loadRecentPosts();
 
     // 4. Listen to local save events
     const handleLocalUpdate = (e: Event) => {
@@ -64,9 +68,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount,
     };
     window.addEventListener('website_pages_updated', handleLocalUpdate);
 
+    // 5. Listen to blog updates from admin
+    const handleBlogUpdate = () => {
+      loadRecentPosts();
+    };
+    window.addEventListener('blog_posts_updated', handleBlogUpdate);
+
     return () => {
       unsubscribe();
       window.removeEventListener('website_pages_updated', handleLocalUpdate);
+      window.removeEventListener('blog_posts_updated', handleBlogUpdate);
     };
   }, []);
 
@@ -446,8 +457,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount,
 
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-2">
-                    <div className="flex items-center space-x-3 text-xs" style={{ color: colors.mutedText }}>
-                      <span>{new Date(post.publishedAt).toLocaleDateString('en-RW', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: colors.mutedText }}>
+                      {(() => {
+                        const dateInfo = formatPublicationDate(post.publishedAt);
+                        if (!dateInfo) return null;
+                        return (
+                          <span title={`${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}`}>
+                            {dateInfo.formattedDate} ({dateInfo.relativeTime})
+                          </span>
+                        );
+                      })()}
                       <span>•</span>
                       <span className="inline-flex items-center space-x-1">
                         <Clock className="w-3.5 h-3.5" />

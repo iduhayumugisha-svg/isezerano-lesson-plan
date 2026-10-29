@@ -15,6 +15,7 @@ import {
 import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
 import { getBlogPosts } from '../services/blogService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { formatPublicationDate } from '../utils/dateUtils';
 
 interface BlogListViewProps {
   onSelectPost: (slug: string) => void;
@@ -28,12 +29,24 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
 
-  useEffect(() => {
+  const loadPublishedPosts = () => {
     getBlogPosts(false).then((data) => {
       setPosts(data);
       setIsLoading(false);
     });
+  };
+
+  useEffect(() => {
+    loadPublishedPosts();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    const handleSync = () => {
+      loadPublishedPosts();
+    };
+    window.addEventListener('blog_posts_updated', handleSync);
+    return () => {
+      window.removeEventListener('blog_posts_updated', handleSync);
+    };
   }, []);
 
   const filteredPosts = posts.filter(post => {
@@ -152,15 +165,27 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
 
                 <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between">
                   <div className="space-y-3">
-                    <div className="flex items-center space-x-3 text-xs text-slate-500 font-medium">
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{new Date(featuredPost.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      </span>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-medium">
+                      {(() => {
+                        const dateInfo = formatPublicationDate(featuredPost.publishedAt);
+                        if (!dateInfo) return null;
+                        return (
+                          <span className="flex items-center space-x-1" title={`${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}`}>
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{dateInfo.formattedDate}</span>
+                            <span className="text-teal-700 font-semibold">({dateInfo.relativeTime})</span>
+                          </span>
+                        );
+                      })()}
                       <span>•</span>
                       <span className="flex items-center space-x-1">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
                         <span>{featuredPost.readTimeMinutes || 4} min read</span>
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center space-x-1">
+                        <Eye className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{featuredPost.views || 0} views</span>
                       </span>
                     </div>
 
@@ -236,10 +261,20 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
                         </div>
 
                         <div className="p-5 space-y-2.5">
-                          <div className="flex items-center space-x-2 text-[11px] text-slate-500">
-                            <span>{new Date(post.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                            {(() => {
+                              const dateInfo = formatPublicationDate(post.publishedAt);
+                              if (!dateInfo) return null;
+                              return (
+                                <span title={`${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}`}>
+                                  {dateInfo.formattedDate} ({dateInfo.relativeTime})
+                                </span>
+                              );
+                            })()}
                             <span>•</span>
                             <span>{post.readTimeMinutes || 3} min read</span>
+                            <span>•</span>
+                            <span>{post.views || 0} views</span>
                           </div>
 
                           <h4 className="text-base font-bold text-slate-900 group-hover:text-teal-700 transition-colors line-clamp-2 leading-snug">

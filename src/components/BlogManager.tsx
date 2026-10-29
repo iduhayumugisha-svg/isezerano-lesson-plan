@@ -31,6 +31,7 @@ import {
 } from '../services/blogService';
 import { RichTextEditor } from './RichTextEditor';
 import { useAuth } from '../context/AuthContext';
+import { formatPublicationDate } from '../utils/dateUtils';
 
 interface BlogManagerProps {
   onViewLivePost?: (slug: string) => void;
@@ -49,12 +50,20 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
 
   useEffect(() => {
     loadPosts();
+
+    const handleSync = () => {
+      loadPosts();
+    };
+    window.addEventListener('blog_posts_updated', handleSync);
+    return () => {
+      window.removeEventListener('blog_posts_updated', handleSync);
+    };
   }, []);
 
   const loadPosts = async () => {
     setIsLoading(true);
     try {
-      const all = await getBlogPosts(true); // include drafts
+      const all = await getBlogPosts(true); // include drafts for admin
       setPosts(all);
     } catch (err) {
       console.error('Failed to load posts:', err);
@@ -76,7 +85,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
         name: user?.email ? user.email.split('@')[0] : 'GS GITUMBA Editorial Team',
         role: 'Pedagogical Lead & Teacher'
       },
-      publishedAt: new Date().toISOString(),
+      publishedAt: '', // Drafts do not have a fake publication date
       status: 'draft',
       views: 0
     };
@@ -90,12 +99,24 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
   };
 
   const handleDeletePost = async (id: string, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete the post "${title}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete the post "${title}"? This cannot be undone.`)) {
       return;
     }
     const adminUid = user?.uid || 'admin';
-    await deleteBlogPost(id, adminUid);
-    setPosts(prev => prev.filter(p => p.id !== id));
+    setIsLoading(true);
+    try {
+      const res = await deleteBlogPost(id, adminUid);
+      if (res.success) {
+        setPosts(prev => prev.filter(p => p.id !== id));
+        await loadPosts();
+      } else {
+        alert(res.error || 'Failed to delete post from Firestore.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Error occurred while deleting post.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSavePost = async (statusOverride?: 'published' | 'draft') => {
@@ -110,11 +131,18 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
     setSaveStatus(null);
 
     const targetStatus = statusOverride || editingPost.status;
+    const isFirstTimePublishing = targetStatus === 'published' && (!editingPost.publishedAt || editingPost.status === 'draft');
+    const publishedAt = isFirstTimePublishing 
+      ? new Date().toISOString() 
+      : (editingPost.publishedAt || (targetStatus === 'published' ? new Date().toISOString() : ''));
+
     const finalPost: BlogPost = {
       ...editingPost,
+      title: editingPost.title.trim(),
       status: targetStatus,
+      publishedAt,
       slug: editingPost.slug ? generateSlug(editingPost.slug) : generateSlug(editingPost.title),
-      readTimeMinutes: calculateReadingTime(editingPost.content)
+      readTimeMinutes: calculateReadingTime(editingPost.content || '')
     };
 
     try {
@@ -132,7 +160,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
           setActiveView('list');
         }, 1200);
       } else {
-        setSaveStatus({ type: 'error', text: res.error || 'Failed to save post.' });
+        setSaveStatus({ type: 'error', text: res.error || 'Failed to save post to Firestore.' });
       }
     } catch (err: any) {
       setSaveStatus({ type: 'error', text: err?.message || 'Error saving post.' });
@@ -304,7 +332,21 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                           {post.author?.name || 'Editorial Team'}
                         </td>
                         <td className="py-3.5 px-3 text-slate-500 whitespace-nowrap">
-                          {new Date(post.publishedAt).toLocaleDateString()}
+                          {(() => {
+                            const dateInfo = formatPublicationDate(post.publishedAt);
+                            if (post.status === 'draft') {
+                              return <span className="italic text-slate-400">Unpublished draft</span>;
+                            }
+                            if (!dateInfo) {
+                              return <span className="text-slate-400">Date pending</span>;
+                            }
+                            return (
+                              <div className="flex flex-col">
+                                <span className="font-medium text-slate-800">{dateInfo.formattedDate}</span>
+                                <span className="text-[10px] text-teal-700 font-medium">{dateInfo.relativeTime}</span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3.5 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

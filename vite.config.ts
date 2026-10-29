@@ -1,7 +1,23 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import { defineConfig, Plugin } from 'vite';
+
+const CANONICAL_BASE_URL = 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+
+function replaceOrInsertMeta(html: string, nameOrProp: string, isProperty: boolean, content: string): string {
+  const attrName = isProperty ? 'property' : 'name';
+  // Matches <meta [any attributes] property="og:title" [any attributes]> across line breaks
+  const regex = new RegExp(`<meta\\s+[^>]*?${attrName}=["']${nameOrProp}["'][^>]*?>`, 'is');
+  const safeContent = content.replace(/"/g, '&quot;');
+  const newTag = `<meta ${attrName}="${nameOrProp}" content="${safeContent}" />`;
+
+  if (regex.test(html)) {
+    return html.replace(regex, newTag);
+  }
+  return html.replace('</head>', `    ${newTag}\n  </head>`);
+}
 
 /**
  * Prerenders OpenGraph and Twitter card metadata for social crawlers (WhatsApp, Facebook, Telegram, X)
@@ -10,51 +26,115 @@ import { defineConfig, Plugin } from 'vite';
 function seoCrawlerPrerenderPlugin(): Plugin {
   return {
     name: 'seo-social-crawler-prerender',
+    configureServer(server) {
+      // Local sync endpoint to persist blog posts to posts.json on disk
+      server.middlewares.use('/api/sync-blog', (req, res) => {
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const payload = JSON.parse(body);
+              const postsFilePath = path.resolve(import.meta.dirname, 'src/data/posts.json');
+              let currentPosts: any[] = [];
+              if (fs.existsSync(postsFilePath)) {
+                currentPosts = JSON.parse(fs.readFileSync(postsFilePath, 'utf-8'));
+              }
+
+              if (payload.action === 'save' && payload.post) {
+                const idx = currentPosts.findIndex(p => p.id === payload.post.id || p.slug === payload.post.slug);
+                if (idx >= 0) {
+                  currentPosts[idx] = payload.post;
+                } else {
+                  currentPosts.unshift(payload.post);
+                }
+              } else if (payload.action === 'delete' && payload.postId) {
+                currentPosts = currentPosts.filter(p => p.id !== payload.postId);
+              }
+
+              fs.writeFileSync(postsFilePath, JSON.stringify(currentPosts, null, 2), 'utf-8');
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: true }));
+              return;
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message }));
+              return;
+            }
+          });
+        } else {
+          res.statusCode = 404;
+          res.end();
+        }
+      });
+    },
+
     transformIndexHtml(html: string, ctx: any) {
       const url = ctx?.originalUrl || ctx?.url || '';
       if (!url.startsWith('/blog/')) {
         return html;
       }
 
-      const slug = url.split('/blog/')[1]?.split('?')[0]?.replace(/\/$/, '');
-      if (!slug) return html;
+      const rawSlug = url.split('/blog/')[1]?.split('?')[0]?.replace(/\/$/, '');
+      if (!rawSlug) return html;
 
-      let title = 'Pedagogical Article – ISEZERANO ONLINE';
-      let description = 'Official educational guidance, CBC schemes of work, and school news from GS GITUMBA in Rwanda.';
-      let image = 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80';
-
-      if (slug.includes('cbc') || slug.includes('lesson-plan')) {
-        title = 'Mastering the Rwanda CBC 8-Column Lesson Plan: Complete Guide for Teachers';
-        description = 'Step-by-step pedagogical breakdown of Competence-Based Curriculum (CBC) lesson planning for Rwandan teachers.';
-        image = 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80';
-      } else if (slug.includes('stem') || slug.includes('science')) {
-        title = 'Transforming STEM and Practical Science Education at GS GITUMBA';
-        description = 'How GS GITUMBA in Rulindo District leverages local learning materials and science kits for hands-on experiments.';
-        image = 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1200&q=80';
-      } else if (slug.includes('digital') || slug.includes('tools')) {
-        title = 'Digital Tools in Rwandan Classrooms: Empowering Educators in 2026';
-        description = 'Exploring how technology, digital lesson planning, and online teacher collaboration are raising pedagogical quality across Rwanda.';
-        image = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80';
-      } else {
-        const words = slug.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        title = `${words} – GS GITUMBA Educational Journal`;
-        description = `Read ${words} on ISEZERANO ONLINE – GS GITUMBA pedagogical journal.`;
+      // Read published posts from disk
+      let posts: any[] = [];
+      try {
+        const postsFilePath = path.resolve(import.meta.dirname, 'src/data/posts.json');
+        if (fs.existsSync(postsFilePath)) {
+          posts = JSON.parse(fs.readFileSync(postsFilePath, 'utf-8'));
+        }
+      } catch (err) {
+        console.warn('Could not read posts.json for prerender:', err);
       }
 
-      const fullTitle = `${title} – ISEZERANO ONLINE – GS GITUMBA`;
-      const canonicalUrl = `https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app/blog/${slug}`;
+      // Find matching post by slug or id
+      const post = posts.find(p => p.slug === rawSlug || p.id === rawSlug);
 
-      return html
-        .replace(/<title>.*?<\/title>/, `<title>${fullTitle}</title>`)
-        .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${description}" />`)
-        .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${fullTitle}" />`)
-        .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${description}" />`)
-        .replace(/<meta property="og:image" content=".*?" \/>/, `<meta property="og:image" content="${image}" />`)
-        .replace(/<meta property="og:image:secure_url" content=".*?" \/>/, `<meta property="og:image:secure_url" content="${image}" />`)
-        .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${canonicalUrl}" />`)
-        .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${fullTitle}" />`)
-        .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${description}" />`)
-        .replace(/<meta name="twitter:image" content=".*?" \/>/, `<meta name="twitter:image" content="${image}" />`);
+      let title = '';
+      let description = '';
+      let image = 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80';
+      const canonicalUrl = `${CANONICAL_BASE_URL}/blog/${rawSlug}`;
+
+      if (post) {
+        title = post.title;
+        description = post.excerpt || post.title;
+        if (post.thumbnailUrl && post.thumbnailUrl.startsWith('http')) {
+          image = post.thumbnailUrl;
+        }
+      } else {
+        const words = rawSlug.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        title = `${words} – GS GITUMBA Educational Journal`;
+        description = `Official pedagogical articles and Competence-Based Curriculum (CBC) guidance from GS GITUMBA on ISEZERANO ONLINE.`;
+      }
+
+      const fullPageTitle = `${title} – ISEZERANO ONLINE – GS GITUMBA`;
+
+      let output = html;
+
+      // 1. Page Title
+      output = output.replace(/<title>[\s\S]*?<\/title>/i, `<title>${fullPageTitle}</title>`);
+
+      // 2. Meta description
+      output = replaceOrInsertMeta(output, 'description', false, description);
+
+      // 3. OpenGraph tags
+      output = replaceOrInsertMeta(output, 'og:title', true, fullPageTitle);
+      output = replaceOrInsertMeta(output, 'og:description', true, description);
+      output = replaceOrInsertMeta(output, 'og:image', true, image);
+      output = replaceOrInsertMeta(output, 'og:image:secure_url', true, image);
+      output = replaceOrInsertMeta(output, 'og:url', true, canonicalUrl);
+      output = replaceOrInsertMeta(output, 'og:type', true, 'article');
+
+      // 4. Twitter tags
+      output = replaceOrInsertMeta(output, 'twitter:card', false, 'summary_large_image');
+      output = replaceOrInsertMeta(output, 'twitter:title', false, fullPageTitle);
+      output = replaceOrInsertMeta(output, 'twitter:description', false, description);
+      output = replaceOrInsertMeta(output, 'twitter:image', false, image);
+
+      return output;
     }
   };
 }

@@ -114,7 +114,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
         request.resource.data.views is int &&
-        request.resource.data.views >= resource.data.views
+        (!('views' in resource.data) || request.resource.data.views >= resource.data.views)
       );
     }
 
