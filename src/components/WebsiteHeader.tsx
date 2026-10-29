@@ -17,7 +17,7 @@ import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'blog';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -54,6 +54,11 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       label: t.navLessonPlan || 'Lesson Plan',
       active: isLessonPlanActive,
       badge: 'CBC'
+    },
+    {
+      id: 'blog',
+      label: 'Blog & News',
+      active: currentPage === 'blog'
     },
     {
       id: 'about',
@@ -116,10 +121,10 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
             
-            {/* Logo & Platform Name: Dynamic from Admin Branding */}
+            {/* Logo & Platform Name: Responsive from Admin Branding */}
             <div 
               onClick={() => handleNavClick('home')}
-              className="flex items-center space-x-3 cursor-pointer group select-none shrink-0"
+              className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group select-none min-w-0 shrink"
               title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
             >
               {/* Dynamic Custom or Default Logo */}
@@ -127,8 +132,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 <div 
                   className={`overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:scale-102 transition-all ${logoSettings.borderRadius}`}
                   style={{
-                    height: `${logoSettings.displayHeight}px`,
-                    width: `${logoSettings.displayHeight}px`
+                    height: `clamp(32px, 8vw, ${logoSettings.displayHeight}px)`,
+                    width: `clamp(32px, 8vw, ${logoSettings.displayHeight}px)`
                   }}
                 >
                   <img 
@@ -139,20 +144,18 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   />
                 </div>
               )}
-              <div className="flex flex-col justify-center">
+              <div className="flex flex-col justify-center min-w-0">
                 <span 
-                  className="font-bold tracking-tight transition-colors leading-tight"
+                  className="font-bold tracking-tight transition-colors leading-tight truncate text-sm sm:text-base md:text-lg"
                   style={{
-                    fontSize: `${typography.websiteTitleSize}px`,
                     color: colors.headerText
                   }}
                 >
                   {branding?.platformTitle || 'ISEZERANO ONLINE'}
                 </span>
                 <span 
-                  className="font-semibold tracking-wider uppercase leading-none mt-0.5"
+                  className="font-semibold tracking-wider uppercase leading-none mt-0.5 truncate text-[10px] sm:text-xs"
                   style={{
-                    fontSize: `${typography.websiteSubtitleSize}px`,
                     color: colors.navLinkActive
                   }}
                 >

@@ -24,6 +24,9 @@ import { AboutView } from './views/AboutView';
 import { ContactView } from './views/ContactView';
 import { PrivacyPolicyView } from './views/PrivacyPolicyView';
 import { TermsConditionsView } from './views/TermsConditionsView';
+import { BlogListView } from './views/BlogListView';
+import { BlogPostDetailView } from './views/BlogPostDetailView';
+import { AdSlot } from './components/AdSlot';
 
 // Central Application Views
 import { DashboardView } from './views/DashboardView';
@@ -47,7 +50,19 @@ import { FEATURE_FLAGS } from './config/features';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
 
-export type AppPage = WebsitePage | 'students' | 'admin';
+export type AppPage = WebsitePage | 'students' | 'admin' | 'blog' | 'blog_post';
+
+// Helper to extract initial blog post slug from URL
+const getInitialBlogSlug = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const pathname = window.location.pathname;
+  if (pathname.startsWith('/blog/') && pathname.length > 6) {
+    return pathname.substring(6).replace(/\/$/, '');
+  }
+  const search = new URLSearchParams(window.location.search);
+  if (search.get('post')) return search.get('post');
+  return null;
+};
 
 // Helper to determine initial page from browser URL or hash (/admin, /manage, #admin, etc.)
 const getPageFromUrl = (): AppPage => {
@@ -67,6 +82,8 @@ const getPageFromUrl = (): AppPage => {
   ) {
     return 'admin';
   }
+  if (pathname.startsWith('/blog/') && pathname.length > 6) return 'blog_post';
+  if (pathname === '/blog' || hash === '#blog' || search.get('page') === 'blog') return 'blog';
   if (pathname === '/dashboard' || hash === '#dashboard' || search.get('page') === 'dashboard') return 'dashboard';
   if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
   if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
@@ -86,6 +103,7 @@ function AppContent() {
 
   // Route state initialized from browser URL (/admin, /manage, #admin, etc.)
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
+  const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(() => getInitialBlogSlug());
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -104,7 +122,9 @@ function AppContent() {
     // Listen to browser navigation (back/forward button and hash changes)
     const handleUrlChange = () => {
       const detected = getPageFromUrl();
+      const slug = getInitialBlogSlug();
       setCurrentPage(detected);
+      setSelectedBlogSlug(slug);
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -217,8 +237,11 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleNavigate = (page: WebsitePage | 'admin' | 'students') => {
-    setCurrentPage(page);
+  const handleNavigate = (page: WebsitePage | AppPage | 'admin' | 'students') => {
+    if (page === 'blog') {
+      setSelectedBlogSlug(null);
+    }
+    setCurrentPage(page as AppPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (typeof window !== 'undefined') {
@@ -237,11 +260,24 @@ function AppContent() {
     }
   };
 
+  const handleSelectBlogPost = (slug: string) => {
+    setSelectedBlogSlug(slug);
+    setCurrentPage('blog_post');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (typeof window !== 'undefined') {
+      try {
+        window.history.pushState({ page: 'blog_post', slug }, '', `/blog/${slug}`);
+      } catch {
+        // Fallback
+      }
+    }
+  };
+
   const isLessonPlanWorkspace = ['create', 'saved', 'settings'].includes(currentPage);
 
   return (
     <div 
-      className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors"
+      className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors overflow-x-hidden w-full"
       style={{
         backgroundColor: colors.bodyBg,
         color: colors.bodyText
@@ -255,14 +291,35 @@ function AppContent() {
         savedCount={lessonPlans.length}
       />
 
+      {/* Ad Placement: Below Header */}
+      <AdSlot placement="below_header" />
+
       {/* 2. Main Content Area */}
-      <main className="flex-1 w-full">
+      <main className="flex-1 w-full overflow-x-hidden">
         
         {/* PUBLIC PAGE 1: Home View (Default opening page) */}
         {currentPage === 'home' && (
           <HomeView
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
+            onSelectBlogPost={handleSelectBlogPost}
+          />
+        )}
+
+        {/* PUBLIC PAGE: Pedagogical Blog List & Journal Archive */}
+        {currentPage === 'blog' && (
+          <BlogListView
+            onSelectPost={handleSelectBlogPost}
+            onNavigate={handleNavigate}
+          />
+        )}
+
+        {/* PUBLIC PAGE: Blog Post Article Detail View */}
+        {currentPage === 'blog_post' && selectedBlogSlug && (
+          <BlogPostDetailView
+            slug={selectedBlogSlug}
+            onNavigate={handleNavigate}
+            onSelectPost={handleSelectBlogPost}
           />
         )}
 
@@ -502,6 +559,9 @@ function AppContent() {
           onClose={() => setPrintingPlan(null)}
         />
       )}
+
+      {/* Ad Placement: Above Footer */}
+      <AdSlot placement="above_footer" />
 
       {/* 4. Global Professional Public Website Footer */}
       <WebsiteFooter 

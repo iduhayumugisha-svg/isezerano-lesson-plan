@@ -24,16 +24,20 @@ import {
   DEFAULT_PAGES_CONTENT 
 } from '../services/websitePagesService';
 import { WebsitePageContent } from '../types/websitePages';
+import { getBlogPosts } from '../services/blogService';
+import { BlogPost } from '../types/blog';
 
 interface HomeViewProps {
   onNavigate: (page: WebsitePage) => void;
   savedPlansCount: number;
+  onSelectBlogPost?: (slug: string) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount, onSelectBlogPost }) => {
   const { t } = useLanguage();
   const { colors, typography, branding } = useWebsiteDesign();
   const [content, setContent] = useState<WebsitePageContent>(DEFAULT_PAGES_CONTENT.home);
+  const [recentPosts, setRecentPosts] = useState<BlogPost[]>([]);
 
   useEffect(() => {
     // 1. Initial load
@@ -46,7 +50,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount 
       if (updated) setContent(updated);
     });
 
-    // 3. Listen to local save events
+    // 3. Load published blog posts for recent articles showcase
+    getBlogPosts(false).then((posts) => {
+      setRecentPosts(posts.slice(0, 3));
+    });
+
+    // 4. Listen to local save events
     const handleLocalUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<{ pageId: string; page: WebsitePageContent }>;
       if (customEvent.detail?.pageId === 'home' && customEvent.detail.page) {
@@ -376,6 +385,98 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, savedPlansCount 
           })}
         </div>
       </section>
+
+      {/* 3.5. LATEST PEDAGOGICAL ARTICLES & SCHOOL JOURNAL */}
+      {recentPosts.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b pb-4" style={{ borderColor: colors.cardBorder }}>
+            <div>
+              <div 
+                className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider mb-1"
+                style={{ color: colors.navLinkActive }}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Pedagogical News & Journal</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight" style={{ color: colors.headingPrimary || colors.headingSecondary }}>
+                Latest Articles & Updates
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('blog')}
+              className="inline-flex items-center space-x-1.5 text-sm font-bold transition-all hover:underline self-start sm:self-auto cursor-pointer"
+              style={{ color: colors.navLinkActive }}
+            >
+              <span>View All Articles</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {recentPosts.map((post) => (
+              <article
+                key={post.id}
+                onClick={() => {
+                  if (onSelectBlogPost) {
+                    onSelectBlogPost(post.slug);
+                  } else {
+                    onNavigate('blog');
+                  }
+                }}
+                className="group flex flex-col rounded-2xl overflow-hidden border shadow-2xs hover:shadow-md transition-all duration-300 cursor-pointer"
+                style={{
+                  backgroundColor: colors.cardBg,
+                  borderColor: colors.cardBorder
+                }}
+              >
+                <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
+                  <img
+                    src={post.thumbnailUrl}
+                    alt={post.thumbnailAlt || post.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute top-3 left-3">
+                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase bg-teal-800 text-teal-100 shadow-xs">
+                      {post.category}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-3 text-xs" style={{ color: colors.mutedText }}>
+                      <span>{new Date(post.publishedAt).toLocaleDateString('en-RW', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <span>•</span>
+                      <span className="inline-flex items-center space-x-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{post.readTimeMinutes} min read</span>
+                      </span>
+                    </div>
+
+                    <h3 className="text-base sm:text-lg font-bold leading-snug group-hover:text-teal-700 transition-colors line-clamp-2" style={{ color: colors.headingSecondary }}>
+                      {post.title}
+                    </h3>
+
+                    <p className="text-xs sm:text-sm line-clamp-2 leading-relaxed" style={{ color: colors.bodyText }}>
+                      {post.excerpt}
+                    </p>
+                  </div>
+
+                  <div className="pt-3 border-t flex items-center justify-between text-xs font-semibold" style={{ borderColor: colors.cardBorder }}>
+                    <span style={{ color: colors.mutedText }}>By {post.author.name}</span>
+                    <span className="inline-flex items-center space-x-1 text-teal-700 group-hover:translate-x-1 transition-transform">
+                      <span>Read</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 4. CALL TO ACTION BANNER (Dynamic styling) */}
       <section className="max-w-5xl mx-auto px-4">

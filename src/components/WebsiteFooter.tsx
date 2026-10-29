@@ -109,6 +109,14 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate, onOpen
               </li>
               <li>
                 <button
+                  onClick={() => handleLink('blog')}
+                  className="text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
+                >
+                  Pedagogical Blog & News
+                </button>
+              </li>
+              <li>
+                <button
                   onClick={() => handleLink('create')}
                   className="text-slate-400 hover:text-white transition-colors cursor-pointer"
                 >

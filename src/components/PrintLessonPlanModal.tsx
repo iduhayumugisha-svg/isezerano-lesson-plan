@@ -10,9 +10,17 @@ import {
   School as SchoolIcon, 
   Check, 
   Download,
-  CheckCircle2
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  FileDown
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { 
+  exportLessonPlanToWord, 
+  exportLessonPlanToPdf, 
+  ExportLangMode 
+} from '../services/lessonPlanExportService';
 
 interface PrintLessonPlanModalProps {
   plan: LessonPlan;
@@ -24,7 +32,9 @@ const PREF_SCHOOL_KEY = 'isezerano_pref_school_name';
 
 /**
  * Pure printable / exportable Rwanda CBC Lesson Plan Document.
- * Shared between on-screen preview, isolated iframe print, and standalone download.
+ * Shared between on-screen preview, isolated iframe print, and PDF generation.
+ * Headings and bottom signatures have been removed as requested.
+ * Teacher's Name is placed on the top-right above the table.
  */
 interface LessonPlanDocumentProps {
   plan: LessonPlan;
@@ -49,28 +59,8 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
         fontFamily: "'Times New Roman', Times, Georgia, serif",
       }}
     >
-      {/* 1. Official Republic of Rwanda / MINEDUC / REB Header */}
-      <div className="text-center mb-1.5 pb-1 border-b border-black avoid-break">
-        <div className="text-[8.5pt] font-bold tracking-wider uppercase text-black leading-none mb-0.5">
-          {langMode === 'rw' && "REPUBULIKA Y'U RWANDA"}
-          {langMode === 'fr' && 'RÉPUBLIQUE DU RWANDA'}
-          {(langMode === 'en' || langMode === 'bi') && 'REPUBLIC OF RWANDA'}
-        </div>
-        <div className="text-[7.5pt] font-semibold text-slate-800 leading-none mb-0.5">
-          {langMode === 'rw' && "MINISITERI Y'U BUREZI (MINEDUC) • IKIGO GISHINZWE UBUREZI BW'IBANZE (REB)"}
-          {langMode === 'fr' && "MINISTÈRE DE L'ÉDUCATION (MINEDUC) • REB"}
-          {(langMode === 'en' || langMode === 'bi') && 'MINISTRY OF EDUCATION (MINEDUC) • RWANDA BASIC EDUCATION BOARD (REB)'}
-        </div>
-        <h1 className="text-[10pt] font-bold uppercase tracking-wider text-black mt-0.5 leading-tight">
-          {langMode === 'rw' && "IMBATA Y'ISOMO RY'IKITEGEREREZO (CBC)"}
-          {langMode === 'bi' && "IMBATA Y'ISOMO / COMPETENCE-BASED LESSON PLAN"}
-          {langMode === 'en' && 'OFFICIAL COMPETENCE-BASED LESSON PLAN (CBC)'}
-          {langMode === 'fr' && 'FICHE PÉDAGOGIQUE OFFICIELLE (CBC / APC)'}
-        </h1>
-      </div>
-
-      {/* 2. Top Identification Line: School & Teacher's Full Name (Class & Subject placed in Table 1) */}
-      <div className="flex flex-wrap items-center justify-between text-[8pt] font-bold border-b border-black pb-1 mb-1.5 gap-2 avoid-break">
+      {/* 1. Top Identification Line: School on Left & Teacher's Name on Top-Right */}
+      <div className="flex flex-wrap items-center justify-between text-[8.5pt] font-bold border-b border-black pb-1 mb-2 gap-2 avoid-break">
         <div className="flex items-center space-x-1.5">
           <span className="text-black">
             {langMode === 'en'
@@ -81,19 +71,19 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
               ? 'School / Ishuri:'
               : 'Ishuri:'}
           </span>
-          <span className="font-semibold text-black uppercase underline decoration-1 underline-offset-2">
+          <span className="font-semibold text-black uppercase">
             {schoolName || plan.schoolName || 'GS GITUMBA'}
           </span>
         </div>
         <div className="flex items-center space-x-1.5 text-right">
           <span className="text-black">
             {langMode === 'en'
-              ? "Teacher's Full Name:"
+              ? "Teacher's Name:"
               : langMode === 'fr'
               ? "Nom de l'Enseignant(e) :"
               : langMode === 'bi'
-              ? 'Teacher / Mwarimu:'
-              : 'Umwarimu:'}
+              ? "Teacher's Name / Izina rya Mwarimu:"
+              : 'Izina rya Mwarimu:'}
           </span>
           <span className="font-semibold text-black underline decoration-1 underline-offset-2">
             {teacherName || plan.teacherName || '—'}
@@ -101,7 +91,7 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
         </div>
       </div>
 
-      {/* 3. Table 1: Official 8-Column Rwanda CBC Metadata Bar */}
+      {/* 2. Table 1: Official 8-Column Rwanda CBC Metadata Bar */}
       <table className="w-full border-collapse border border-black text-center text-[7.5pt] mb-1.5 table-fixed">
         <thead>
           <tr className="bg-slate-100 font-bold border-b border-black">
@@ -154,7 +144,7 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
         </tbody>
       </table>
 
-      {/* 4. Table 2: 8 Rows Objectives & Context Table */}
+      {/* 3. Table 2: 8 Rows Objectives & Context Table */}
       <table className="w-full border-collapse border border-black text-left text-[7.5pt] mb-1.5 table-fixed">
         <tbody>
           {/* Row 1: Special Needs Learners */}
@@ -287,7 +277,7 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
         </tbody>
       </table>
 
-      {/* 5. Table 3: Main Steps Table (Timing | Teacher's Act | Learner's Act | Competences & Cross-Cutting) */}
+      {/* 4. Table 3: Main Steps Table (Timing | Teacher's Act | Learner's Act | Competences & Cross-Cutting) */}
       <table className="w-full border-collapse border border-black text-left text-[7.5pt] mb-1.5 table-fixed">
         <thead>
           {/* Header Row 1 */}
@@ -392,7 +382,7 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
         </tbody>
       </table>
 
-      {/* 6. Table 4: Isuzuma mwarimu yikora (Teacher's Self-Assessment / Evaluation) */}
+      {/* 5. Table 4: Isuzuma mwarimu yikora (Teacher's Self-Assessment / Evaluation) */}
       <table className="w-full border-collapse border border-black text-left text-[7.5pt] mb-2 table-fixed">
         <tbody>
           <tr>
@@ -414,73 +404,6 @@ export const LessonPlanDocument: React.FC<LessonPlanDocumentProps> = ({
           </tr>
         </tbody>
       </table>
-
-      {/* 7. Official Signatures, Approval & Stamp Section (NO promotional footer) */}
-      <div className="w-full border border-black p-2 text-[7.5pt] avoid-break bg-white">
-        <div className="grid grid-cols-2 gap-4">
-          {/* Teacher Signature */}
-          <div>
-            <div className="font-bold text-black mb-1 uppercase tracking-wide">
-              {langMode === 'en'
-                ? "Teacher's Signature:"
-                : langMode === 'fr'
-                ? "Signature de l'Enseignant(e) :"
-                : langMode === 'bi'
-                ? "Umukono wa Mwarimu / Teacher's Signature:"
-                : 'Umukono wa Mwarimu:'}
-            </div>
-            <div className="text-[7.5pt] text-slate-800 space-y-1">
-              <div className="flex items-center">
-                <span className="font-semibold w-24">
-                  {langMode === 'en' ? 'Full Name:' : langMode === 'fr' ? 'Nom complet :' : 'Izina:'}
-                </span>
-                <span className="border-b border-black flex-1 pb-0.5 font-medium">
-                  {teacherName || plan.teacherName || '___________________________'}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="font-semibold w-24">
-                  {langMode === 'en' ? 'Date & Sign:' : langMode === 'fr' ? 'Date & Signature :' : "Itariki n'Umukono:"}
-                </span>
-                <span className="border-b border-black flex-1 pb-0.5">
-                  ___________________________
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* School Leadership Approval */}
-          <div>
-            <div className="font-bold text-black mb-1 uppercase tracking-wide">
-              {langMode === 'en'
-                ? 'Dean of Studies / Headteacher Approval:'
-                : langMode === 'fr'
-                ? 'Visa du Directeur des Études / Préfet :'
-                : langMode === 'bi'
-                ? "Umuyobozi w'Amasomo / Ishuri:"
-                : "Umuyobozi w'Amasomo / Ishuri:"}
-            </div>
-            <div className="text-[7.5pt] text-slate-800 space-y-1">
-              <div className="flex items-center">
-                <span className="font-semibold w-28">
-                  {langMode === 'en' ? 'Name & Title:' : langMode === 'fr' ? 'Nom & Titre :' : "Izina n'Inshingano:"}
-                </span>
-                <span className="border-b border-black flex-1 pb-0.5">
-                  ___________________________
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="font-semibold w-28">
-                  {langMode === 'en' ? 'Stamp & Sign:' : langMode === 'fr' ? 'Cachet & Signature :' : "Kashe n'Umukono:"}
-                </span>
-                <span className="border-b border-black flex-1 pb-0.5">
-                  ___________________________
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
@@ -489,10 +412,10 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
   const { language, t } = useLanguage();
   const [langMode, setLangMode] = useState<'rw' | 'bi' | 'en' | 'fr'>(language);
   
-  // Requirement 1 & 2: Use A4 landscape orientation as default for Rwanda CBC multi-column tables
-  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
+  // Orientation for on-screen preview and browser print (Word is formatted in portrait)
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('portrait');
 
-  // Requirement 4: Editable School & Teacher Name with persistent preference storage
+  // Editable School & Teacher Name with persistent preference storage
   const [customTeacherName, setCustomTeacherName] = useState<string>(() => {
     return plan.teacherName || localStorage.getItem(PREF_TEACHER_KEY) || '';
   });
@@ -503,7 +426,12 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
 
   const [teacherSaved, setTeacherSaved] = useState(false);
   const [schoolSaved, setSchoolSaved] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  // Export states
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-save teacher name preference
@@ -539,8 +467,7 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
   };
 
   /**
-   * Generates a completely isolated standalone HTML document string.
-   * This guarantees 100% freedom from website styles, navigation, or parent layouts.
+   * Generates a completely isolated standalone HTML document string for print.
    */
   const buildStandaloneHtml = (elementHtml: string, title: string, pageOrientation: 'landscape' | 'portrait') => {
     return `<!DOCTYPE html>
@@ -624,9 +551,71 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
   };
 
   /**
-   * Primary Print / PDF Export Method:
-   * Uses an isolated hidden iframe to completely disconnect the print job from the website DOM.
-   * Eliminates all website elements, duplicate pages, and side clipping.
+   * OPTION 1: Download PDF
+   * Directly generates and downloads a clean A4 PDF file using jsPDF and html2canvas.
+   */
+  const handleDownloadPdf = async () => {
+    setIsExportingPdf(true);
+    setStatusFeedback(null);
+    try {
+      const docTitle = getCleanDocumentTitle();
+      const portal = document.getElementById('rwanda-cbc-print-portal');
+      const targetElement = (portal?.querySelector('.rwanda-cbc-document') || previewContainerRef.current?.querySelector('.rwanda-cbc-document') || previewContainerRef.current) as HTMLElement;
+
+      if (!targetElement) {
+        throw new Error('Lesson plan document could not be located for PDF generation.');
+      }
+
+      await exportLessonPlanToPdf(targetElement, docTitle, orientation);
+      setStatusFeedback({ type: 'success', message: '🎉 PDF downloaded successfully!' });
+      setTimeout(() => setStatusFeedback(null), 3500);
+    } catch (err: any) {
+      console.error('PDF export error:', err);
+      setStatusFeedback({ 
+        type: 'error', 
+        message: err?.message || 'Could not export PDF. You can also click "Print" and select "Save as PDF".' 
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  /**
+   * OPTION 2: Download Word (.docx)
+   * Directly generates and downloads a Microsoft Word (.docx) document formatted in portrait orientation.
+   * All columns and text are sized to fit portrait A4 without being cut off.
+   */
+  const handleDownloadWord = async () => {
+    setIsExportingWord(true);
+    setStatusFeedback(null);
+    try {
+      const docTitle = getCleanDocumentTitle();
+      await exportLessonPlanToWord(
+        plan,
+        customTeacherName,
+        customSchoolName,
+        langMode as ExportLangMode,
+        docTitle
+      );
+      setStatusFeedback({ 
+        type: 'success', 
+        message: '📄 Word document (.docx) downloaded in Portrait format! Columns and text fit cleanly.' 
+      });
+      setTimeout(() => setStatusFeedback(null), 4000);
+    } catch (err: any) {
+      console.error('Word export error:', err);
+      setStatusFeedback({ 
+        type: 'error', 
+        message: err?.message || 'Could not export Word document. Please try again.' 
+      });
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
+
+  /**
+   * OPTION 3: Print
+   * Uses an isolated hidden iframe to print cleanly without website chrome, side clipping, or interference.
    */
   const handlePrint = () => {
     const docTitle = getCleanDocumentTitle();
@@ -685,7 +674,7 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
       }, 350);
 
     } catch {
-      // Fallback: standard window.print with index.css portal isolation
+      // Fallback
       const originalTitle = document.title;
       document.title = docTitle;
       window.print();
@@ -695,38 +684,12 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
     }
   };
 
-  /**
-   * Standalone Offline Export:
-   * Downloads a self-contained .html file containing the exact formatted lesson plan.
-   * Can be opened and printed from any phone, USB drive, or computer anytime.
-   */
-  const handleDownloadOfflineFile = () => {
-    const docTitle = getCleanDocumentTitle();
-    const portalElement = document.getElementById('rwanda-cbc-print-portal');
-    const sourceElement = portalElement || previewContainerRef.current;
-    if (!sourceElement) return;
-
-    const fullHtml = buildStandaloneHtml(sourceElement.innerHTML, docTitle, orientation);
-    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${docTitle}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 2500);
-  };
-
   return (
     <>
       {/* 
         PRINT PORTAL:
         Rendered directly into document.body.
-        Used as the exact clean source for iframe printing and fallback window.print.
+        Used as the exact clean source for iframe printing, PDF download, and fallback window.print.
       */}
       {createPortal(
         <div id="rwanda-cbc-print-portal">
@@ -761,42 +724,42 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
               <FileText className="w-5 h-5 text-teal-400" />
               <div>
                 <h2 className="text-xs sm:text-sm font-bold text-white leading-tight">
-                  {t.printModalTitle}
+                  Lesson Plan Export & Print
                 </h2>
                 <p className="text-[10px] text-slate-400">
-                  {t.printModalSubtext}
+                  Select an action: Download PDF, Download Word (.docx), or Print directly.
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              {/* Orientation Toggle (Default: Landscape) */}
+              {/* Orientation Toggle */}
               <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
                 <button
                   type="button"
-                  onClick={() => setOrientation('landscape')}
-                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-md font-bold transition-colors cursor-pointer text-xs ${
-                    orientation === 'landscape'
-                      ? 'bg-teal-700 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Landscape: Recommended for Rwanda CBC multi-column tables"
-                >
-                  <Layout className="w-3.5 h-3.5 rotate-90" />
-                  <span>Landscape (CBC)</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setOrientation('portrait')}
-                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-md font-bold transition-colors cursor-pointer text-xs ${
                     orientation === 'portrait'
-                      ? 'bg-slate-700 text-white shadow-xs'
+                      ? 'bg-teal-700 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white'
                   }`}
                   title="Portrait (Standard A4)"
                 >
                   <Layout className="w-3.5 h-3.5" />
                   <span>Portrait</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrientation('landscape')}
+                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+                    orientation === 'landscape'
+                      ? 'bg-teal-700 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Landscape format"
+                >
+                  <Layout className="w-3.5 h-3.5 rotate-90" />
+                  <span>Landscape</span>
                 </button>
               </div>
 
@@ -852,32 +815,57 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
                 </button>
               </div>
 
-              {/* Download Standalone File (.html) Button */}
+              {/* OPTION 1: Download PDF */}
               <button
                 type="button"
-                onClick={handleDownloadOfflineFile}
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-                title="Download standalone offline printable document file"
+                onClick={handleDownloadPdf}
+                disabled={isExportingPdf}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                title="Download as PDF file"
               >
-                {downloadSuccess ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                {isExportingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Generating PDF...</span>
+                  </>
                 ) : (
-                  <Download className="w-3.5 h-3.5 text-teal-400" />
+                  <>
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span>Download PDF</span>
+                  </>
                 )}
-                <span className="hidden sm:inline">
-                  {downloadSuccess ? 'Downloaded!' : 'Download (.html)'}
-                </span>
               </button>
 
-              {/* Primary Action: Print / Save PDF Button */}
+              {/* OPTION 2: Download Word (.docx) */}
+              <button
+                type="button"
+                onClick={handleDownloadWord}
+                disabled={isExportingWord}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                title="Download as Microsoft Word (.docx) document formatted in portrait"
+              >
+                {isExportingWord ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Generating Word...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Download Word (.docx)</span>
+                  </>
+                )}
+              </button>
+
+              {/* OPTION 3: Print */}
               <button
                 type="button"
                 onClick={handlePrint}
                 className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-sm cursor-pointer active:scale-98 transition-all"
-                title="Print or Save as PDF using your browser dialog"
+                title="Print directly or save using your browser dialog"
               >
                 <Printer className="w-4 h-4" />
-                <span>{t.printSavePdfBtn}</span>
+                <span>Print</span>
               </button>
 
               {/* Close Button */}
@@ -892,7 +880,23 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
             </div>
           </div>
 
-          {/* 2. Editable Teacher & School Header Settings Panel (Requirement 4) */}
+          {/* Toast / Status Notification */}
+          {statusFeedback && (
+            <div className={`px-4 py-2 text-xs flex items-center space-x-2 shrink-0 ${
+              statusFeedback.type === 'success' 
+                ? 'bg-emerald-50 text-emerald-800 border-b border-emerald-200' 
+                : 'bg-rose-50 text-rose-800 border-b border-rose-200'
+            }`}>
+              {statusFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span className="font-semibold">{statusFeedback.message}</span>
+            </div>
+          )}
+
+          {/* 2. Editable Teacher & School Header Settings Panel */}
           <div className="no-print bg-slate-50 border-b border-slate-200 px-3 sm:px-6 py-2.5 shrink-0">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 max-w-4xl">
               {/* Editable Teacher Name */}
@@ -900,7 +904,7 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
                 <div className="flex items-center justify-between mb-0.5">
                   <label className="text-[11px] font-bold text-slate-800 flex items-center space-x-1.5">
                     <User className="w-3.5 h-3.5 text-teal-700" />
-                    <span>Teacher's Full Name (for PDF Header & Signatures)</span>
+                    <span>Teacher's Name (shown at top-right above table)</span>
                   </label>
                   {teacherSaved && (
                     <span className="text-[10px] text-emerald-600 font-bold flex items-center space-x-0.5 animate-pulse">
@@ -913,11 +917,11 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
                   type="text"
                   value={customTeacherName}
                   onChange={(e) => handleTeacherNameChange(e.target.value)}
-                  placeholder="Enter your name or teacher's full name..."
+                  placeholder="Enter teacher's name..."
                   className="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600 text-slate-900 shadow-2xs"
                 />
-                <p className="text-[9.5pt] text-slate-500 mt-0.5 leading-none">
-                  Editable for yourself or another teacher. Saved automatically for all future exports.
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-none">
+                  Saved automatically and applied across PDF, Word (.docx), and Print.
                 </p>
               </div>
 
@@ -926,7 +930,7 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
                 <div className="flex items-center justify-between mb-0.5">
                   <label className="text-[11px] font-bold text-slate-800 flex items-center space-x-1.5">
                     <SchoolIcon className="w-3.5 h-3.5 text-teal-700" />
-                    <span>School Name</span>
+                    <span>School Name (shown at top-left)</span>
                   </label>
                   {schoolSaved && (
                     <span className="text-[10px] text-emerald-600 font-bold flex items-center space-x-0.5 animate-pulse">
@@ -942,8 +946,8 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
                   placeholder="Enter school name (e.g. GS GITUMBA)..."
                   className="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-teal-600 text-slate-900 shadow-2xs"
                 />
-                <p className="text-[9.5pt] text-slate-500 mt-0.5 leading-none">
-                  Change school identification anytime. Saved automatically for all future exports.
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-none">
+                  Saved automatically and applied across PDF, Word (.docx), and Print.
                 </p>
               </div>
             </div>
@@ -967,12 +971,12 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
             </div>
           </div>
 
-          {/* 4. Bottom Quick Action Bar */}
-          <div className="no-print bg-white px-3 sm:px-6 py-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
+          {/* 4. Bottom Quick Action Bar with the 3 Options */}
+          <div className="no-print bg-white px-3 sm:px-6 py-2.5 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 shrink-0">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span className="font-semibold text-slate-700 text-xs">
-                A4 {orientation === 'landscape' ? 'Landscape (Default • Official CBC Format)' : 'Portrait'}
+                Format: A4 {orientation === 'landscape' ? 'Landscape' : 'Portrait'}
               </span>
               <span className="text-slate-400">•</span>
               <span className="text-slate-500 text-xs">
@@ -980,21 +984,53 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
               </span>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3 py-1 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors font-medium cursor-pointer text-xs"
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors font-medium cursor-pointer text-xs"
               >
-                {t.closePreview}
+                Close Preview
               </button>
+
+              {/* 1. Download PDF */}
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isExportingPdf}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-xs cursor-pointer active:scale-98 text-xs disabled:opacity-50"
+              >
+                {isExportingPdf ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="w-3.5 h-3.5" />
+                )}
+                <span>Download PDF</span>
+              </button>
+
+              {/* 2. Download Word (.docx) */}
+              <button
+                type="button"
+                onClick={handleDownloadWord}
+                disabled={isExportingWord}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold transition-all shadow-xs cursor-pointer active:scale-98 text-xs disabled:opacity-50"
+              >
+                {isExportingWord ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )}
+                <span>Download Word (.docx)</span>
+              </button>
+
+              {/* 3. Print */}
               <button
                 type="button"
                 onClick={handlePrint}
                 className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 text-white font-bold transition-all shadow-xs cursor-pointer active:scale-98 text-xs"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>{t.printSavePdfBtn}</span>
+                <span>Print</span>
               </button>
             </div>
           </div>
