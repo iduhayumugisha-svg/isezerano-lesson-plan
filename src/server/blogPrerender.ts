@@ -11,7 +11,7 @@ import {
   SAFE_FALLBACK_THUMBNAILS
 } from '../utils/thumbnailUtils';
 
-const CANONICAL_BASE_URL = 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+const CANONICAL_BASE_URL = 'https://isezerano.online';
 
 const CANONICAL_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyBJToe1yvQJ8ZRRXn6xwOYxh8wZOa4HO0c',

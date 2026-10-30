@@ -28,7 +28,7 @@ import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
 import { formatPublicationDate } from '../utils/dateUtils';
 import { normalizeAndUpgradeThumbnailUrl, getSafeFallbackThumbnail } from '../utils/thumbnailUtils';
 
-const CANONICAL_BASE_URL = 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+const CANONICAL_BASE_URL = 'https://isezerano.online';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;

@@ -6,10 +6,11 @@ import {
   setDoc, 
   deleteDoc, 
   updateDoc, 
-  increment,
-  onSnapshot
+  increment, 
+  onSnapshot 
 } from 'firebase/firestore';
-import { initFirestoreIfConfigured } from './storageService';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { initFirestoreIfConfigured, getFirebaseApp } from './storageService';
 import { BlogPost } from '../types/blog';
 import { isValidDateString } from '../utils/dateUtils';
 import { 
@@ -612,4 +613,53 @@ const updateLocalPostViews = (postId: string, explicitCount?: number): number =>
     // ignore
   }
   return finalCount;
+};
+
+/**
+ * Uploads a blog post thumbnail image to Firebase Storage (bucket: isezerano-news.firebasestorage.app)
+ * Path: posts/thumb_{timestamp}_{random}.{ext}
+ * Returns permanent, stable, publicly accessible HTTPS download URL.
+ */
+export const uploadBlogPostThumbnail = async (
+  file: File,
+  adminUid: string
+): Promise<{ success: boolean; url?: string; error?: string }> => {
+  // Validate file
+  if (!file.type.startsWith('image/')) {
+    return { success: false, error: 'File must be an image (JPEG, PNG, WebP, etc.).' };
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return { success: false, error: 'Image size cannot exceed 10 MB.' };
+  }
+
+  const app = getFirebaseApp();
+  if (!app) {
+    return { success: false, error: 'Firebase connection is not available.' };
+  }
+
+  try {
+    const bucketName = 'isezerano-news.firebasestorage.app';
+    const storage = getStorage(app, `gs://${bucketName}`);
+    const rawExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const cleanExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
+    const cleanName = file.name.replace(/[^\w.-]/g, '_');
+    const storagePath = `posts/thumb_${Date.now()}_${cleanName}.${cleanExt}`;
+    const storageRef = ref(storage, storagePath);
+
+    const metadata = {
+      contentType: file.type || `image/${cleanExt}`,
+      customMetadata: {
+        uploadedBy: adminUid,
+        uploadedAt: new Date().toISOString(),
+        originalName: file.name
+      }
+    };
+
+    const uploadResult = await uploadBytes(storageRef, file, metadata);
+    const downloadUrl = await getDownloadURL(uploadResult.ref);
+    return { success: true, url: downloadUrl };
+  } catch (err: any) {
+    console.error('Failed to upload thumbnail to Firebase Storage:', err);
+    return { success: false, error: err?.message || 'Failed to upload image to Firebase Storage.' };
+  }
 };

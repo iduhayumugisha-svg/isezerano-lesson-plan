@@ -24,7 +24,8 @@ import {
   Info,
   X,
   Copy,
-  Check
+  Check,
+  Upload
 } from 'lucide-react';
 import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
 import { 
@@ -35,7 +36,8 @@ import {
   calculateReadingTime,
   subscribeToBlogPosts,
   seedInitialPostsToFirestore,
-  auditAndRepairAllFirestoreBlogPosts
+  auditAndRepairAllFirestoreBlogPosts,
+  uploadBlogPostThumbnail
 } from '../services/blogService';
 import { 
   isValidHttpsImageUrl, 
@@ -48,7 +50,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { useAuth } from '../context/AuthContext';
 import { formatPublicationDate } from '../utils/dateUtils';
 
-const CANONICAL_BASE_URL = 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+const CANONICAL_BASE_URL = 'https://isezerano.online';
 
 interface BlogManagerProps {
   onViewLivePost?: (slug: string) => void;
@@ -72,6 +74,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
   // Global audit modal state
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditReport, setAuditReport] = useState<GlobalAuditReport | null>(null);
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -243,6 +246,36 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
       thumbnailUrl: fallback,
       needsImageReview: false
     });
+  };
+
+  const handleThumbnailFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingPost) return;
+
+    const adminUid = user?.uid || 'admin';
+    setIsUploadingThumbnail(true);
+    try {
+      const res = await uploadBlogPostThumbnail(file, adminUid);
+      if (res.success && res.url) {
+        setEditingPost(prev => prev ? ({
+          ...prev,
+          thumbnailUrl: res.url!,
+          needsImageReview: false
+        }) : null);
+        setSaveStatus({
+          type: 'success',
+          text: 'Featured thumbnail uploaded to Firebase Storage!'
+        });
+        setTimeout(() => setSaveStatus(null), 3500);
+      } else {
+        alert(res.error || 'Failed to upload image to Firebase Storage.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Error uploading image.');
+    } finally {
+      setIsUploadingThumbnail(false);
+      e.target.value = '';
+    }
   };
 
   const filteredPosts = posts.filter(p => {
@@ -652,14 +685,27 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="url"
                   value={editingPost.thumbnailUrl}
                   onChange={(e) => setEditingPost(prev => prev ? ({ ...prev, thumbnailUrl: e.target.value }) : null)}
-                  placeholder="https://images.unsplash.com/... or https://blogger.googleusercontent.com/..."
+                  placeholder="Paste HTTPS image URL (Blogger, Unsplash, etc.)..."
                   className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                 />
+                <label className={`inline-flex items-center justify-center space-x-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer shrink-0 ${
+                  isUploadingThumbnail ? 'opacity-60 cursor-not-allowed' : ''
+                }`}>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUploadingThumbnail ? 'Uploading...' : 'Upload Image'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleThumbnailFileUpload}
+                    disabled={isUploadingThumbnail}
+                    className="hidden"
+                  />
+                </label>
               </div>
 
               {/* Validation Status Notice */}
@@ -844,7 +890,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                     />
                     <div className="p-3.5 space-y-1">
                       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-                        ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app
+                        isezerano.online
                       </span>
                       <h4 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">
                         {previewingSocialPost.title}
@@ -871,7 +917,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                   />
                   <div className="p-3.5 space-y-1">
                     <span className="text-[10px] text-slate-400 font-mono">
-                      ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app
+                      isezerano.online
                     </span>
                     <h4 className="text-sm font-bold text-slate-100 leading-snug line-clamp-2">
                       {previewingSocialPost.title}

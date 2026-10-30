@@ -101,7 +101,7 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
     };
   }, [slug, isAdmin]);
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://isezerano.online';
   const postUrl = `${originUrl}/blog/${slug}`;
 
   const handleCopyLink = () => {

@@ -3,8 +3,8 @@ import { normalizeAndUpgradeThumbnailUrl, getSafeFallbackThumbnail, isValidHttps
 
 const DEFAULT_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
 const DEFAULT_DESCRIPTION = 'Specialized pedagogical lesson-planning platform helping primary and secondary school teachers in Rwanda prepare official REB-compliant 8-column Competence-Based Curriculum (CBC) lesson plans.';
-const DEFAULT_IMAGE = 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app/isezerano-online-logo.jpg';
-const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://ais-pre-a7az4u6j4emzxaw3vwjczy-591146875574.europe-west2.run.app';
+const DEFAULT_IMAGE = 'https://isezerano.online/isezerano-online-logo.jpg';
+const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://isezerano.online';
 
 /**
  * Sets or creates a meta tag with the given attribute and content.
