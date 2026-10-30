@@ -14,7 +14,12 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { BlogPost } from '../types/blog';
-import { getBlogPostBySlug, getBlogPosts, incrementPostViews } from '../services/blogService';
+import { 
+  getBlogPostBySlug, 
+  getBlogPosts, 
+  incrementPostViews,
+  subscribeToBlogPost
+} from '../services/blogService';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { useAuth } from '../context/AuthContext';
@@ -42,65 +47,56 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
     let isMounted = true;
     setIsLoading(true);
 
-    const loadArticle = async () => {
-      const found = await getBlogPostBySlug(slug, isAdmin);
-      if (!isMounted) return;
+    // Real-time Firestore subscription to this specific post
+    const unsubscribe = subscribeToBlogPost(
+      slug,
+      (found) => {
+        if (!isMounted) return;
+        setPost(found);
+        setIsLoading(false);
 
-      setPost(found);
-      setIsLoading(false);
+        if (found) {
+          // 1. Update dynamic SEO, OpenGraph, Twitter Cards, and Schema.org
+          updateBlogPostSeo(found);
 
-      if (found) {
-        // 1. Update dynamic SEO, OpenGraph, Twitter Cards, and Schema.org
-        updateBlogPostSeo(found);
-
-        // 2. Increment view counter with session debounce to prevent duplicate render increments
-        const sessionKey = `isezerano_viewed_post_${found.id}`;
-        let shouldIncrement = false;
-        try {
-          if (typeof sessionStorage !== 'undefined') {
-            if (!sessionStorage.getItem(sessionKey)) {
-              sessionStorage.setItem(sessionKey, Date.now().toString());
-              shouldIncrement = true;
+          // 2. Increment view counter with session debounce to prevent duplicate render increments
+          const sessionKey = `isezerano_viewed_post_${found.id}`;
+          let shouldIncrement = false;
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              if (!sessionStorage.getItem(sessionKey)) {
+                sessionStorage.setItem(sessionKey, Date.now().toString());
+                shouldIncrement = true;
+              }
             }
+          } catch {
+            shouldIncrement = true;
           }
-        } catch {
-          shouldIncrement = true;
-        }
 
-        if (shouldIncrement) {
-          incrementPostViews(found.id).then((freshCount) => {
-            if (isMounted && typeof freshCount === 'number') {
-              setPost(prev => prev && prev.id === found.id ? { ...prev, views: freshCount } : prev);
-            }
+          if (shouldIncrement) {
+            incrementPostViews(found.id).then((freshCount) => {
+              if (isMounted && typeof freshCount === 'number') {
+                setPost(prev => prev && prev.id === found.id ? { ...prev, views: freshCount } : prev);
+              }
+            });
+          }
+
+          // 3. Load related posts from same category
+          getBlogPosts(false).then((all) => {
+            if (!isMounted) return;
+            const related = all.filter(p => p.id !== found.id && (p.category === found.category || true)).slice(0, 3);
+            setRelatedPosts(related);
           });
         }
+      },
+      isAdmin
+    );
 
-        // 3. Load related posts from same category
-        getBlogPosts(false).then((all) => {
-          if (!isMounted) return;
-          const related = all.filter(p => p.id !== found.id && (p.category === found.category || true)).slice(0, 3);
-          setRelatedPosts(related);
-        });
-      }
-    };
-
-    loadArticle();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // Listen to sync updates from admin editor
-    const handleSync = (e: Event) => {
-      const customEvent = e as CustomEvent<{ post?: BlogPost; deletedId?: string }>;
-      if (customEvent.detail?.deletedId && post?.id === customEvent.detail.deletedId) {
-        setPost(null);
-      } else if (customEvent.detail?.post && customEvent.detail.post.slug === slug) {
-        setPost(customEvent.detail.post);
-      }
-    };
-    window.addEventListener('blog_posts_updated', handleSync);
 
     return () => {
       isMounted = false;
-      window.removeEventListener('blog_posts_updated', handleSync);
+      unsubscribe();
       resetDefaultSeo();
     };
   }, [slug, isAdmin]);

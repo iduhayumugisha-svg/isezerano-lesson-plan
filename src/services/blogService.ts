@@ -7,17 +7,21 @@ import {
   deleteDoc, 
   updateDoc, 
   increment,
-  query,
-  orderBy 
+  onSnapshot
 } from 'firebase/firestore';
 import { initFirestoreIfConfigured } from './storageService';
 import { BlogPost } from '../types/blog';
 import { isValidDateString } from '../utils/dateUtils';
+import { 
+  auditAndRepairBlogPost, 
+  auditAllBlogPosts, 
+  GlobalAuditReport 
+} from '../utils/thumbnailUtils';
 
 const BLOG_STORAGE_KEY = 'isezerano_blog_posts';
-const DELETED_POSTS_STORAGE_KEY = 'isezerano_deleted_post_ids';
+const BLOG_INITIALIZED_KEY = 'isezerano_blog_initialized';
 
-// Curated starter pedagogical blog posts about GS GITUMBA & Rwanda CBC (Accurate 0 initial views)
+// Curated starter pedagogical blog posts about GS GITUMBA & Rwanda CBC
 export const SEED_BLOG_POSTS: BlogPost[] = [
   {
     id: 'post-1-cbc-lesson-planning',
@@ -127,25 +131,6 @@ export const SEED_BLOG_POSTS: BlogPost[] = [
   }
 ];
 
-export const getDeletedPostIds = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem(DELETED_POSTS_STORAGE_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set<string>();
-  } catch {
-    return new Set<string>();
-  }
-};
-
-export const addDeletedPostId = (id: string): void => {
-  try {
-    const set = getDeletedPostIds();
-    set.add(id);
-    localStorage.setItem(DELETED_POSTS_STORAGE_KEY, JSON.stringify(Array.from(set)));
-  } catch (err) {
-    console.error('Failed to update deleted post IDs:', err);
-  }
-};
-
 /**
  * Normalizes title into an SEO-friendly URL slug.
  */
@@ -183,85 +168,194 @@ const syncToDiskEndpoint = async (action: 'save' | 'delete', post?: BlogPost, po
 };
 
 /**
- * Fetches all blog posts from Firestore with local storage fallback and initial seed.
- * When includeDrafts is false, drafts are strictly filtered out.
+ * Real-time subscription to blog posts in Firestore.
+ * Automatically synchronizes changes (creates, edits, deletions) across all connected devices in real-time.
+ * Returns an unsubscribe cleanup function.
  */
-export const getBlogPosts = async (includeDrafts: boolean = false): Promise<BlogPost[]> => {
-  const deletedIds = getDeletedPostIds();
+export const subscribeToBlogPosts = (
+  callback: (posts: BlogPost[]) => void,
+  includeDrafts: boolean = false
+): (() => void) => {
   const db = initFirestoreIfConfigured();
 
-  // 1. Attempt to load from Firestore 'posts' collection
-  if (db) {
-    try {
-      const postsCol = collection(db, 'posts');
-      const q = query(postsCol, orderBy('publishedAt', 'desc'));
-      const snap = await getDocs(q);
+  if (!db) {
+    getBlogPosts(includeDrafts).then(callback);
+    return () => {};
+  }
 
-      if (!snap.empty) {
-        const remotePosts: BlogPost[] = [];
-        snap.forEach((docSnap) => {
-          if (!deletedIds.has(docSnap.id)) {
+  try {
+    const postsCol = collection(db, 'posts');
+    const unsubscribe = onSnapshot(
+      postsCol,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remotePosts: BlogPost[] = [];
+          snapshot.forEach((docSnap) => {
             const data = docSnap.data() as BlogPost;
             remotePosts.push({
               ...data,
               id: docSnap.id,
               views: typeof data.views === 'number' ? data.views : 0
             });
+          });
+
+          // Sort chronologically by publication or update timestamp
+          remotePosts.sort((a, b) => {
+            const timeA = isValidDateString(a.publishedAt) 
+              ? new Date(a.publishedAt).getTime() 
+              : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
+            const timeB = isValidDateString(b.publishedAt) 
+              ? new Date(b.publishedAt).getTime() 
+              : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+            return timeB - timeA;
+          });
+
+          // Mirror authoritative Firestore state into localStorage
+          try {
+            localStorage.setItem(BLOG_STORAGE_KEY, JSON.stringify(remotePosts));
+            localStorage.setItem(BLOG_INITIALIZED_KEY, 'true');
+          } catch {
+            // ignore
           }
+
+          const filtered = includeDrafts 
+            ? remotePosts 
+            : remotePosts.filter(p => p.status === 'published');
+
+          callback(filtered);
+        } else {
+          // Firestore is empty
+          const isInitialized = typeof localStorage !== 'undefined' && localStorage.getItem(BLOG_INITIALIZED_KEY) === 'true';
+          if (isInitialized) {
+            // All posts were deleted from Firestore
+            try {
+              localStorage.setItem(BLOG_STORAGE_KEY, JSON.stringify([]));
+            } catch {}
+            callback([]);
+          } else {
+            // Database not yet seeded, show starter posts
+            let localPosts: BlogPost[] = [];
+            try {
+              const raw = localStorage.getItem(BLOG_STORAGE_KEY);
+              if (raw) localPosts = JSON.parse(raw);
+            } catch {}
+            if (localPosts.length === 0) {
+              localPosts = [...SEED_BLOG_POSTS];
+            }
+            const filtered = includeDrafts 
+              ? localPosts 
+              : localPosts.filter(p => p.status === 'published');
+            callback(filtered);
+          }
+        }
+      },
+      (error) => {
+        console.warn('Firestore blog subscription error, using local cache:', error);
+        getBlogPosts(includeDrafts).then(callback);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    console.error('Failed to establish Firestore blog subscription:', err);
+    getBlogPosts(includeDrafts).then(callback);
+    return () => {};
+  }
+};
+
+/**
+ * Real-time subscription to a single post by slug or ID.
+ * Returns unsubscribe cleanup function.
+ */
+export const subscribeToBlogPost = (
+  slugOrId: string,
+  callback: (post: BlogPost | null) => void,
+  includeDraft: boolean = false
+): (() => void) => {
+  return subscribeToBlogPosts((allPosts) => {
+    const found = allPosts.find(p => p.slug === slugOrId || p.id === slugOrId);
+    if (!found) {
+      callback(null);
+      return;
+    }
+    if (!includeDraft && found.status !== 'published') {
+      callback(null);
+      return;
+    }
+    callback(found);
+  }, includeDraft);
+};
+
+/**
+ * Fetches all blog posts once from Firestore (authoritative).
+ */
+export const getBlogPosts = async (includeDrafts: boolean = false): Promise<BlogPost[]> => {
+  const db = initFirestoreIfConfigured();
+
+  if (db) {
+    try {
+      const postsCol = collection(db, 'posts');
+      const snap = await getDocs(postsCol);
+
+      if (!snap.empty) {
+        const remotePosts: BlogPost[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as BlogPost;
+          remotePosts.push({
+            ...data,
+            id: docSnap.id,
+            views: typeof data.views === 'number' ? data.views : 0
+          });
         });
 
-        // Cache valid posts to local storage
+        remotePosts.sort((a, b) => {
+          const timeA = isValidDateString(a.publishedAt) 
+            ? new Date(a.publishedAt).getTime() 
+            : (a.updatedAt ? new Date(a.updatedAt).getTime() : 0);
+          const timeB = isValidDateString(b.publishedAt) 
+            ? new Date(b.publishedAt).getTime() 
+            : (b.updatedAt ? new Date(b.updatedAt).getTime() : 0);
+          return timeB - timeA;
+        });
+
         try {
           localStorage.setItem(BLOG_STORAGE_KEY, JSON.stringify(remotePosts));
-        } catch {
-          // ignore
-        }
+          localStorage.setItem(BLOG_INITIALIZED_KEY, 'true');
+        } catch {}
 
-        const filtered = includeDrafts 
+        return includeDrafts 
           ? remotePosts 
           : remotePosts.filter(p => p.status === 'published');
-
-        return filtered;
+      } else {
+        const isInitialized = typeof localStorage !== 'undefined' && localStorage.getItem(BLOG_INITIALIZED_KEY) === 'true';
+        if (isInitialized) {
+          return [];
+        }
       }
     } catch (err) {
-      console.warn('Could not read posts from Firestore, checking local cache:', err);
+      console.warn('Could not read posts from Firestore:', err);
     }
   }
 
-  // 2. Read local cache if Firestore is empty or offline
+  // Fallback to local storage if Firestore network fails
   let localPosts: BlogPost[] = [];
   try {
     const raw = localStorage.getItem(BLOG_STORAGE_KEY);
-    if (raw) {
-      localPosts = JSON.parse(raw);
-    }
-  } catch {
-    // ignore
-  }
+    if (raw) localPosts = JSON.parse(raw);
+  } catch {}
 
-  // 3. Fallback to SEED_BLOG_POSTS if local cache is empty
-  if (localPosts.length === 0) {
+  const isInitialized = typeof localStorage !== 'undefined' && localStorage.getItem(BLOG_INITIALIZED_KEY) === 'true';
+  if (localPosts.length === 0 && !isInitialized) {
     localPosts = [...SEED_BLOG_POSTS];
   }
 
-  // Filter out any explicitly deleted post IDs
-  const activePosts = localPosts.filter(p => !deletedIds.has(p.id));
-
-  // Sort by publishedAt desc
-  activePosts.sort((a, b) => {
-    const timeA = isValidDateString(a.publishedAt) ? new Date(a.publishedAt).getTime() : 0;
-    const timeB = isValidDateString(b.publishedAt) ? new Date(b.publishedAt).getTime() : 0;
-    return timeB - timeA;
-  });
-
   return includeDrafts 
-    ? activePosts 
-    : activePosts.filter(p => p.status === 'published');
+    ? localPosts 
+    : localPosts.filter(p => p.status === 'published');
 };
 
 /**
  * Fetches a single blog post by its SEO slug or ID.
- * If includeDraft is false, drafts will return null.
  */
 export const getBlogPostBySlug = async (slugOrId: string, includeDraft: boolean = false): Promise<BlogPost | null> => {
   const allPosts = await getBlogPosts(true);
@@ -269,20 +363,63 @@ export const getBlogPostBySlug = async (slugOrId: string, includeDraft: boolean 
 
   if (!found) return null;
   if (!includeDraft && found.status !== 'published') {
-    return null; // Public visitors cannot view drafts
+    return null;
   }
   return found;
 };
 
 /**
+ * Seeds initial baseline posts to Firestore if the collection is empty.
+ * Restricted to authorized administrator.
+ */
+export const seedInitialPostsToFirestore = async (
+  adminUid: string
+): Promise<{ success: boolean; count: number; error?: string }> => {
+  const db = initFirestoreIfConfigured();
+  if (!db) {
+    return { success: false, count: 0, error: 'Database connection is not available.' };
+  }
+
+  try {
+    let count = 0;
+    for (const post of SEED_BLOG_POSTS) {
+      const docRef = doc(db, 'posts', post.id);
+      const existing = await getDoc(docRef);
+      if (!existing.exists()) {
+        await setDoc(docRef, {
+          ...post,
+          views: 0,
+          updatedAt: new Date().toISOString()
+        });
+        count++;
+      }
+    }
+    try {
+      localStorage.setItem(BLOG_INITIALIZED_KEY, 'true');
+    } catch {}
+    return { success: true, count };
+  } catch (err: any) {
+    console.error('Failed to seed posts to Firestore:', err);
+    return { success: false, count: 0, error: err?.message };
+  }
+};
+
+/**
  * Saves or updates a blog post in Firestore 'posts' collection and synchronizes state.
- * Strictly checks permissions and returns real success/error without false positives.
+ * Strictly checks permissions and returns real success/error after Firestore confirms write.
  */
 export const saveBlogPost = async (
   post: BlogPost,
   adminUid: string
 ): Promise<{ success: boolean; post?: BlogPost; error?: string }> => {
   const db = initFirestoreIfConfigured();
+
+  if (!db) {
+    return {
+      success: false,
+      error: 'Firestore database is not connected. Please verify Firebase connection.'
+    };
+  }
 
   // Validate required title
   if (!post.title || !post.title.trim()) {
@@ -299,13 +436,12 @@ export const saveBlogPost = async (
       resolvedPublishedAt = new Date().toISOString();
     }
   } else {
-    // Draft status
     if (!resolvedPublishedAt) {
       resolvedPublishedAt = '';
     }
   }
 
-  const payload: BlogPost = {
+  const rawPayload: BlogPost = {
     ...post,
     title: post.title.trim(),
     slug: post.slug ? generateSlug(post.slug) : generateSlug(post.title),
@@ -315,53 +451,84 @@ export const saveBlogPost = async (
     views: typeof post.views === 'number' ? post.views : 0
   };
 
-  // 1. Persist directly to Firestore 'posts' collection
-  if (db) {
-    try {
-      const docRef = doc(db, 'posts', payload.id);
-      await setDoc(docRef, payload, { merge: true });
-    } catch (err: any) {
-      console.error('Firestore saveBlogPost failed:', err);
-      return {
-        success: false,
-        error: err?.message || 'Failed to save post to Firestore. Ensure you are signed in as authorized administrator.'
-      };
-    }
-  } else {
+  // Run automatic thumbnail audit and resolution upgrade before persisting
+  const { repairedPost } = auditAndRepairBlogPost(rawPayload);
+  const payload = repairedPost;
+
+  // 1. Await Firestore setDoc write
+  try {
+    const docRef = doc(db, 'posts', payload.id);
+    await setDoc(docRef, payload, { merge: true });
+  } catch (err: any) {
+    console.error('Firestore saveBlogPost failed:', err);
     return {
       success: false,
-      error: 'Firestore database is not connected. Please verify Firebase connection.'
+      error: err?.message || 'Failed to save post to Firestore. Ensure you are signed in as authorized administrator.'
     };
   }
 
-  // 2. Update local storage cache
   try {
-    const raw = localStorage.getItem(BLOG_STORAGE_KEY);
-    const list: BlogPost[] = raw ? JSON.parse(raw) : [...SEED_BLOG_POSTS];
-    const index = list.findIndex(p => p.id === payload.id);
-    if (index >= 0) {
-      list[index] = payload;
-    } else {
-      list.unshift(payload);
-    }
-    localStorage.setItem(BLOG_STORAGE_KEY, JSON.stringify(list));
-  } catch (err) {
-    console.error('Failed to update local posts cache:', err);
-  }
+    localStorage.setItem(BLOG_INITIALIZED_KEY, 'true');
+  } catch {}
 
-  // 3. Sync to disk for crawler prerendering
+  // 2. Sync to disk for crawler prerendering
   syncToDiskEndpoint('save', payload);
-
-  // 4. Notify app components across the website
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('blog_posts_updated', { detail: { post: payload } }));
-  }
 
   return { success: true, post: payload };
 };
 
 /**
- * Deletes a blog post from Firestore and synchronizes all lists and views.
+ * Audits every blog post in Firestore:
+ * - Checks thumbnail validity and accessibility
+ * - Upgrades Blogger/Google low-resolution URLs to /s1600/
+ * - Extracts images from content if thumbnail is missing
+ * - Assigns safe category-specific fallbacks and flags for review if no image exists
+ * - Persists repairs directly to Firestore and synchronizes disk prerender cache
+ */
+export const auditAndRepairAllFirestoreBlogPosts = async (
+  adminUid: string
+): Promise<{ success: boolean; report?: GlobalAuditReport; error?: string }> => {
+  const db = initFirestoreIfConfigured();
+  if (!db) {
+    return { success: false, error: 'Firestore database is not connected.' };
+  }
+
+  try {
+    const postsCol = collection(db, 'posts');
+    const snap = await getDocs(postsCol);
+    const remotePosts: BlogPost[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as BlogPost;
+      remotePosts.push({
+        ...data,
+        id: docSnap.id,
+        views: typeof data.views === 'number' ? data.views : 0
+      });
+    });
+
+    const report = auditAllBlogPosts(remotePosts);
+
+    // Save repaired posts back to Firestore
+    for (const result of report.results) {
+      if (result.wasModified || !result.repairedPost.thumbnailAuditStatus) {
+        const docRef = doc(db, 'posts', result.repairedPost.id);
+        await setDoc(docRef, {
+          ...result.repairedPost,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        await syncToDiskEndpoint('save', result.repairedPost);
+      }
+    }
+
+    return { success: true, report };
+  } catch (err: any) {
+    console.error('Audit failed:', err);
+    return { success: false, error: err?.message || 'Failed to complete audit.' };
+  }
+};
+
+/**
+ * Deletes a blog post from Firestore and synchronizes all connected devices via onSnapshot.
  */
 export const deleteBlogPost = async (
   postId: string,
@@ -369,42 +536,27 @@ export const deleteBlogPost = async (
 ): Promise<{ success: boolean; error?: string }> => {
   const db = initFirestoreIfConfigured();
 
-  // 1. Delete from Firestore
-  if (db) {
-    try {
-      const docRef = doc(db, 'posts', postId);
-      await deleteDoc(docRef);
-    } catch (err: any) {
-      console.error('Could not delete post from Firestore:', err);
-      return {
-        success: false,
-        error: err?.message || 'Failed to delete post from Firestore. Ensure you are signed in as administrator.'
-      };
-    }
+  if (!db) {
+    return {
+      success: false,
+      error: 'Firestore database is not connected.'
+    };
   }
 
-  // 2. Track as deleted locally to prevent reappearance
-  addDeletedPostId(postId);
-
-  // 3. Remove from local storage cache
+  // 1. Await Firestore deleteDoc
   try {
-    const raw = localStorage.getItem(BLOG_STORAGE_KEY);
-    if (raw) {
-      const list: BlogPost[] = JSON.parse(raw);
-      const filtered = list.filter(p => p.id !== postId);
-      localStorage.setItem(BLOG_STORAGE_KEY, JSON.stringify(filtered));
-    }
-  } catch (err) {
-    console.error('Failed to remove post from local cache:', err);
+    const docRef = doc(db, 'posts', postId);
+    await deleteDoc(docRef);
+  } catch (err: any) {
+    console.error('Could not delete post from Firestore:', err);
+    return {
+      success: false,
+      error: err?.message || 'Failed to delete post from Firestore. Ensure you are signed in as administrator.'
+    };
   }
 
-  // 4. Sync deletion to disk
+  // 2. Sync deletion to disk
   syncToDiskEndpoint('delete', undefined, postId);
-
-  // 5. Notify app components
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('blog_posts_updated', { detail: { deletedId: postId } }));
-  }
 
   return { success: true };
 };

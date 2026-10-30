@@ -4,8 +4,11 @@ import {
   FolderClock, 
   Settings as SettingsIcon, 
   LayoutDashboard,
-  ShieldCheck,
-  Home
+  ShieldCheck, 
+  Home,
+  Users,
+  Newspaper,
+  ArrowLeft
 } from 'lucide-react';
 import { LessonPlan } from './types/lessonPlan';
 import { 
@@ -28,19 +31,18 @@ import { BlogListView } from './views/BlogListView';
 import { BlogPostDetailView } from './views/BlogPostDetailView';
 import { AdSlot } from './components/AdSlot';
 
-// Central Application Views
+// Central Protected Education Application Views
 import { DashboardView } from './views/DashboardView';
 import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
+import { StudentsIdentificationView } from './views/StudentsIdentificationView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
+import { EducationLoginGate } from './components/EducationLoginGate';
 
-// Preserved Hidden Views (Retained for future activation, hidden from UI)
-import { StudentsIdentificationView } from './views/StudentsIdentificationView';
+// Admin Portal & Modals
 import { AdminDashboardView } from './views/AdminDashboardView';
-import { Sidebar, SaasNavPage } from './components/Sidebar';
-import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
@@ -88,6 +90,7 @@ const getPageFromUrl = (): AppPage => {
   if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
   if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
   if (pathname === '/settings' || hash === '#settings' || search.get('page') === 'settings') return 'settings';
+  if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'students';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -101,7 +104,7 @@ function AppContent() {
   const { user, isAdmin, signOutUser } = useAuth();
   const { colors, typography } = useWebsiteDesign();
 
-  // Route state initialized from browser URL (/admin, /manage, #admin, etc.)
+  // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
   const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(() => getInitialBlogSlug());
 
@@ -150,7 +153,7 @@ function AppContent() {
       }
     }
 
-    // Initialize Google Analytics 4 (Measurement ID: G-XVJBQX90HX)
+    // Initialize Google Analytics 4
     initGoogleAnalytics();
 
     return () => {
@@ -159,16 +162,9 @@ function AppContent() {
     };
   }, []);
 
-  // Track SPA navigation in Google Analytics 4 and local telemetry
+  // Track SPA navigation in Google Analytics 4
   useEffect(() => {
     trackPageView(currentPage);
-  }, [currentPage]);
-
-  // Redirect legacy hidden routes safely (students)
-  useEffect(() => {
-    if (currentPage === 'students') {
-      setCurrentPage('dashboard');
-    }
   }, [currentPage]);
 
   // Lesson plan save handler with ownerUid binding
@@ -273,7 +269,9 @@ function AppContent() {
     }
   };
 
-  const isLessonPlanWorkspace = ['create', 'saved', 'settings'].includes(currentPage);
+  // Protected education routes
+  const isProtectedEducationPage = ['dashboard', 'create', 'saved', 'settings', 'students'].includes(currentPage);
+  const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'students'].includes(currentPage);
 
   return (
     <div 
@@ -289,6 +287,7 @@ function AppContent() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       {/* Ad Placement: Below Header */}
@@ -297,7 +296,7 @@ function AppContent() {
       {/* 2. Main Content Area */}
       <main className="flex-1 w-full overflow-x-hidden">
         
-        {/* PUBLIC PAGE 1: Home View (Default opening page) */}
+        {/* PUBLIC PAGE 1: Digital Newspaper Home View (Default opening page at /) */}
         {currentPage === 'home' && (
           <HomeView
             onNavigate={handleNavigate}
@@ -306,7 +305,7 @@ function AppContent() {
           />
         )}
 
-        {/* PUBLIC PAGE: Pedagogical Blog List & Journal Archive */}
+        {/* PUBLIC PAGE: News Archive & Journal Articles List */}
         {currentPage === 'blog' && (
           <BlogListView
             onSelectPost={handleSelectBlogPost}
@@ -314,60 +313,13 @@ function AppContent() {
           />
         )}
 
-        {/* PUBLIC PAGE: Blog Post Article Detail View */}
+        {/* PUBLIC PAGE: News Article Detail Reader View */}
         {currentPage === 'blog_post' && selectedBlogSlug && (
           <BlogPostDetailView
             slug={selectedBlogSlug}
             onNavigate={handleNavigate}
             onSelectPost={handleSelectBlogPost}
           />
-        )}
-
-        {/* APPLICATION DASHBOARD VIEW: Opened by clicking Dashboard menu or button */}
-        {currentPage === 'dashboard' && (
-          <DashboardView
-            lessonPlans={lessonPlans}
-            onNavigate={(page) => {
-              if (page === 'home') {
-                handleNavigate('home');
-              } else if (page === 'create' || page === 'saved' || page === 'settings') {
-                handleNavigate(page);
-              } else if (page === 'admin') {
-                handleNavigate('admin');
-              } else {
-                handleNavigate('dashboard');
-              }
-            }}
-            onSelectPlanToEdit={handleEditPlan}
-            onSelectPlanToPrint={handlePrintPlan}
-          />
-        )}
-
-        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or Header Admin button */}
-        {currentPage === 'admin' && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            {isAdmin && user ? (
-              <AdminDashboardView
-                lessonPlans={lessonPlans}
-                onNavigate={(page) => {
-                  if (page === 'create' || page === 'saved' || page === 'settings') {
-                    handleNavigate(page);
-                  } else {
-                    handleNavigate('dashboard');
-                  }
-                }}
-                onLogout={async () => {
-                  await signOutUser();
-                  handleNavigate('home');
-                }}
-              />
-            ) : (
-              <AdminPortalGateway
-                onNavigate={handleNavigate}
-                onOpenAuthModal={() => setIsAuthModalOpen(true)}
-              />
-            )}
-          </div>
         )}
 
         {/* PUBLIC PAGE 2: About Us View */}
@@ -390,14 +342,56 @@ function AppContent() {
           <TermsConditionsView onNavigate={handleNavigate} />
         )}
 
-        {/* PRIMARY FUNCTIONAL APPLICATION SECTION: Lesson Plan Workspace */}
-        {isLessonPlanWorkspace && (
+        {/* ============================================================== */}
+        {/* PROTECTED EDUCATION PLATFORM: AUTHENTICATION GATE CHECK        */}
+        {/* ============================================================== */}
+        {isProtectedEducationPage && !user && (
+          <EducationLoginGate
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onNavigateHome={() => handleNavigate('home')}
+          />
+        )}
+
+        {/* AUTHENTICATED EDUCATION DASHBOARD VIEW */}
+        {currentPage === 'dashboard' && user && (
+          <DashboardView
+            lessonPlans={lessonPlans}
+            onNavigate={(page) => {
+              if (page === 'home') {
+                handleNavigate('home');
+              } else if (page === 'create' || page === 'saved' || page === 'settings' || page === 'students') {
+                handleNavigate(page);
+              } else if (page === 'admin') {
+                handleNavigate('admin');
+              } else {
+                handleNavigate('dashboard');
+              }
+            }}
+            onSelectPlanToEdit={handleEditPlan}
+            onSelectPlanToPrint={handlePrintPlan}
+          />
+        )}
+
+        {/* AUTHENTICATED EDUCATION WORKSPACE: Lesson Plans, Students, and Settings */}
+        {isLessonPlanWorkspace && user && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             
-            {/* Dedicated Workspace Navigation Bar with Deep Navy and Teal Palette */}
+            {/* Dedicated Workspace Navigation Bar with Return to Newspaper */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
               <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
-                {/* Return to Dashboard */}
+                
+                {/* Return to Public Newspaper */}
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('home')}
+                  className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shrink-0 text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer border border-slate-200"
+                  title="Return to Public Newspaper Homepage"
+                >
+                  <Newspaper className="w-4 h-4 text-teal-700" />
+                  <span>Newspaper</span>
+                </button>
+
+                {/* Dashboard Home */}
                 <button
                   type="button"
                   onClick={() => setCurrentPage('dashboard')}
@@ -444,7 +438,21 @@ function AppContent() {
                   )}
                 </button>
 
-                {/* Tab 3: Settings & Preferences */}
+                {/* Tab 3: Students Identification */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('students')}
+                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                    currentPage === 'students'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-teal-400" />
+                  <span>Students</span>
+                </button>
+
+                {/* Tab 4: Settings & Preferences */}
                 <button
                   type="button"
                   onClick={() => setCurrentPage('settings')}
@@ -488,12 +496,22 @@ function AppContent() {
               />
             )}
 
-            {/* Sub-View 3: Preferences / Settings */}
+            {/* Sub-View 3: Students Identification */}
+            {currentPage === 'students' && (
+              <StudentsIdentificationView
+                lessonPlans={lessonPlans}
+                onNavigate={(page) => handleNavigate(page as AppPage)}
+                onSelectPlanToEdit={handleEditPlan}
+                onCreateNewWithStudents={handleCreateNew}
+              />
+            )}
+
+            {/* Sub-View 4: Preferences / Settings */}
             {currentPage === 'settings' && (
               <SettingsView
                 totalPlansCount={lessonPlans.length}
                 onNavigate={(page) => {
-                  if (page === 'saved' || page === 'create' || page === 'settings') {
+                  if (page === 'saved' || page === 'create' || page === 'settings' || page === 'students') {
                     setCurrentPage(page);
                   } else {
                     setCurrentPage('dashboard');
@@ -506,45 +524,28 @@ function AppContent() {
           </div>
         )}
 
-        {/* 
-          PRESERVED BUT HIDDEN SECTIONS:
-          The following components are preserved in the codebase for future administrator activation 
-          as required by instructions, but remain completely hidden from all standard user paths.
-        */}
-        {false && (
-          <div style={{ display: 'none' }}>
-            <StudentsIdentificationView
-              lessonPlans={lessonPlans}
-              onNavigate={(page) => setCurrentPage(page as AppPage)}
-              onSelectPlanToEdit={handleEditPlan}
-              onCreateNewWithStudents={handleCreateNew}
-            />
-            <Sidebar
-              currentPage="create"
-              onNavigate={(page) => setCurrentPage(page as AppPage)}
-              savedCount={lessonPlans.length}
-              isCollapsed={false}
-              onToggleCollapse={() => {}}
-              isMobileOpen={false}
-              onCloseMobile={() => {}}
-              onOpenAuth={() => {}}
-            />
-            <Header
-              currentPage="create"
-              onOpenMobileMenu={() => {}}
-              onOpenAuth={() => {}}
-              isSidebarCollapsed={false}
-            />
-            {FEATURE_FLAGS.ENABLE_ADMIN_UI && isAdmin && (
+        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or Header Admin button */}
+        {currentPage === 'admin' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            {isAdmin && user ? (
               <AdminDashboardView
                 lessonPlans={lessonPlans}
-                onNavigate={(page) => setCurrentPage(page as AppPage)}
+                onNavigate={(page) => {
+                  if (page === 'create' || page === 'saved' || page === 'settings' || page === 'students') {
+                    handleNavigate(page);
+                  } else {
+                    handleNavigate('dashboard');
+                  }
+                }}
+                onLogout={async () => {
+                  await signOutUser();
+                  handleNavigate('home');
+                }}
               />
-            )}
-            {FEATURE_FLAGS.ENABLE_ADMIN_UI && (
-              <AuthModal
-                isOpen={false}
-                onClose={() => {}}
+            ) : (
+              <AdminPortalGateway
+                onNavigate={handleNavigate}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
               />
             )}
           </div>

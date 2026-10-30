@@ -13,7 +13,7 @@ import {
   Share2
 } from 'lucide-react';
 import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
-import { getBlogPosts } from '../services/blogService';
+import { getBlogPosts, subscribeToBlogPosts } from '../services/blogService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { formatPublicationDate } from '../utils/dateUtils';
 
@@ -29,23 +29,18 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
 
-  const loadPublishedPosts = () => {
-    getBlogPosts(false).then((data) => {
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsLoading(true);
+
+    // Real-time Firestore subscription across all devices
+    const unsubscribe = subscribeToBlogPosts((data) => {
       setPosts(data);
       setIsLoading(false);
-    });
-  };
+    }, false); // Published posts only for public view
 
-  useEffect(() => {
-    loadPublishedPosts();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    const handleSync = () => {
-      loadPublishedPosts();
-    };
-    window.addEventListener('blog_posts_updated', handleSync);
     return () => {
-      window.removeEventListener('blog_posts_updated', handleSync);
+      unsubscribe();
     };
   }, []);
 

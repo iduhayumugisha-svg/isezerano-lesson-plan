@@ -20,6 +20,9 @@ export interface BlogPost {
   tags?: string[];
   views?: number;
   readTimeMinutes?: number;
+  thumbnailAuditStatus?: 'verified' | 'upgraded' | 'extracted_from_content' | 'using_fallback';
+  needsImageReview?: boolean;
+  thumbnailAuditNote?: string;
 }
 
 export const BLOG_CATEGORIES = [

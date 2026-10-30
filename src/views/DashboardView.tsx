@@ -7,13 +7,15 @@ import {
   ArrowRight, 
   CheckCircle2, 
   FileCheck, 
-  Search,
-  Settings,
-  FolderClock,
-  ArrowLeft,
-  Sparkles,
-  ShieldCheck,
-  Home
+  Search, 
+  Settings, 
+  FolderClock, 
+  ArrowLeft, 
+  Sparkles, 
+  ShieldCheck, 
+  Home,
+  Users,
+  Newspaper
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
 import { SaasNavPage } from '../components/Sidebar';
@@ -23,7 +25,7 @@ import { FEATURE_FLAGS } from '../config/features';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];
-  onNavigate: (page: SaasNavPage | 'home') => void;
+  onNavigate: (page: SaasNavPage | 'home' | 'students') => void;
   onSelectPlanToEdit: (plan: LessonPlan) => void;
   onSelectPlanToPrint: (plan: LessonPlan) => void;
 }
@@ -41,7 +43,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const primaryPlans = lessonPlans.filter((p) => p.educationLevel === 'Primary').length;
   const secondaryPlans = lessonPlans.filter((p) => p.educationLevel === 'Secondary').length;
 
-  // Available Education Modules in the Dashboard (Students Identification intentionally excluded to keep it hidden)
+  // Available Education Modules in the Dashboard
   const educationModules = [
     {
       id: 'create' as SaasNavPage,
@@ -58,10 +60,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       title: t.moduleSavedTitle || 'Saved Lesson Plans & Export',
       badge: `${totalPlans} ${t.totalPlans || 'Plans'}`,
       badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
-      description: t.moduleSavedDesc || 'Search, preview, duplicate, edit, and print or export all your prepared lesson plans as official PDF tables.',
+      description: t.moduleSavedDesc || 'Search, preview, duplicate, edit, and print or export all your prepared lesson plans as official PDF and Word tables.',
       icon: FolderClock,
       iconColor: 'bg-slate-100 text-slate-800 group-hover:bg-slate-800 group-hover:text-white',
       buttonText: t.browsePlans || 'Browse Saved Plans'
+    },
+    {
+      id: 'students' as any,
+      title: 'Students Identification',
+      badge: 'CBC Demographics',
+      badgeColor: 'bg-indigo-50 text-indigo-900 border-indigo-200',
+      description: 'Manage class enrollment totals, gender distribution (boys & girls), and academic term learner counts for REB CBC compliance.',
+      icon: Users,
+      iconColor: 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-700 group-hover:text-white',
+      buttonText: 'Manage Student Records'
     },
     {
       id: 'settings' as SaasNavPage,
@@ -100,12 +112,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onClick={() => onNavigate('home')}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            <Home className="w-3.5 h-3.5" />
-            <span>Return to Home</span>
+            <Newspaper className="w-3.5 h-3.5 text-teal-700" />
+            <span>← Return to Public Newspaper</span>
           </button>
           <span className="text-slate-300">/</span>
           <span className="text-xs font-bold text-slate-900">
-            {t.navDashboard || 'Application Dashboard'}
+            {t.navDashboard || 'Teacher Application Dashboard'}
           </span>
         </div>
 
@@ -145,7 +157,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Teacher Application Dashboard
           </h1>
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-            ISEZERANO ONLINE is a specialized pedagogical platform designed to help primary and secondary school educators in Rwanda prepare structured, REB-compliant 8-column lesson plans with ease. Access your tools, saved records, and clean, printable A4 exports directly from the dashboard.
+            ISEZERANO ONLINE is a specialized pedagogical platform designed to help primary and secondary school educators in Rwanda prepare structured, REB-compliant 8-column lesson plans with ease. Access your tools, saved records, student demographics, and clean, printable A4 exports directly from this dashboard.
           </p>
 
           <div className="pt-2 flex flex-wrap gap-3">
@@ -162,6 +174,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <Search className="w-4 h-4 text-teal-400" />
               <span>{t.browsePlans || 'Browse Saved Plans'} ({totalPlans})</span>
+            </button>
+            <button
+              onClick={() => onNavigate('students')}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-900/60 hover:bg-indigo-900 text-indigo-200 transition-all border border-indigo-700 cursor-pointer"
+            >
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span>Students Identification</span>
             </button>
           </div>
         </div>
@@ -187,10 +206,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
               <h3 className="text-base font-bold text-white mt-0.5">
-                Manage Homepage Photos & Administration
+                Manage Homepage Photos, Blog, Ads & Administration
               </h3>
               <p className="text-xs text-slate-300">
-                Upload, replace, reorder, delete, and publish homepage hero slider photos and configure curriculum settings.
+                Create & edit blog articles, configure ads, customize website appearance, and manage hero photos.
               </p>
             </div>
           </div>
@@ -199,7 +218,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all cursor-pointer shrink-0 active:scale-98"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Open Photo Manager →</span>
+            <span>Open Admin Portal →</span>
           </button>
         </div>
       )}
@@ -217,7 +236,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {educationModules.map((mod) => {
             const Icon = mod.icon;
             return (
@@ -274,7 +293,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-3 flex items-baseline space-x-2">
             <span className="text-3xl font-bold text-slate-900">{totalPlans}</span>
-            <span className="text-xs text-slate-500">stored locally</span>
+            <span className="text-xs text-slate-500">stored</span>
           </div>
         </div>
 
