@@ -8,7 +8,8 @@ import {
 import { getAuth } from 'firebase/auth';
 import { 
   WebsiteDesignSettings, 
-  DEFAULT_WEBSITE_DESIGN 
+  DEFAULT_WEBSITE_DESIGN,
+  DEFAULT_ANNOUNCEMENT_STRIP
 } from '../types/websiteDesign';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 
@@ -78,6 +79,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
         typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(parsed.typography || {}) },
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
+        announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
       };
@@ -98,6 +100,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
+          announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
@@ -147,6 +150,7 @@ export const subscribeToWebsiteDesign = (
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
+          announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };

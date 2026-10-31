@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Calendar, 
   Clock, 
   Eye, 
   User, 
@@ -155,40 +154,24 @@ export const BlogPostDetailView: React.FC<BlogPostDetailViewProps> = ({
           <span>Back to Articles & School Journal</span>
         </button>
 
-        {/* Category Badge & Meta Info */}
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mb-3">
-          <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
-            {post.category}
-          </span>
+        {/* Article Meta: Elapsed publication age and view count only */}
+        <div className="flex items-center space-x-2.5 text-xs text-slate-500 mb-3">
           {(() => {
             const dateInfo = formatPublicationDate(post.publishedAt);
-            if (!dateInfo) {
-              return post.status === 'draft' ? (
-                <>
-                  <span>•</span>
-                  <span className="italic text-amber-600 font-semibold">Draft Preview</span>
-                </>
-              ) : null;
-            }
+            const timeAgoText = dateInfo?.relativeTime || (post.status === 'draft' ? 'Draft preview' : 'Recently published');
             return (
-              <>
-                <span>•</span>
-                <span className="flex items-center space-x-1" title={`${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}`}>
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>{dateInfo.formattedDate}</span>
-                  <span className="text-teal-700 font-medium">({dateInfo.relativeTime})</span>
-                </span>
-              </>
+              <span 
+                className="flex items-center space-x-1.5 text-slate-600 font-medium"
+                title={dateInfo?.formattedDateFull ? `${dateInfo.formattedDateFull} at ${dateInfo.formattedTime}` : undefined}
+              >
+                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>{timeAgoText}</span>
+              </span>
             );
           })()}
-          <span>•</span>
-          <span className="flex items-center space-x-1">
-            <Clock className="w-3.5 h-3.5" />
-            <span>{post.readTimeMinutes || 4} min read</span>
-          </span>
-          <span>•</span>
-          <span className="flex items-center space-x-1">
-            <Eye className="w-3.5 h-3.5" />
+          <span className="text-slate-300">•</span>
+          <span className="flex items-center space-x-1.5 text-slate-600 font-medium">
+            <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>{post.views || 0} views</span>
           </span>
         </div>

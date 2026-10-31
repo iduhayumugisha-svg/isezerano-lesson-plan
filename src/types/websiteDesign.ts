@@ -89,11 +89,42 @@ export interface WebsiteBrandingSettings {
   footerCopyright: string;        // Copyright statement in footer
 }
 
+export interface AnnouncementItem {
+  id: string;
+  text: string;
+  linkUrl?: string; // Optional internal (/blog/slug) or external URL
+  badge?: string;   // Optional badge (e.g. "AMAKURU", "UBUREZI", "URWANDA", "CBC")
+  active?: boolean; // Whether this specific message is active
+}
+
+export interface AnnouncementStripSettings {
+  enabled: boolean;
+  messages: AnnouncementItem[];
+  
+  // Animation & Behavior
+  transitionEffect: 'slide' | 'fade'; // Slide or Fade animation
+  rotationIntervalSeconds: number;     // Seconds between auto-rotations (e.g. 5)
+  pauseOnHover: boolean;
+  showDismissButton: boolean;
+  showNavigationArrows: boolean;
+  showBadgePill: boolean;
+
+  // Typography & Appearance
+  fontSize: number;                   // In px: 11px to 18px (default 13)
+  fontFamily: string;                 // Font family string
+  textColor: string;                  // Hex code, e.g. #ffffff
+  backgroundColor: string;            // Hex code, e.g. #0f766e
+  textAlign: 'left' | 'center' | 'right';
+  fontWeight: 'normal' | 'medium' | 'semibold' | 'bold';
+  heightPadding: 'compact' | 'normal' | 'spacious';
+}
+
 export interface WebsiteDesignSettings {
   branding: WebsiteBrandingSettings;
   colors: WebsiteColorSettings;
   typography: WebsiteTypographySettings;
   logo: WebsiteLogoSettings;
+  announcements?: AnnouncementStripSettings;
   updatedAt: string;
   updatedBy: string;
 }
@@ -163,6 +194,43 @@ export const DEFAULT_WEBSITE_TYPOGRAPHY: WebsiteTypographySettings = {
   lineHeight: 'normal'
 };
 
+export const DEFAULT_ANNOUNCEMENT_STRIP: AnnouncementStripSettings = {
+  enabled: true,
+  messages: [
+    {
+      id: 'ann-1',
+      text: 'Ikaze kuri ISEZERANO ONLINE – Soma amakuru yizewe kandi utegure imfashanyigisho za CBC!',
+      badge: 'AMAKURU',
+      active: true
+    },
+    {
+      id: 'ann-2',
+      text: 'Urubuga rw’umwimerere rwubatswe na mwarimu wa GS GITUMBA (Buyoga, Rulindo) gufasha abarezi b’u Rwanda.',
+      badge: 'UBUREZI',
+      active: true
+    },
+    {
+      id: 'ann-3',
+      text: 'Integanyanyigisho na Porogaramu y’Amasomo byubahirije amabwiriza ya REB & MINEDUC 2026.',
+      badge: 'CBC 2026',
+      active: true
+    }
+  ],
+  transitionEffect: 'slide',
+  rotationIntervalSeconds: 5,
+  pauseOnHover: true,
+  showDismissButton: true,
+  showNavigationArrows: true,
+  showBadgePill: true,
+  fontSize: 13,
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  textColor: '#ffffff',
+  backgroundColor: '#0f766e',
+  textAlign: 'center',
+  fontWeight: 'semibold',
+  heightPadding: 'normal'
+};
+
 export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
   logoUrl: '/isezerano-online-logo.jpg',
   isCustomLogo: false,
@@ -182,6 +250,7 @@ export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   colors: DEFAULT_WEBSITE_COLORS,
   typography: DEFAULT_WEBSITE_TYPOGRAPHY,
   logo: DEFAULT_WEBSITE_LOGO,
+  announcements: DEFAULT_ANNOUNCEMENT_STRIP,
   updatedAt: '2026-01-01T00:00:00.000Z',
   updatedBy: 'system'
 };

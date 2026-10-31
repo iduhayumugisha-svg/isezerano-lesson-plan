@@ -5,11 +5,14 @@ import {
   WebsiteTypographySettings, 
   WebsiteLogoSettings,
   WebsiteBrandingSettings,
+  AnnouncementStripSettings,
+  AnnouncementItem,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
   DEFAULT_WEBSITE_LOGO,
-  DEFAULT_WEBSITE_BRANDING
+  DEFAULT_WEBSITE_BRANDING,
+  DEFAULT_ANNOUNCEMENT_STRIP
 } from '../types/websiteDesign';
 import { 
   getWebsiteDesignSettings, 
@@ -37,8 +40,13 @@ interface WebsiteDesignContextType {
   updateDraftColors: (colors: Partial<WebsiteColorSettings>) => void;
   updateDraftTypography: (typography: Partial<WebsiteTypographySettings>) => void;
   updateDraftLogo: (logo: Partial<WebsiteLogoSettings>) => void;
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'all') => void;
-  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo', fieldKey: string) => void;
+  updateDraftAnnouncements: (announcements: Partial<AnnouncementStripSettings>) => void;
+  addAnnouncementMessage: (text: string, badge?: string, linkUrl?: string) => void;
+  updateAnnouncementMessage: (id: string, updates: Partial<AnnouncementItem>) => void;
+  deleteAnnouncementMessage: (id: string) => void;
+  reorderAnnouncementMessage: (id: string, direction: 'up' | 'down') => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'all') => void;
+  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   publishSettings: () => Promise<{ success: boolean; error?: string }>;
@@ -47,6 +55,7 @@ interface WebsiteDesignContextType {
 
   // Convenience Getters
   branding: WebsiteBrandingSettings;
+  announcements: AnnouncementStripSettings;
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
   colors: WebsiteColorSettings;
@@ -167,7 +176,123 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'all') => {
+  const updateDraftAnnouncements = (partialAnnouncements: Partial<AnnouncementStripSettings>) => {
+    setDraftSettings(prev => {
+      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
+      const nextAnnouncements: AnnouncementStripSettings = {
+        ...current,
+        ...partialAnnouncements
+      };
+      const next = {
+        ...prev,
+        announcements: nextAnnouncements,
+        // Also keep legacy branding fields synchronized
+        branding: {
+          ...prev.branding,
+          headerAnnouncement: nextAnnouncements.messages[0]?.text || prev.branding?.headerAnnouncement || '',
+          headerAnnouncementEnabled: nextAnnouncements.enabled
+        }
+      };
+      return next;
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const addAnnouncementMessage = (text: string, badge?: string, linkUrl?: string) => {
+    if (!text.trim()) return;
+    setDraftSettings(prev => {
+      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
+      const newMsg: AnnouncementItem = {
+        id: `ann-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        text: text.trim(),
+        badge: badge?.trim() || undefined,
+        linkUrl: linkUrl?.trim() || undefined,
+        active: true
+      };
+      const updatedMessages = [...current.messages, newMsg];
+      const nextAnnouncements = { ...current, messages: updatedMessages };
+      return {
+        ...prev,
+        announcements: nextAnnouncements,
+        branding: {
+          ...prev.branding,
+          headerAnnouncement: updatedMessages[0]?.text || '',
+          headerAnnouncementEnabled: nextAnnouncements.enabled
+        }
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateAnnouncementMessage = (id: string, updates: Partial<AnnouncementItem>) => {
+    setDraftSettings(prev => {
+      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
+      const updatedMessages = current.messages.map(msg => 
+        msg.id === id ? { ...msg, ...updates } : msg
+      );
+      const nextAnnouncements = { ...current, messages: updatedMessages };
+      return {
+        ...prev,
+        announcements: nextAnnouncements,
+        branding: {
+          ...prev.branding,
+          headerAnnouncement: updatedMessages[0]?.text || '',
+          headerAnnouncementEnabled: nextAnnouncements.enabled
+        }
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const deleteAnnouncementMessage = (id: string) => {
+    setDraftSettings(prev => {
+      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
+      const filtered = current.messages.filter(msg => msg.id !== id);
+      const nextAnnouncements = { ...current, messages: filtered };
+      return {
+        ...prev,
+        announcements: nextAnnouncements,
+        branding: {
+          ...prev.branding,
+          headerAnnouncement: filtered[0]?.text || '',
+          headerAnnouncementEnabled: nextAnnouncements.enabled
+        }
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const reorderAnnouncementMessage = (id: string, direction: 'up' | 'down') => {
+    setDraftSettings(prev => {
+      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
+      const msgs = [...current.messages];
+      const index = msgs.findIndex(m => m.id === id);
+      if (index === -1) return prev;
+      if (direction === 'up' && index > 0) {
+        const temp = msgs[index];
+        msgs[index] = msgs[index - 1];
+        msgs[index - 1] = temp;
+      } else if (direction === 'down' && index < msgs.length - 1) {
+        const temp = msgs[index];
+        msgs[index] = msgs[index + 1];
+        msgs[index + 1] = temp;
+      } else {
+        return prev;
+      }
+      return {
+        ...prev,
+        announcements: { ...current, messages: msgs }
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -182,6 +307,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       if (section === 'logo' || section === 'all') {
         updated.logo = { ...DEFAULT_WEBSITE_LOGO };
       }
+      if (section === 'announcements' || section === 'all') {
+        updated.announcements = { ...DEFAULT_ANNOUNCEMENT_STRIP };
+      }
       applyDesignCssVariables(updated);
       return updated;
     });
@@ -189,7 +317,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo', fieldKey: string) => {
+  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements', fieldKey: string) => {
     setDraftSettings(prev => {
       const updated = { ...prev };
       if (section === 'branding') {
@@ -200,6 +328,8 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         (updated.typography as any)[fieldKey] = (DEFAULT_WEBSITE_TYPOGRAPHY as any)[fieldKey];
       } else if (section === 'logo') {
         (updated.logo as any)[fieldKey] = (DEFAULT_WEBSITE_LOGO as any)[fieldKey];
+      } else if (section === 'announcements') {
+        (updated.announcements as any)[fieldKey] = (DEFAULT_ANNOUNCEMENT_STRIP as any)[fieldKey];
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -299,6 +429,11 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         updateDraftColors,
         updateDraftTypography,
         updateDraftLogo,
+        updateDraftAnnouncements,
+        addAnnouncementMessage,
+        updateAnnouncementMessage,
+        deleteAnnouncementMessage,
+        reorderAnnouncementMessage,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
@@ -307,6 +442,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         uploadLogoFile,
         reloadSettings: loadSettings,
         branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
+        announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,
         colors: activeSettings.colors,

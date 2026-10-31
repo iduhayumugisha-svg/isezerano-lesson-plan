@@ -19,6 +19,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { TopAnnouncementTicker } from './TopAnnouncementTicker';
 
 export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'students' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'blog';
 
@@ -78,33 +79,9 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     handleNavClick('home');
   };
 
-  const showAnnouncement = branding?.headerAnnouncementEnabled && branding?.headerAnnouncement && !dismissAnnouncement;
-
   return (
     <>
-      {showAnnouncement && (
-        <div 
-          className="no-print w-full py-1.5 px-4 text-xs font-semibold flex items-center justify-between transition-colors z-50 border-b"
-          style={{
-            backgroundColor: colors.accentBg,
-            borderColor: colors.cardBorder,
-            color: colors.primaryButtonBg
-          }}
-        >
-          <div className="max-w-7xl mx-auto flex items-center justify-center space-x-2 w-full text-center">
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
-            <span>{branding.headerAnnouncement}</span>
-          </div>
-          <button 
-            type="button" 
-            onClick={() => setDismissAnnouncement(true)}
-            className="text-slate-400 hover:text-slate-700 ml-2 p-0.5 cursor-pointer"
-            aria-label="Dismiss banner"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+      <TopAnnouncementTicker onNavigate={handleNavClick} />
 
       <header 
         className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"

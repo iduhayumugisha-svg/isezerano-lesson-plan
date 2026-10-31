@@ -34,6 +34,7 @@ import {
   WebsiteLogoSettings
 } from '../types/websiteDesign';
 import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
+import { TopAnnouncementStripManager } from './TopAnnouncementStripManager';
 
 // Preset educational palettes for 1-click theme switching
 const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
@@ -160,7 +161,7 @@ export const WebsiteDesignManager: React.FC = () => {
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'branding' | 'logo' | 'colors' | 'typography' | 'preview'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'preview'>('branding');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -419,6 +420,22 @@ export const WebsiteDesignManager: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setActiveTab('announcements')}
+            className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'announcements'
+                ? 'border-teal-600 text-teal-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>2. Top Announcement Strip</span>
+            {draftSettings.announcements?.enabled && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('logo')}
             className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'logo'
@@ -427,7 +444,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>2. Website Logo</span>
+            <span>3. Website Logo</span>
             {draftSettings.logo.isCustomLogo && (
               <span className="w-2 h-2 rounded-full bg-teal-500" />
             )}
@@ -443,7 +460,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Palette className="w-4 h-4" />
-            <span>3. Colors & Appearance</span>
+            <span>4. Colors & Appearance</span>
           </button>
 
           <button
@@ -456,7 +473,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Type className="w-4 h-4" />
-            <span>4. Typography & Sizing</span>
+            <span>5. Typography & Sizing</span>
           </button>
 
           <button
@@ -469,7 +486,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Eye className="w-4 h-4" />
-            <span>5. Live Preview</span>
+            <span>6. Live Preview</span>
           </button>
         </div>
 
@@ -642,41 +659,41 @@ export const WebsiteDesignManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Announcement Banner Box */}
-          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          {/* Top Announcement Strip Gateway Card */}
+          <div className="bg-gradient-to-r from-teal-50 via-slate-50 to-emerald-50 p-5 rounded-2xl border border-teal-200 space-y-3 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-teal-100">
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-4 h-4 text-amber-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Top Announcement Strip
+                <h4 className="text-xs font-bold uppercase tracking-wider text-teal-950">
+                  Top Announcement Strip &amp; Animated Ticker
                 </h4>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={draftSettings.branding?.headerAnnouncementEnabled ?? false}
-                  onChange={(e) => updateDraftBranding({ headerAnnouncementEnabled: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
-                <span className="ml-2 text-xs font-semibold text-slate-600">
-                  {draftSettings.branding?.headerAnnouncementEnabled ? 'Visible' : 'Hidden'}
-                </span>
-              </label>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto ${
+                draftSettings.announcements?.enabled
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-slate-200 text-slate-600'
+              }`}>
+                {draftSettings.announcements?.enabled ? 'Strip Visible (Live)' : 'Strip Hidden'}
+              </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Announcement Message
-              </label>
-              <input
-                type="text"
-                value={draftSettings.branding?.headerAnnouncement || ''}
-                onChange={(e) => updateDraftBranding({ headerAnnouncement: e.target.value })}
-                placeholder="e.g. Welcome to Term 2! Prepare official Rwanda CBC Lesson Plans with confidence."
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">Appears as a clean top notification strip above the header on public pages.</p>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Manage multiple rotating announcements, customize font size, typeface, colors, sliding or fading transitions, and rotation speed.
+            </p>
+
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span className="text-[11px] text-slate-500 font-medium">
+                {draftSettings.announcements?.messages?.length || 0} announcement message(s) configured
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('announcements')}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <span>Customize Announcement Ticker &amp; Fonts</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
@@ -711,7 +728,12 @@ export const WebsiteDesignManager: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: WEBSITE LOGO MANAGER */}
+      {/* TAB 2: TOP ANNOUNCEMENT STRIP MANAGER */}
+      {activeTab === 'announcements' && (
+        <TopAnnouncementStripManager />
+      )}
+
+      {/* TAB 3: WEBSITE LOGO MANAGER */}
       {activeTab === 'logo' && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8">
           
