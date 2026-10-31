@@ -28,13 +28,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     ? adsSettings.belowHeaderAd 
     : adsSettings.aboveFooterAd;
 
-  // Master disabled or slot disabled: render nothing
-  if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
-    return null;
-  }
-
-  // Handle script / code execution inside DOM safely
+  // Handle script / code execution inside DOM safely (called unconditionally before returns)
   useEffect(() => {
+    if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
+      return;
+    }
+
     if (slotConfig.type === 'code' && slotConfig.code && codeContainerRef.current) {
       const container = codeContainerRef.current;
       container.innerHTML = '';
@@ -63,7 +62,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
         container.appendChild(newScript);
       });
     }
-  }, [slotConfig.code, slotConfig.type]);
+  }, [adsSettings.masterEnabled, slotConfig?.enabled, slotConfig?.type, slotConfig?.code]);
+
+  // Master disabled or slot disabled: render nothing
+  if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
+    return null;
+  }
 
   const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
 

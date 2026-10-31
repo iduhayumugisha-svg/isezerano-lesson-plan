@@ -71,6 +71,24 @@ async function runPrerender() {
       fs.writeFileSync(path.join(blogDistDir, `${post.id}.html`), postHtml, 'utf-8');
     }
 
+    // 4. Also write any known slug aliases
+    const aliases = [];
+    if (post.id === 'post-1793332078487') {
+      aliases.push('ai-10-zingenzi-zifasha-abanyeshuri-nabarimu-mu-burezi');
+      aliases.push('ai-10-zingenzi-zifasha-abanyeshuri-nabarimu');
+    }
+    for (const alias of aliases) {
+      if (alias !== post.slug) {
+        const aliasDir = path.join(blogDistDir, alias);
+        if (!fs.existsSync(aliasDir)) {
+          fs.mkdirSync(aliasDir, { recursive: true });
+        }
+        const aliasHtml = renderBlogPostMetadata(baseHtml, post, alias);
+        fs.writeFileSync(path.join(aliasDir, 'index.html'), aliasHtml, 'utf-8');
+        fs.writeFileSync(path.join(blogDistDir, `${alias}.html`), aliasHtml, 'utf-8');
+      }
+    }
+
     console.log(`✅ Prerendered [${post.slug}]:`);
     console.log(`   Image: ${post.thumbnailUrl}`);
     console.log(`   Valid HTTPS: ${isValidHttpsImageUrl(post.thumbnailUrl)}`);

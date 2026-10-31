@@ -417,11 +417,11 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
 
   // Editable School & Teacher Name with persistent preference storage
   const [customTeacherName, setCustomTeacherName] = useState<string>(() => {
-    return plan.teacherName || localStorage.getItem(PREF_TEACHER_KEY) || '';
+    return plan?.teacherName || localStorage.getItem(PREF_TEACHER_KEY) || '';
   });
 
   const [customSchoolName, setCustomSchoolName] = useState<string>(() => {
-    return plan.schoolName || localStorage.getItem(PREF_SCHOOL_KEY) || 'GS GITUMBA';
+    return plan?.schoolName || localStorage.getItem(PREF_SCHOOL_KEY) || 'GS GITUMBA';
   });
 
   const [teacherSaved, setTeacherSaved] = useState(false);
@@ -433,6 +433,8 @@ export const PrintLessonPlanModal: React.FC<PrintLessonPlanModalProps> = ({ plan
   const [statusFeedback, setStatusFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  if (!plan) return null;
 
   // Auto-save teacher name preference
   const handleTeacherNameChange = (name: string) => {
