@@ -17,30 +17,57 @@ import { getBlogPosts, subscribeToBlogPosts } from '../services/blogService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { formatPublicationDate } from '../utils/dateUtils';
 
+import { NewsCategory, DEFAULT_NEWS_CATEGORIES } from '../types/category';
+import { subscribeToNewsCategories } from '../services/categoryService';
+
 interface BlogListViewProps {
   onSelectPost: (slug: string) => void;
   onNavigate: (page: any) => void;
+  selectedCategory?: string;
+  onSelectCategory?: (category: string) => void;
 }
 
-export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavigate }) => {
+export const BlogListView: React.FC<BlogListViewProps> = ({ 
+  onSelectPost, 
+  onNavigate,
+  selectedCategory: propCategory,
+  onSelectCategory: propOnSelectCategory
+}) => {
   const { colors, branding } = useWebsiteDesign();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
+  const [localCategory, setLocalCategory] = useState<string>('All Categories');
+  const [categories, setCategories] = useState<NewsCategory[]>(DEFAULT_NEWS_CATEGORIES);
+
+  const activeCategory = propCategory ?? localCategory;
+
+  const handleCategoryChange = (cat: string) => {
+    if (propOnSelectCategory) {
+      propOnSelectCategory(cat);
+    } else {
+      setLocalCategory(cat);
+    }
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setIsLoading(true);
 
     // Real-time Firestore subscription across all devices
-    const unsubscribe = subscribeToBlogPosts((data) => {
+    const unsubscribePosts = subscribeToBlogPosts((data) => {
       setPosts(data);
       setIsLoading(false);
     }, false); // Published posts only for public view
 
+    // Real-time Firestore subscription for categories
+    const unsubscribeCats = subscribeToNewsCategories((cats) => {
+      setCategories(cats);
+    });
+
     return () => {
-      unsubscribe();
+      unsubscribePosts();
+      unsubscribeCats();
     };
   }, []);
 
@@ -49,8 +76,16 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
       post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       post.excerpt.toLowerCase().includes(searchTerm.toLowerCase()) ||
       post.tags?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCat = 
-      selectedCategory === 'All Categories' || post.category === selectedCategory;
+
+    const isAll = !activeCategory || activeCategory === 'All Categories' || activeCategory === 'Byose' || activeCategory === 'Byose (All Stories)';
+    const postCat = (post.category || '').toLowerCase().trim();
+    const targetCat = (activeCategory || '').toLowerCase().trim();
+    const matchesCat = isAll || 
+      postCat === targetCat || 
+      postCat.includes(targetCat) || 
+      targetCat.includes(postCat) ||
+      (post.tags && post.tags.some(t => t.toLowerCase() === targetCat || targetCat.includes(t.toLowerCase())));
+
     return matchesSearch && matchesCat;
   });
 
@@ -97,20 +132,38 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
 
           {/* Category Chips Scroll */}
           <div className="flex items-center space-x-2 overflow-x-auto pt-2 pb-1 scrollbar-none">
-            {BLOG_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-teal-700 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => handleCategoryChange('All Categories')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                activeCategory === 'All Categories' || activeCategory === 'Byose' || activeCategory === 'Byose (All Stories)'
+                  ? 'bg-teal-700 text-white shadow-2xs font-bold'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              Byose (All Categories)
+            </button>
+            {categories.filter((c) => c.enabled !== false).map((cat) => {
+              const isSelected = 
+                activeCategory.toLowerCase() === cat.name.toLowerCase() ||
+                activeCategory.toLowerCase() === cat.slug.toLowerCase() ||
+                (cat.nameEn && activeCategory.toLowerCase() === cat.nameEn.toLowerCase());
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleCategoryChange(cat.name)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-teal-700 text-white shadow-2xs font-bold'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -130,7 +183,7 @@ export const BlogListView: React.FC<BlogListViewProps> = ({ onSelectPost, onNavi
             </p>
             <button
               type="button"
-              onClick={() => { setSearchTerm(''); setSelectedCategory('All Categories'); }}
+              onClick={() => { setSearchTerm(''); handleCategoryChange('All Categories'); }}
               className="px-4 py-2 text-xs font-bold bg-teal-700 text-white rounded-lg hover:bg-teal-600"
             >
               Reset Filters

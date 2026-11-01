@@ -107,6 +107,7 @@ function AppContent() {
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
   const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(() => getInitialBlogSlug());
+  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -269,6 +270,13 @@ function AppContent() {
     }
   };
 
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCategory(cat);
+    if (currentPage !== 'home' && currentPage !== 'blog') {
+      handleNavigate('home');
+    }
+  };
+
   // Protected education routes
   const isProtectedEducationPage = ['dashboard', 'create', 'saved', 'settings', 'students'].includes(currentPage);
   const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'students'].includes(currentPage);
@@ -288,6 +296,8 @@ function AppContent() {
         onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        selectedCategory={selectedCategory}
+        onSelectCategory={handleSelectCategory}
       />
 
       {/* Ad Placement: Below Header */}
@@ -302,6 +312,8 @@ function AppContent() {
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
             onSelectBlogPost={handleSelectBlogPost}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleSelectCategory}
           />
         )}
 
@@ -310,6 +322,8 @@ function AppContent() {
           <BlogListView
             onSelectPost={handleSelectBlogPost}
             onNavigate={handleNavigate}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleSelectCategory}
           />
         )}
 

@@ -209,8 +209,43 @@ async function runVerification() {
     throw new Error('FAILED: App rendered a blank screen on Homepage!');
   }
   console.log(`✓ Homepage rendered successfully (${homeHtml.length} bytes of DOM output).`);
-  console.log(`  Contains header: ${homeHtml.includes('ISEZERANO')}`);
+  console.log(`  Contains newspaper masthead: ${homeHtml.includes('ISEZERANO ONLINE')}`);
   console.log(`  Contains top announcement strip: ${homeHtml.includes('Press') || homeHtml.includes('Ikaze') || homeHtml.includes('Announcement')}`);
+
+  // Test Three-Dot Menu (⋮) in Header
+  const threeDotBtn = appContainer.querySelector('button[title="Account & Platform Menu"]') as HTMLButtonElement;
+  if (!threeDotBtn) {
+    throw new Error('FAILED: Three-dot menu button (⋮) not found in header!');
+  }
+  console.log('✓ Three-dot menu button found in header.');
+
+  // Click three-dot menu to open dropdown
+  await act(async () => {
+    threeDotBtn.click();
+  });
+  const openMenuHtml = appContainer.innerHTML;
+  const hasLoginOption = openMenuHtml.includes('Login / Account');
+  if (!hasLoginOption) {
+    throw new Error('FAILED: Dropdown menu did not reveal Login / Account option when clicked!');
+  }
+  console.log('✓ Clicking three-dot menu opens dropdown containing Login / Account.');
+
+  // Test Dynamic Category Bar in Header
+  const hasCategoryBar = openMenuHtml.includes('Byose (All Stories)') && openMenuHtml.includes('Uburezi');
+  if (!hasCategoryBar) {
+    throw new Error('FAILED: Category bar not displaying in public header!');
+  }
+  console.log('✓ Dynamic news categories bar displayed in header.');
+
+  // Test Footer Prominent Links (About Us, Contact Us, Privacy Policy, Terms)
+  const hasFooterAbout = openMenuHtml.includes('About Us') || openMenuHtml.includes('navAbout');
+  const hasFooterContact = openMenuHtml.includes('Contact Us') || openMenuHtml.includes('navContact');
+  const hasFooterPrivacy = openMenuHtml.includes('Privacy Policy') || openMenuHtml.includes('navPrivacy');
+  const hasFooterTerms = openMenuHtml.includes('Terms') && (openMenuHtml.includes('Conditions') || openMenuHtml.includes('Amategeko'));
+  if (!hasFooterAbout || !hasFooterContact || !hasFooterPrivacy || !hasFooterTerms) {
+    throw new Error('FAILED: Footer missing one or more required institutional links!');
+  }
+  console.log('✓ Footer prominently contains About Us, Contact Us, Privacy Policy, and Terms & Conditions.');
 
   // 3b. Test navigation to /create (Lesson Plan Generator)
   console.log('\nTesting Route: /create (Lesson Plan Generator)');
@@ -256,6 +291,32 @@ async function runVerification() {
   });
   const adminHtml = appContainer.innerHTML;
   console.log(`✓ Admin portal rendered (${adminHtml.length} bytes of DOM).`);
+
+  // 3g. Test CategoryManager component directly
+  console.log('\n--- TEST 3g: CategoryManager Admin Component Verification ---');
+  const { CategoryManager } = await import('../src/components/CategoryManager');
+  const catMgrContainer = window.document.createElement('div');
+  window.document.body.appendChild(catMgrContainer);
+  const catMgrRoot = createRoot(catMgrContainer);
+
+  await act(async () => {
+    catMgrRoot.render(
+      React.createElement(
+        AuthProvider,
+        null,
+        React.createElement(CategoryManager)
+      )
+    );
+  });
+  const catMgrHtml = catMgrContainer.innerHTML;
+  console.log(`✓ CategoryManager rendered successfully (${catMgrHtml.length} bytes).`);
+  console.log(`  Contains Add New Category form: ${catMgrHtml.includes('Add New Category')}`);
+  console.log(`  Contains category list: ${catMgrHtml.includes('Uburezi')}`);
+
+  await act(async () => {
+    catMgrRoot.unmount();
+  });
+  catMgrContainer.remove();
 
   // TEST 4: BlogPostDetailView Meta Cleanliness Test
   console.log('\n--- TEST 4: BlogPostDetailView Header Meta Inspection ---');

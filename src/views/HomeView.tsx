@@ -28,34 +28,58 @@ import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
 import { formatPublicationDate } from '../utils/dateUtils';
 import { normalizeAndUpgradeThumbnailUrl, getSafeFallbackThumbnail } from '../utils/thumbnailUtils';
 
+import { NewsCategory, DEFAULT_NEWS_CATEGORIES } from '../types/category';
+import { subscribeToNewsCategories } from '../services/categoryService';
+
 const CANONICAL_BASE_URL = 'https://isezerano.online';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
   savedPlansCount?: number;
   onSelectBlogPost?: (slug: string) => void;
+  selectedCategory?: string;
+  onSelectCategory?: (category: string) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({ 
   onNavigate, 
-  onSelectBlogPost 
+  onSelectBlogPost,
+  selectedCategory: propCategory,
+  onSelectCategory: propOnSelectCategory
 }) => {
   const { colors, typography, branding } = useWebsiteDesign();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
+  const [localCategory, setLocalCategory] = useState<string>('All Categories');
+  const [categories, setCategories] = useState<NewsCategory[]>(DEFAULT_NEWS_CATEGORIES);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
+  const activeCategory = propCategory ?? localCategory;
+
+  const handleCategoryChange = (cat: string) => {
+    if (propOnSelectCategory) {
+      propOnSelectCategory(cat);
+    } else {
+      setLocalCategory(cat);
+    }
+  };
+
   useEffect(() => {
-    // Real-time Firestore subscription across all devices
-    const unsubscribe = subscribeToBlogPosts((allPosts) => {
+    // Real-time Firestore subscription for articles across all devices
+    const unsubscribePosts = subscribeToBlogPosts((allPosts) => {
       setPosts(allPosts);
       setIsLoading(false);
     }, false); // only published articles for public readers
 
+    // Real-time Firestore subscription for categories
+    const unsubscribeCats = subscribeToNewsCategories((cats) => {
+      setCategories(cats);
+    });
+
     return () => {
-      unsubscribe();
+      unsubscribePosts();
+      unsubscribeCats();
     };
   }, []);
 
@@ -91,7 +115,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // Filter posts by category and search query
   const filteredPosts = posts.filter((p) => {
-    const matchesCategory = selectedCategory === 'All Categories' || p.category === selectedCategory;
+    const isAll = !activeCategory || activeCategory === 'All Categories' || activeCategory === 'Byose' || activeCategory === 'Byose (All Stories)';
+    const postCat = (p.category || '').toLowerCase().trim();
+    const targetCat = (activeCategory || '').toLowerCase().trim();
+    
+    // Check direct equality, slug equality, or tags
+    const matchesCategory = isAll || 
+      postCat === targetCat || 
+      postCat.includes(targetCat) || 
+      targetCat.includes(postCat) ||
+      (p.tags && p.tags.some(t => t.toLowerCase() === targetCat || targetCat.includes(t.toLowerCase())));
+
     const matchesQuery = 
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -188,20 +222,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           {/* Category Navigation Bar */}
           <div className="pt-2 flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 border-t border-slate-100">
-            {BLOG_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100/90 text-slate-700 hover:bg-slate-200/90 hover:text-slate-900'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => handleCategoryChange('All Categories')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                activeCategory === 'All Categories' || activeCategory === 'Byose' || activeCategory === 'Byose (All Stories)'
+                  ? 'bg-slate-900 text-white shadow-xs font-bold'
+                  : 'bg-slate-100/90 text-slate-700 hover:bg-slate-200/90 hover:text-slate-900'
+              }`}
+            >
+              Byose (All Stories)
+            </button>
+            {categories.filter((c) => c.enabled !== false).map((cat) => {
+              const isSelected = 
+                activeCategory.toLowerCase() === cat.name.toLowerCase() ||
+                activeCategory.toLowerCase() === cat.slug.toLowerCase() ||
+                (cat.nameEn && activeCategory.toLowerCase() === cat.nameEn.toLowerCase());
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleCategoryChange(cat.name)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-teal-700 text-white shadow-xs font-bold'
+                      : 'bg-slate-100/90 text-slate-700 hover:bg-slate-200/90 hover:text-slate-900'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              );
+            })}
           </div>
 
         </div>
@@ -227,7 +278,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <p className="text-xs text-slate-500">Try selecting "All Categories" or adjusting your search keyword.</p>
             <button
               type="button"
-              onClick={() => { setSelectedCategory('All Categories'); setSearchQuery(''); }}
+              onClick={() => { handleCategoryChange('All Categories'); setSearchQuery(''); }}
               className="mt-2 px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 cursor-pointer"
             >
               Reset Filters
@@ -414,7 +465,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="flex items-center space-x-2">
                     <Newspaper className="w-5 h-5 text-teal-700" />
                     <h3 className="font-serif text-xl font-bold text-slate-950">
-                      {selectedCategory === 'All Categories' ? 'Latest News & Articles' : selectedCategory}
+                      {activeCategory === 'All Categories' || activeCategory === 'Byose' || activeCategory === 'Byose (All Stories)' ? 'Latest News & Articles' : activeCategory}
                     </h3>
                   </div>
                   <span className="text-xs font-semibold text-slate-500">
@@ -544,17 +595,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     Explore Topics
                   </h4>
                   <div className="space-y-1.5">
-                    {BLOG_CATEGORIES.filter(c => c !== 'All Categories').map((cat) => {
-                      const count = posts.filter(p => p.category === cat).length;
+                    {categories.filter(c => c.enabled !== false).map((cat) => {
+                      const count = posts.filter(p => {
+                        const pCat = (p.category || '').toLowerCase();
+                        const cName = cat.name.toLowerCase();
+                        return pCat === cName || pCat.includes(cName) || cName.includes(pCat);
+                      }).length;
                       return (
                         <button
-                          key={cat}
+                          key={cat.id}
                           type="button"
-                          onClick={() => { setSelectedCategory(cat); window.scrollTo({ top: 300, behavior: 'smooth' }); }}
+                          onClick={() => { handleCategoryChange(cat.name); window.scrollTo({ top: 300, behavior: 'smooth' }); }}
                           className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-teal-800 transition-colors cursor-pointer"
                         >
-                          <span>{cat}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600">
+                          <span>{cat.name}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-bold">
                             {count}
                           </span>
                         </button>
