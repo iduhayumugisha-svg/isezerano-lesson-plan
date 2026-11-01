@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+:root {
+  --app-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
+  --app-heading-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
+  --app-body-bg: #f8fafc;
+  --app-body-text: #1e293b;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--app-font-family);
+    color: var(--app-body-text);
+    background-color: var(--app-body-bg);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--app-heading-font-family);
+  }
+
+  input, button, select, textarea {
+    font-family: inherit;
+  }
+}
+
+/* Screen mode: strictly hide print portal from UI */
+@media screen {
+  #rwanda-cbc-print-portal {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* Print Specific Formatting for Official Rwanda CBC Lesson Plans */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 6mm 8mm 6mm 8mm;
+  }
+
+  /* CRITICAL: Completely hide #root from the print layout tree.
+     This completely eliminates leaked website headers, footers, navigation,
+     sidebars, dashboard cards, modal overlays, or duplicated phantom pages. */
+  body > #root {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app navigation, sidebar, headers, footers, buttons, and modal overlays */
+  .no-print,
+  nav,
+  header,
+  footer,
+  aside,
+  button,
+  .print-controls {
+    display: none !important;
+  }
+
+  /* Dedicated print portal container */
+  #rwanda-cbc-print-portal {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  #rwanda-cbc-print-portal * {
+    visibility: visible !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Fallback if rendered directly without portal */
+  #printable-lesson-plan {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Document Typography for Rwanda CBC */
+  .rwanda-cbc-document {
+    font-family: 'Times New Roman', Times, Georgia, serif !important;
+    font-size: 7.5pt !important;
+    line-height: 1.2 !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Official CBC Tables Layout */
+  .rwanda-cbc-document table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+    page-break-inside: auto !important;
+    margin-bottom: 1.5mm !important;
+  }
+
+  .rwanda-cbc-document th,
+  .rwanda-cbc-document td {
+    border: 1px solid #000000 !important;
+    padding: 2.5px 4.5px !important;
+    font-size: 7.5pt !important;
+    line-height: 1.18 !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+    vertical-align: top !important;
+    box-sizing: border-box !important;
+    color: #000000 !important;
+  }
+
+  .rwanda-cbc-document thead {
+    display: table-header-group !important;
+  }
+
+  .rwanda-cbc-document tfoot {
+    display: table-footer-group !important;
+  }
+
+  .rwanda-cbc-document tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: always !important;
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
