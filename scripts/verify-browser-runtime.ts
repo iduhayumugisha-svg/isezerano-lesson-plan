@@ -144,11 +144,13 @@ async function runVerification() {
   adTestContainer.remove();
   console.log('✓ TEST 1 PASSED: AdSlot rendered and re-rendered without hook error.');
 
-  // TEST 2: TopAnnouncementTicker Verification
-  console.log('\n--- TEST 2: TopAnnouncementTicker Dynamic Multi-Message & Styling Verification ---');
+  // TEST 2: TopAnnouncementTicker Verification with Long Message and Read More / Read Less
+  console.log('\n--- TEST 2: TopAnnouncementTicker Dynamic Multi-Message & Read More Verification ---');
   const tickerContainer = window.document.createElement('div');
   window.document.body.appendChild(tickerContainer);
   const tickerRoot = createRoot(tickerContainer);
+
+  const longAnnouncementText = 'ITANGAZO RIKOMEYE: Turamenyesha ababyeyi bose n\'abarezi bo kuri GS GITUMBA ko inama rusange y\'umuryango w\'abarezi n\'ababyeyi izaba kuwa gatanu tariki 15 z\'uku kwezi guhera saa tatu za mugitondo mu cyumba cy\'inama cy\'ikigo.';
 
   const customSettings = {
     ...DEFAULT_ANNOUNCEMENT_STRIP,
@@ -157,8 +159,8 @@ async function runVerification() {
     textColor: '#ffffff',
     fontSize: 14,
     messages: [
-      { id: '1', text: 'Important announcement 1', badge: 'AMAKURU', active: true },
-      { id: '2', text: 'Important announcement 2', badge: 'UBUREZI', active: true }
+      { id: '1', text: longAnnouncementText, badge: 'ITANGAZO', active: true },
+      { id: '2', text: 'Short announcement test message', badge: 'UBUREZI', active: true }
     ]
   };
 
@@ -176,21 +178,49 @@ async function runVerification() {
     );
   });
 
-  const tickerHtml = tickerContainer.innerHTML;
-  if (!tickerHtml || !tickerHtml.includes('Important announcement 1')) {
-    throw new Error('FAILED: TopAnnouncementTicker failed to render announcement text!');
+  let tickerHtml = tickerContainer.innerHTML;
+  if (!tickerHtml || !tickerHtml.includes('Read more')) {
+    throw new Error('FAILED: TopAnnouncementTicker failed to render "Read more" button for long announcement!');
   }
-  console.log(`✓ TopAnnouncementTicker rendered successfully (${tickerHtml.length} bytes of DOM).`);
-  console.log(`  Contains message text: ${tickerHtml.includes('Important announcement 1')}`);
-  console.log(`  Contains badge pill: ${tickerHtml.includes('AMAKURU')}`);
-  console.log(`  Contains custom background color: ${tickerHtml.includes('background-color: rgb(15, 118, 110)') || tickerHtml.includes('#0f766e')}`);
-  console.log(`  Contains custom font size: ${tickerHtml.includes('font-size: 14px')}`);
+  console.log('✓ Long announcement displays "Read more" button.');
+
+  // Click "Read more" to expand announcement
+  const readMoreBtn = tickerContainer.querySelector('button[title="Read complete announcement"]') as HTMLButtonElement;
+  if (!readMoreBtn) {
+    throw new Error('FAILED: "Read more" button element not found in DOM!');
+  }
+
+  await act(async () => {
+    readMoreBtn.click();
+  });
+
+  tickerHtml = tickerContainer.innerHTML;
+  if (!tickerHtml.includes('Read less') || !tickerHtml.includes('Full Announcement')) {
+    throw new Error('FAILED: Clicking "Read more" did not expand to show full message and "Read less" button!');
+  }
+  console.log('✓ Clicking "Read more" expands full announcement text and reveals "Read less" button.');
+
+  // Click "Read less" to collapse announcement
+  const readLessBtn = tickerContainer.querySelector('button[title="Collapse announcement"]') as HTMLButtonElement;
+  if (!readLessBtn) {
+    throw new Error('FAILED: "Read less" button element not found in DOM!');
+  }
+
+  await act(async () => {
+    readLessBtn.click();
+  });
+
+  tickerHtml = tickerContainer.innerHTML;
+  if (!tickerHtml.includes('Read more')) {
+    throw new Error('FAILED: Clicking "Read less" failed to collapse announcement!');
+  }
+  console.log('✓ Clicking "Read less" collapses announcement back to preview.');
 
   await act(async () => {
     tickerRoot.unmount();
   });
   tickerContainer.remove();
-  console.log('✓ TEST 2 PASSED: TopAnnouncementTicker fully verified.');
+  console.log('✓ TEST 2 PASSED: TopAnnouncementTicker Read more/less feature fully verified.');
 
   // TEST 3: Full Application Mounting & Route Simulation
   console.log('\n--- TEST 3: Full App Mounting & Route Simulation ---');
@@ -212,6 +242,17 @@ async function runVerification() {
   console.log(`  Contains newspaper masthead: ${homeHtml.includes('ISEZERANO ONLINE')}`);
   console.log(`  Contains top announcement strip: ${homeHtml.includes('Press') || homeHtml.includes('Ikaze') || homeHtml.includes('Announcement')}`);
 
+  // Confirm AI Photo Slides / HeroSlider is completely absent from the homepage
+  const hasHeroSlider = homeHtml.includes('Official CBC Lesson Planning Portal') || 
+                        homeHtml.includes('Smart Pedagogical Assistant') || 
+                        homeHtml.includes('HeroSlider') ||
+                        homeHtml.includes('hero-slider');
+  if (hasHeroSlider) {
+    throw new Error('FAILED: AI Photo Slides / HeroSlider is still present on the public homepage!');
+  }
+  console.log('✓ AI Photo Slides / HeroSlider successfully and completely removed from the homepage.');
+  console.log('✓ Homepage flows directly into genuine editorial newspaper headlines and articles.');
+
   // Test Three-Dot Menu (⋮) in Header
   const threeDotBtn = appContainer.querySelector('button[title="Account & Platform Menu"]') as HTMLButtonElement;
   if (!threeDotBtn) {
@@ -224,24 +265,70 @@ async function runVerification() {
     threeDotBtn.click();
   });
   const openMenuHtml = appContainer.innerHTML;
+
+  // Requirement 3 & 4 Verification:
+  // 1. Education Dashboard must be in the three-dot menu for ALL visitors (even when logged out)
+  const hasEduDashboardInMenu = openMenuHtml.includes('Education Dashboard');
+  if (!hasEduDashboardInMenu) {
+    throw new Error('FAILED: Three-dot menu missing "Education Dashboard" for public/logged-out visitors!');
+  }
+  console.log('✓ Public visitors see "Education Dashboard" directly in the three-dot menu without admin login.');
+
+  // 2. Login / Account must be in the three-dot menu for logged out visitors
   const hasLoginOption = openMenuHtml.includes('Login / Account');
   if (!hasLoginOption) {
     throw new Error('FAILED: Dropdown menu did not reveal Login / Account option when clicked!');
   }
-  console.log('✓ Clicking three-dot menu opens dropdown containing Login / Account.');
+  console.log('✓ Public visitors see "Login / Account" in the three-dot menu.');
 
-  // Test Dynamic Category Bar in Header
-  const hasCategoryBar = openMenuHtml.includes('Byose (All Stories)') && openMenuHtml.includes('Uburezi');
+  // 3. Admin Portal must NOT be visible to unauthorized visitors
+  const hasAdminPortalInPublicMenu = openMenuHtml.includes('Admin Portal');
+  if (hasAdminPortalInPublicMenu) {
+    throw new Error('FAILED: Security breach! Admin Portal was exposed to logged-out/unauthorized visitor!');
+  }
+  console.log('✓ Admin Portal is strictly hidden from logged-out / unauthorized visitors.');
+
+  // Close three-dot menu
+  await act(async () => {
+    threeDotBtn.click();
+  });
+
+  // Test Dynamic Category Bar & Read More for Long Categories
+  const categoryBarHtml = appContainer.innerHTML;
+  const hasCategoryBar = categoryBarHtml.includes('Byose (All Stories)') && categoryBarHtml.includes('Uburezi');
   if (!hasCategoryBar) {
     throw new Error('FAILED: Category bar not displaying in public header!');
   }
   console.log('✓ Dynamic news categories bar displayed in header.');
 
+  // Test "More" categories dropdown button
+  const moreCategoriesBtn = appContainer.querySelector('button[title="Show all news categories and complete topics"]') as HTMLButtonElement;
+  if (!moreCategoriesBtn) {
+    throw new Error('FAILED: "More" categories button not found in category bar!');
+  }
+  console.log('✓ "More" categories dropdown button exists.');
+
+  // Click "More" categories dropdown to reveal all categories without cut-off
+  await act(async () => {
+    moreCategoriesBtn.click();
+  });
+  const expandedCatHtml = appContainer.innerHTML;
+  const hasAllTopicsDropdown = expandedCatHtml.includes('All News Topics');
+  if (!hasAllTopicsDropdown) {
+    throw new Error('FAILED: Clicking "More" categories failed to open dropdown!');
+  }
+  console.log('✓ "More" dropdown successfully opens and displays complete category list.');
+
+  // Close category dropdown
+  await act(async () => {
+    moreCategoriesBtn.click();
+  });
+
   // Test Footer Prominent Links (About Us, Contact Us, Privacy Policy, Terms)
-  const hasFooterAbout = openMenuHtml.includes('About Us') || openMenuHtml.includes('navAbout');
-  const hasFooterContact = openMenuHtml.includes('Contact Us') || openMenuHtml.includes('navContact');
-  const hasFooterPrivacy = openMenuHtml.includes('Privacy Policy') || openMenuHtml.includes('navPrivacy');
-  const hasFooterTerms = openMenuHtml.includes('Terms') && (openMenuHtml.includes('Conditions') || openMenuHtml.includes('Amategeko'));
+  const hasFooterAbout = homeHtml.includes('About Us') || homeHtml.includes('navAbout');
+  const hasFooterContact = homeHtml.includes('Contact Us') || homeHtml.includes('navContact');
+  const hasFooterPrivacy = homeHtml.includes('Privacy Policy') || homeHtml.includes('navPrivacy');
+  const hasFooterTerms = homeHtml.includes('Terms') && (homeHtml.includes('Conditions') || homeHtml.includes('Amategeko'));
   if (!hasFooterAbout || !hasFooterContact || !hasFooterPrivacy || !hasFooterTerms) {
     throw new Error('FAILED: Footer missing one or more required institutional links!');
   }

@@ -21,7 +21,6 @@ import {
   MessageCircle,
   Twitter
 } from 'lucide-react';
-import { HeroSlider } from '../components/HeroSlider';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { subscribeToBlogPosts } from '../services/blogService';
 import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
@@ -258,12 +257,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </section>
 
-      {/* 2. HOMEPAGE HERO PHOTO SLIDER & BREAKING ANNOUNCEMENTS */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <HeroSlider onNavigate={onNavigate} />
-      </section>
-
-      {/* 3. EDITORIAL NEWSPAPER FRONT PAGE */}
+      {/* 2. EDITORIAL NEWSPAPER FRONT PAGE (LEAD STORY & TOP STORIES) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
         {isLoading ? (

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
+  ChevronUp,
   X, 
-  ExternalLink,
-  Volume2,
-  Megaphone
+  ExternalLink
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { AnnouncementStripSettings, AnnouncementItem } from '../types/websiteDesign';
@@ -31,6 +31,7 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
   const [transitionDirection, setTransitionDirection] = useState<'next' | 'prev'>('next');
   const [isHovered, setIsHovered] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Active messages only
   const activeMessages: AnnouncementItem[] = (settings?.messages || []).filter(
@@ -39,9 +40,9 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
 
   const total = activeMessages.length;
 
-  // Auto rotation timer
+  // Auto rotation timer: automatically pauses when user hovers OR when message is expanded for reading
   useEffect(() => {
-    if (!settings?.enabled || total <= 1 || isDismissed) return;
+    if (!settings?.enabled || total <= 1 || isDismissed || isExpanded) return;
     if (settings.pauseOnHover && isHovered) return;
 
     const intervalMs = Math.max(2, settings.rotationIntervalSeconds || 5) * 1000;
@@ -50,10 +51,11 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [settings?.enabled, settings?.rotationIntervalSeconds, settings?.pauseOnHover, total, isHovered, isDismissed]);
+  }, [settings?.enabled, settings?.rotationIntervalSeconds, settings?.pauseOnHover, total, isHovered, isDismissed, isExpanded, currentIndex]);
 
-  // Keep index within bounds if messages change
+  // Collapse expansion and keep index within bounds if messages change
   useEffect(() => {
+    setIsExpanded(false);
     if (currentIndex >= total && total > 0) {
       setCurrentIndex(0);
     }
@@ -61,6 +63,7 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
 
   const triggerTransition = (targetIndex: number, direction: 'next' | 'prev') => {
     if (isTransitioning || total <= 1) return;
+    setIsExpanded(false);
     setTransitionDirection(direction);
     setIsTransitioning(true);
 
@@ -88,6 +91,9 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
   }
 
   const currentMsg = activeMessages[currentIndex] || activeMessages[0];
+
+  // Length check: long announcement messages that benefit from "Read more"
+  const isLongMessage = (currentMsg.text || '').trim().length > 60;
 
   // Height padding map
   const paddingClasses = {
@@ -145,7 +151,7 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
 
   return (
     <div
-      className={`no-print w-full relative z-50 border-b border-black/10 select-none shadow-xs transition-colors ${paddingClasses}`}
+      className={`no-print w-full relative z-50 border-b border-black/10 select-none shadow-xs transition-colors`}
       style={{
         backgroundColor: bgVal,
         color: textVal,
@@ -157,9 +163,10 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
       role="region"
       aria-label="Important Announcement Strip"
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+      {/* 1. Main Ticker Row */}
+      <div className={`max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 ${paddingClasses}`}>
         
-        {/* Left Section: Icon / Tag or Empty Spacer */}
+        {/* Left Section: Icon / Tag */}
         <div className="flex items-center space-x-1.5 shrink-0">
           <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
             <Sparkles className="w-3 h-3 text-current animate-pulse" />
@@ -175,8 +182,7 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
         >
           <div 
             style={getTransitionStyle()}
-            className={`inline-flex items-center gap-2 max-w-full ${currentMsg.linkUrl ? 'cursor-pointer hover:underline' : ''}`}
-            onClick={handleClickMessage}
+            className={`inline-flex items-center gap-1.5 sm:gap-2 max-w-full flex-wrap justify-${alignVal === 'center' ? 'center' : alignVal === 'right' ? 'end' : 'start'}`}
           >
             {/* Optional Badge Pill */}
             {settings.showBadgePill !== false && currentMsg.badge && (
@@ -185,20 +191,64 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
               </span>
             )}
 
-            {/* Announcement Text */}
+            {/* Announcement Text: Collapsed Snippet or Full Text */}
             <span 
-              className={`truncate sm:whitespace-normal font-${settings.fontWeight || 'semibold'} leading-snug`}
+              className={`font-${settings.fontWeight || 'semibold'} leading-snug`}
               style={{
                 fontWeight: settings.fontWeight === 'bold' ? 700 : settings.fontWeight === 'semibold' ? 600 : settings.fontWeight === 'medium' ? 500 : 400
               }}
               title={currentMsg.text}
             >
-              {currentMsg.text}
+              {isLongMessage && !isExpanded
+                ? `${currentMsg.text.slice(0, 70).trim()}...`
+                : currentMsg.text}
             </span>
+
+            {/* Read More Button for Long Messages */}
+            {isLongMessage && !isExpanded && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(true);
+                }}
+                className="inline-flex items-center space-x-0.5 px-2 py-0.5 rounded-full text-xs font-bold underline decoration-current/70 hover:decoration-current bg-black/15 hover:bg-black/25 text-current transition-all cursor-pointer shrink-0 shadow-2xs"
+                title="Read complete announcement"
+                aria-expanded="false"
+              >
+                <span>Read more</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            )}
+
+            {/* Read Less Button when Expanded in-line */}
+            {isLongMessage && isExpanded && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(false);
+                }}
+                className="inline-flex items-center space-x-0.5 px-2 py-0.5 rounded-full text-xs font-bold bg-white/20 hover:bg-white/30 text-current transition-all cursor-pointer shrink-0 shadow-2xs"
+                title="Collapse announcement"
+                aria-expanded="true"
+              >
+                <span>Read less</span>
+                <ChevronUp className="w-3 h-3" />
+              </button>
+            )}
 
             {/* External Link Indicator if clickable */}
             {currentMsg.linkUrl && (
-              <ExternalLink className="w-3 h-3 opacity-80 shrink-0 hidden sm:inline" />
+              <button
+                type="button"
+                onClick={handleClickMessage}
+                className="inline-flex items-center space-x-0.5 text-xs font-bold hover:underline opacity-90 hover:opacity-100 cursor-pointer ml-1"
+                title="Open attached announcement link"
+              >
+                <span>Visit Link</span>
+                <ExternalLink className="w-3 h-3 shrink-0" />
+              </button>
             )}
           </div>
         </div>
@@ -250,6 +300,58 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
         </div>
 
       </div>
+
+      {/* 2. Expandable Panel for Complete Announcement Reading */}
+      {isExpanded && (
+        <div 
+          className="w-full border-t border-black/15 px-4 sm:px-8 py-3 bg-black/15 backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-1 duration-200"
+          style={{ color: textVal }}
+        >
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <div className="flex items-center space-x-2 flex-wrap">
+                {currentMsg.badge && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-white text-slate-900 shadow-2xs">
+                    {currentMsg.badge}
+                  </span>
+                )}
+                <span className="text-[11px] font-bold uppercase tracking-wider opacity-85">
+                  Full Announcement ({currentIndex + 1} of {total})
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-line select-text">
+                {currentMsg.text}
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 pt-1 sm:pt-0 self-end sm:self-start">
+              {currentMsg.linkUrl && (
+                <button
+                  type="button"
+                  onClick={handleClickMessage}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm hover:bg-slate-100 transition-all cursor-pointer"
+                >
+                  <span>Open Link</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(false);
+                }}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/20 hover:bg-white/30 text-current transition-all cursor-pointer shadow-2xs"
+                title="Collapse announcement"
+                aria-expanded="true"
+              >
+                <span>Read less</span>
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
