@@ -16,41 +16,41 @@ service firebase.storage {
       );
     }
 
-    // Publicly viewable homepage photos (Max 10MB, Images only)
+    // Publicly viewable homepage photos (Max 15MB, Images only)
     match /homepage_photos/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.size < 10 * 1024 * 1024 && 
+      allow write: if (isAdmin() || isAuthenticated()) && 
+        request.resource.size < 15 * 1024 * 1024 && 
         request.resource.contentType.matches('image/.*');
     }
 
-    // Publicly viewable website assets and branding logos (Max 5MB, Images only)
+    // Publicly viewable website assets and branding logos (Max 10MB, Images only)
     match /website_assets/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.size < 5 * 1024 * 1024 && 
+      allow write: if (isAdmin() || isAuthenticated()) && 
+        request.resource.size < 10 * 1024 * 1024 && 
         request.resource.contentType.matches('image/.*');
     }
 
     // Preserved news website storage collections (posts, news, logos)
     match /posts/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.size < 10 * 1024 * 1024 && 
+      allow write: if (isAdmin() || isAuthenticated()) && 
+        request.resource.size < 15 * 1024 * 1024 && 
         request.resource.contentType.matches('image/.*');
     }
 
     match /logos/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.size < 5 * 1024 * 1024 && 
+      allow write: if (isAdmin() || isAuthenticated()) && 
+        request.resource.size < 10 * 1024 * 1024 && 
         request.resource.contentType.matches('image/.*');
     }
 
     match /news/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.size < 10 * 1024 * 1024 && 
+      allow write: if (isAdmin() || isAuthenticated()) && 
+        request.resource.size < 15 * 1024 * 1024 && 
         request.resource.contentType.matches('image/.*');
     }
 

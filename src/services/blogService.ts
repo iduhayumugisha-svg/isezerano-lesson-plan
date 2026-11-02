@@ -9,8 +9,8 @@ import {
   increment, 
   onSnapshot 
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { initFirestoreIfConfigured, getFirebaseApp } from './storageService';
+import { getStorage, ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { initFirestoreIfConfigured, getFirebaseApp, getFirebaseConfig } from './storageService';
 import { BlogPost } from '../types/blog';
 import { isValidDateString } from '../utils/dateUtils';
 import { 
@@ -616,20 +616,101 @@ const updateLocalPostViews = (postId: string, explicitCount?: number): number =>
 };
 
 /**
+ * Optimizes an image before upload (max width/height 1600px, 0.88 quality JPEG/PNG/WebP)
+ * Ensures smooth, reliable uploads even from mobile phones with high-megapixel cameras.
+ */
+export const optimizeThumbnailFile = (file: File, maxDimension = 1600): Promise<{ blob: Blob | File; contentType: string; ext: string }> => {
+  return new Promise((resolve) => {
+    // If not running in browser or SVG, return as is
+    if (typeof window === 'undefined' || typeof document === 'undefined' || file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      resolve({ blob: file, contentType: file.type || 'image/jpeg', ext });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+            resolve({ blob: file, contentType: file.type || 'image/jpeg', ext });
+            return;
+          }
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+          const outputType = isPng ? 'image/png' : 'image/jpeg';
+          const ext = isPng ? 'png' : 'jpg';
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size < file.size) {
+                resolve({ blob, contentType: outputType, ext });
+              } else {
+                resolve({ blob: file, contentType: file.type || outputType, ext });
+              }
+            },
+            outputType,
+            isPng ? undefined : 0.88
+          );
+        } catch {
+          const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+          resolve({ blob: file, contentType: file.type || 'image/jpeg', ext });
+        }
+      };
+      img.onerror = () => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        resolve({ blob: file, contentType: file.type || 'image/jpeg', ext });
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      resolve({ blob: file, contentType: file.type || 'image/jpeg', ext });
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
  * Uploads a blog post thumbnail image to Firebase Storage (bucket: isezerano-news.firebasestorage.app)
- * Path: posts/thumb_{timestamp}_{random}.{ext}
+ * Path: posts/thumb_{timestamp}_{random}_{basename}.{ext}
  * Returns permanent, stable, publicly accessible HTTPS download URL.
+ * Emits real progress (0-100%) based strictly on Firebase uploadTask state_changed events.
  */
 export const uploadBlogPostThumbnail = async (
   file: File,
-  adminUid: string
+  adminUid: string,
+  onProgress?: (percent: number) => void
 ): Promise<{ success: boolean; url?: string; error?: string }> => {
-  // Validate file
-  if (!file.type.startsWith('image/')) {
-    return { success: false, error: 'File must be an image (JPEG, PNG, WebP, etc.).' };
+  // 1. Validate file format and size
+  if (!file.type.startsWith('image/') && !file.name.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
+    return { success: false, error: 'File must be a valid image (JPEG, PNG, WebP, etc.).' };
   }
-  if (file.size > 10 * 1024 * 1024) {
-    return { success: false, error: 'Image size cannot exceed 10 MB.' };
+  if (file.size > 20 * 1024 * 1024) {
+    return { success: false, error: 'Original image size cannot exceed 20 MB.' };
   }
 
   const app = getFirebaseApp();
@@ -638,16 +719,32 @@ export const uploadBlogPostThumbnail = async (
   }
 
   try {
-    const bucketName = 'isezerano-news.firebasestorage.app';
+    // 2. Prepare optimized image
+    const { blob, contentType, ext } = await optimizeThumbnailFile(file);
+
+    // 3. Configure storage bucket and reference
+    const config = getFirebaseConfig();
+    const bucketName = config.storageBucket || 'isezerano-news.firebasestorage.app';
     const storage = getStorage(app, `gs://${bucketName}`);
-    const rawExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-    const cleanExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
-    const cleanName = file.name.replace(/[^\w.-]/g, '_');
-    const storagePath = `posts/thumb_${Date.now()}_${cleanName}.${cleanExt}`;
+
+    // Set aggressive retry timeouts so Firebase does not hang for 10 minutes when bucket is unreachable
+    try {
+      storage.maxUploadRetryTime = 15000;
+      storage.maxOperationRetryTime = 15000;
+    } catch {
+      // ignore
+    }
+
+    const cleanBaseName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^\w.-]/g, '_')
+      .slice(0, 30);
+    const uniqueSalt = Math.random().toString(36).substring(2, 8);
+    const storagePath = `posts/thumb_${Date.now()}_${uniqueSalt}_${cleanBaseName}.${ext}`;
     const storageRef = ref(storage, storagePath);
 
     const metadata = {
-      contentType: file.type || `image/${cleanExt}`,
+      contentType,
       customMetadata: {
         uploadedBy: adminUid,
         uploadedAt: new Date().toISOString(),
@@ -655,9 +752,87 @@ export const uploadBlogPostThumbnail = async (
       }
     };
 
-    const uploadResult = await uploadBytes(storageRef, file, metadata);
-    const downloadUrl = await getDownloadURL(uploadResult.ref);
-    return { success: true, url: downloadUrl };
+    // 4. Resumable upload with real state_changed progress and safety timeout
+    return new Promise((resolve) => {
+      let isSettled = false;
+      const uploadTask = uploadBytesResumable(storageRef, blob, metadata);
+
+      // Strict 15-second timeout guard to cancel hanging uploads and report real cause
+      const timeoutTimer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          try {
+            uploadTask.cancel();
+          } catch {
+            // ignore
+          }
+          resolve({
+            success: false,
+            error: `Firebase Storage upload timed out after 15s. The bucket "${bucketName}" could not be reached. Ensure Storage is enabled in Firebase Console (project: isezerano-news).`
+          });
+        }
+      }, 15000);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          if (snapshot.totalBytes > 0) {
+            // Real progress calculated directly from Firebase bytesTransferred
+            const actualPct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            onProgress?.(Math.min(99, actualPct));
+          }
+        },
+        (uploadError: any) => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timeoutTimer);
+
+          console.error('Firebase Storage upload error:', uploadError);
+          const errorCode = uploadError?.code || '';
+          const serverMsg = uploadError?.serverResponse || uploadError?.message || '';
+          let userMsg = '';
+
+          if (
+            errorCode === 'storage/unknown' || 
+            uploadError?.status_ === 404 || 
+            serverMsg.includes('404') || 
+            serverMsg.includes('Not Found') ||
+            serverMsg.includes('NoSuchBucket')
+          ) {
+            userMsg = `Firebase Cloud Storage bucket "${bucketName}" not found (404). In Firebase Console for project "isezerano-news", please go to Build → Storage and click "Get started" to activate Cloud Storage.`;
+          } else if (errorCode === 'storage/unauthorized') {
+            userMsg = 'Upload permission denied (storage/unauthorized). Please ensure you are signed in as an administrator in the admin portal and storage.rules are deployed.';
+          } else if (errorCode === 'storage/canceled') {
+            userMsg = `Firebase Storage upload timed out after 15s. Bucket "${bucketName}" may not be active or internet connection was interrupted.`;
+          } else if (errorCode === 'storage/retry-limit-exceeded') {
+            userMsg = `Upload timed out. Firebase Storage bucket "${bucketName}" could not be reached.`;
+          } else {
+            userMsg = uploadError?.message 
+              ? `Firebase Storage error (${errorCode || 'unknown'}): ${uploadError.message}` 
+              : 'Failed to upload image to Firebase Storage.';
+          }
+
+          resolve({ success: false, error: userMsg });
+        },
+        async () => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timeoutTimer);
+
+          try {
+            onProgress?.(100);
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({ success: true, url: downloadUrl });
+          } catch (urlErr: any) {
+            console.error('Failed to get download URL from uploaded ref:', urlErr);
+            resolve({ 
+              success: false, 
+              error: urlErr?.message || 'Image uploaded but download URL could not be retrieved from Firebase Storage.' 
+            });
+          }
+        }
+      );
+    });
   } catch (err: any) {
     console.error('Failed to upload thumbnail to Firebase Storage:', err);
     return { success: false, error: err?.message || 'Failed to upload image to Firebase Storage.' };

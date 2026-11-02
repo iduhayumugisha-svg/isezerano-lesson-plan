@@ -24,10 +24,11 @@ import {
   Info,
   X,
   Copy,
-  Check,
-  Upload
+  Check
 } from 'lucide-react';
-import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
+import { BlogPost } from '../types/blog';
+import { NewsCategory, DEFAULT_NEWS_CATEGORIES } from '../types/category';
+import { subscribeToNewsCategories } from '../services/categoryService';
 import { 
   getBlogPosts, 
   saveBlogPost, 
@@ -36,8 +37,7 @@ import {
   calculateReadingTime,
   subscribeToBlogPosts,
   seedInitialPostsToFirestore,
-  auditAndRepairAllFirestoreBlogPosts,
-  uploadBlogPostThumbnail
+  auditAndRepairAllFirestoreBlogPosts
 } from '../services/blogService';
 import { 
   isValidHttpsImageUrl, 
@@ -59,6 +59,7 @@ interface BlogManagerProps {
 export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
   const { user } = useAuth();
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [adminCategories, setAdminCategories] = useState<NewsCategory[]>(DEFAULT_NEWS_CATEGORIES);
   const [isLoading, setIsLoading] = useState(true);
   const [activeView, setActiveView] = useState<'list' | 'editor' | 'preview'>('list');
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
@@ -74,18 +75,25 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
   // Global audit modal state
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditReport, setAuditReport] = useState<GlobalAuditReport | null>(null);
-  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [thumbImageStatus, setThumbImageStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [copiedThumbUrl, setCopiedThumbUrl] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
-    // Real-time Firestore listener across all devices
-    const unsubscribe = subscribeToBlogPosts((all) => {
+    // Real-time Firestore listener for articles across all devices
+    const unsubscribePosts = subscribeToBlogPosts((all) => {
       setPosts(all);
       setIsLoading(false);
     }, true); // include drafts for admin
 
+    // Real-time Firestore listener for categories created/configured by Admin
+    const unsubscribeCats = subscribeToNewsCategories((cats) => {
+      setAdminCategories(cats);
+    });
+
     return () => {
-      unsubscribe();
+      unsubscribePosts();
+      unsubscribeCats();
     };
   }, []);
 
@@ -130,15 +138,21 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
     }
   };
 
+  const activeCategoryNames = adminCategories
+    .filter(c => c.enabled !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(c => c.name);
+
   const handleStartNew = () => {
+    const defaultCat = activeCategoryNames[0] || 'Uburezi';
     const newPost: BlogPost = {
       id: `post-${Date.now()}`,
       title: '',
       slug: '',
       content: '<p>Start writing your pedagogical article or school announcement here...</p>',
       excerpt: '',
-      thumbnailUrl: getSafeFallbackThumbnail('CBC Curriculum'),
-      category: 'CBC Curriculum',
+      thumbnailUrl: '', // Starts empty so user can choose to upload from device or enter custom URL
+      category: defaultCat,
       author: {
         name: user?.email ? user.email.split('@')[0] : 'GS GITUMBA Editorial Team',
         role: 'Pedagogical Lead & Teacher'
@@ -147,11 +161,19 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
       status: 'draft',
       views: 0
     };
+    setThumbImageStatus('idle');
     setEditingPost(newPost);
     setActiveView('editor');
   };
 
   const handleEditPost = (post: BlogPost) => {
+    if (!post.thumbnailUrl?.trim()) {
+      setThumbImageStatus('idle');
+    } else if (!isValidHttpsImageUrl(post.thumbnailUrl)) {
+      setThumbImageStatus('error');
+    } else {
+      setThumbImageStatus('loading');
+    }
     setEditingPost({ ...post });
     setActiveView('editor');
   };
@@ -194,6 +216,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
     const finalPost: BlogPost = {
       ...editingPost,
       title: editingPost.title.trim(),
+      thumbnailUrl: editingPost.thumbnailUrl?.trim() || getSafeFallbackThumbnail(editingPost.category),
       status: targetStatus,
       publishedAt,
       slug: editingPost.slug ? generateSlug(editingPost.slug) : generateSlug(editingPost.title),
@@ -223,59 +246,32 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
     }
   };
 
+  const handleThumbnailUrlChange = (newUrl: string) => {
+    setEditingPost(prev => prev ? ({ ...prev, thumbnailUrl: newUrl, needsImageReview: false }) : null);
+    if (!newUrl.trim()) {
+      setThumbImageStatus('idle');
+    } else if (!isValidHttpsImageUrl(newUrl)) {
+      setThumbImageStatus('error');
+    } else {
+      setThumbImageStatus('loading');
+    }
+  };
+
   const handleExtractFromContent = () => {
     if (!editingPost) return;
     const extracted = extractFirstImageFromContent(editingPost.content || '');
     if (extracted) {
-      setEditingPost({
-        ...editingPost,
-        thumbnailUrl: extracted,
-        needsImageReview: false
-      });
-      alert('Successfully extracted featured image from article content!');
+      handleThumbnailUrlChange(extracted);
+      alert('Ifoto yakuwe mu nyandiko y\'inkuru neza!');
     } else {
-      alert('No valid HTTPS images found inside article content body.');
+      alert('Nta ifoto ya HTTPS yabonetse mu nyandiko y\'inkuru.');
     }
   };
 
   const handleApplyCategoryFallback = () => {
     if (!editingPost) return;
     const fallback = getSafeFallbackThumbnail(editingPost.category);
-    setEditingPost({
-      ...editingPost,
-      thumbnailUrl: fallback,
-      needsImageReview: false
-    });
-  };
-
-  const handleThumbnailFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !editingPost) return;
-
-    const adminUid = user?.uid || 'admin';
-    setIsUploadingThumbnail(true);
-    try {
-      const res = await uploadBlogPostThumbnail(file, adminUid);
-      if (res.success && res.url) {
-        setEditingPost(prev => prev ? ({
-          ...prev,
-          thumbnailUrl: res.url!,
-          needsImageReview: false
-        }) : null);
-        setSaveStatus({
-          type: 'success',
-          text: 'Featured thumbnail uploaded to Firebase Storage!'
-        });
-        setTimeout(() => setSaveStatus(null), 3500);
-      } else {
-        alert(res.error || 'Failed to upload image to Firebase Storage.');
-      }
-    } catch (err: any) {
-      alert(err?.message || 'Error uploading image.');
-    } finally {
-      setIsUploadingThumbnail(false);
-      e.target.value = '';
-    }
+    handleThumbnailUrlChange(fallback);
   };
 
   const filteredPosts = posts.filter(p => {
@@ -383,9 +379,17 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                 onChange={(e) => setSelectedCategoryFilter(e.target.value)}
                 className="w-full sm:w-auto px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
               >
-                {BLOG_CATEGORIES.map((cat) => (
+                <option value="All Categories">All Categories / Byose</option>
+                {activeCategoryNames.map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
+                {/* Preserve filtering for any existing posts having legacy categories */}
+                {Array.from(new Set(posts.map(p => p.category).filter(Boolean)))
+                  .filter(c => !activeCategoryNames.includes(c))
+                  .map(legacyCat => (
+                    <option key={legacyCat} value={legacyCat}>{legacyCat} (Existing)</option>
+                  ))
+                }
               </select>
             </div>
           </div>
@@ -648,25 +652,43 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
 
             {/* Category */}
             <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-800">Category</label>
+              <label className="block text-xs font-bold text-slate-800">
+                Category / Icyiciro <span className="text-rose-500">*</span>
+              </label>
               <select
                 value={editingPost.category}
                 onChange={(e) => setEditingPost(prev => prev ? ({ ...prev, category: e.target.value }) : null)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 bg-white"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 bg-white font-medium text-slate-800"
               >
-                {BLOG_CATEGORIES.filter(c => c !== 'All Categories').map((c) => (
+                {/* 1. Admin Active Categories from Firestore */}
+                {activeCategoryNames.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
+                
+                {/* 2. Safeguard: Preserve existing post category if it was legacy or disabled */}
+                {editingPost.category && !activeCategoryNames.includes(editingPost.category) && (
+                  <option key={editingPost.category} value={editingPost.category}>
+                    {editingPost.category} (Current / Preserved)
+                  </option>
+                )}
               </select>
+              <p className="text-[11px] text-slate-500">
+                Categories are managed in Admin → Category Manager and sync in real time across all devices.
+              </p>
             </div>
 
-            {/* Featured Image Thumbnail URL & Audit Inspector */}
-            <div className="md:col-span-2 space-y-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
+            {/* Featured Image Thumbnail URL (Spark Free Tier - URL Only) */}
+            <div className="md:col-span-2 space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="block text-xs font-bold text-slate-800">
-                  Featured Thumbnail Image (Verified HTTPS for WhatsApp, Facebook, Telegram & X Cards)
-                </label>
-                <div className="flex items-center space-x-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800">
+                    Featured Thumbnail Image / Ifoto y'Inkuru (Image URL)
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Shyiramo Image URL y'ifoto (urugero: Blogger, Google Photos, Unsplash, n'izindi). Nta Firebase Storage cyangwa Cloudinary bikenerwa (bikorera kuri Firebase Spark y'ubuntu).
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
                   <button
                     type="button"
                     onClick={handleExtractFromContent}
@@ -685,66 +707,163 @@ export const BlogManager: React.FC<BlogManagerProps> = ({ onViewLivePost }) => {
                 </div>
               </div>
 
+              {/* URL Input & Actions */}
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="url"
                   value={editingPost.thumbnailUrl}
-                  onChange={(e) => setEditingPost(prev => prev ? ({ ...prev, thumbnailUrl: e.target.value }) : null)}
-                  placeholder="Paste HTTPS image URL (Blogger, Unsplash, etc.)..."
-                  className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
+                  onChange={(e) => handleThumbnailUrlChange(e.target.value)}
+                  placeholder="https://... (Shyiramo HTTPS Image URL y'ifoto y'inkuru)"
+                  className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white font-mono text-slate-800"
                 />
-                <label className={`inline-flex items-center justify-center space-x-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer shrink-0 ${
-                  isUploadingThumbnail ? 'opacity-60 cursor-not-allowed' : ''
-                }`}>
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{isUploadingThumbnail ? 'Uploading...' : 'Upload Image'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleThumbnailFileUpload}
-                    disabled={isUploadingThumbnail}
-                    className="hidden"
-                  />
-                </label>
+
+                {/* Copy URL Button if URL exists */}
+                {editingPost.thumbnailUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(editingPost.thumbnailUrl);
+                      setCopiedThumbUrl(true);
+                      setTimeout(() => setCopiedThumbUrl(false), 2000);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shrink-0"
+                    title="Koporora URL y'ifoto"
+                  >
+                    {copiedThumbUrl ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Copy URL</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Clear URL Button */}
+                {editingPost.thumbnailUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleThumbnailUrlChange('')}
+                    className="inline-flex items-center space-x-1 px-3 py-2 text-xs font-semibold rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer shrink-0"
+                    title="Siba URL"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Clear</span>
+                  </button>
+                )}
               </div>
 
               {/* Validation Status Notice */}
               <div className="text-[11px]">
-                {isValidHttpsImageUrl(editingPost.thumbnailUrl) ? (
+                {thumbImageStatus === 'error' ? (
+                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-bold">URL y'ifoto ntabwo ibashije gufunguka (Image Failed to Load): </span>
+                      <span>Reba neza niba URL ari nzima kandi niba ifoto ifungurwa ku buryo bwa rusange (public HTTPS access). Ntukoreshe iyi URL kuko itazagaragara ku basomyi.</span>
+                    </div>
+                  </div>
+                ) : thumbImageStatus === 'loading' ? (
+                  <span className="text-sky-700 font-medium inline-flex items-center space-x-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600 shrink-0" />
+                    <span>Turimo kugenzura niba ifoto ifunguka neza...</span>
+                  </span>
+                ) : thumbImageStatus === 'loaded' && isValidHttpsImageUrl(editingPost.thumbnailUrl) ? (
                   editingPost.thumbnailUrl.includes('googleusercontent.com') && editingPost.thumbnailUrl.includes('/s320/') ? (
-                    <span className="text-sky-700 font-medium inline-flex items-center space-x-1">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Google Blogger image detected. Will automatically upgrade to high-res (1600px) upon saving.</span>
+                    <span className="text-sky-700 font-medium inline-flex items-center space-x-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                      <span>Google Blogger image detected & verified. Automatically optimized for high resolution.</span>
                     </span>
                   ) : (
-                    <span className="text-emerald-700 font-medium inline-flex items-center space-x-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Valid HTTPS thumbnail URL ready for WhatsApp, Facebook, and X social cards.</span>
+                    <span className="text-emerald-700 font-medium inline-flex items-center space-x-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Ifoto yemejwe neza (Verified HTTPS Image). Izagaragara neza kuri homepage card, article page no kuri social sharing cards (WhatsApp, Facebook, X, Telegram).</span>
                     </span>
                   )
                 ) : (
-                  <span className="text-amber-700 font-medium inline-flex items-center space-x-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>No valid HTTPS image. System will automatically scan article content or assign safe educational fallback upon saving.</span>
+                  <span className="text-amber-700 font-medium inline-flex items-center space-x-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Nta URL y'ifoto irashyirwamo. Shyiramo HTTPS Image URL cyangwa ukande 'Extract from Content' / 'Use Category Fallback'.</span>
                   </span>
                 )}
               </div>
 
+              {/* Live Preview Card */}
               {editingPost.thumbnailUrl && (
-                <div className="mt-2 flex items-center space-x-3 pt-2 border-t border-slate-200">
-                  <img 
-                    src={normalizeAndUpgradeThumbnailUrl(editingPost.thumbnailUrl)} 
-                    alt="Thumbnail preview"
-                    className="w-24 h-16 object-cover rounded-lg border border-slate-300 shadow-2xs"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                  <div className="text-[11px] text-slate-600 space-y-0.5">
-                    <p className="font-semibold text-slate-800">Card Preview Resolution</p>
-                    <p className="text-slate-500">
-                      Standard 1200×630px social ratio. Appears at the top of shared links in WhatsApp, Telegram, X, and Facebook.
+                <div className="mt-2 flex flex-col sm:flex-row sm:items-start gap-4 pt-3 border-t border-slate-200">
+                  <div className="relative group shrink-0 w-44 h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center shadow-xs">
+                    <img 
+                      src={normalizeAndUpgradeThumbnailUrl(editingPost.thumbnailUrl)} 
+                      alt="Thumbnail preview"
+                      className={`w-full h-full object-cover transition-opacity duration-200 ${
+                        thumbImageStatus === 'loaded' ? 'opacity-100 block' : 'opacity-0 hidden'
+                      }`}
+                      onLoad={() => setThumbImageStatus('loaded')}
+                      onError={() => setThumbImageStatus('error')}
+                    />
+                    {thumbImageStatus === 'loading' && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-500 p-2 text-center">
+                        <RefreshCw className="w-5 h-5 animate-spin text-teal-600 mb-1" />
+                        <span className="text-[10px] font-medium">Kugenzura ifoto...</span>
+                      </div>
+                    )}
+                    {thumbImageStatus === 'error' && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-rose-50 text-rose-700 p-2 text-center">
+                        <AlertCircle className="w-6 h-6 text-rose-500 mb-1" />
+                        <span className="text-[11px] font-bold">Ifoto ntiyabonetse</span>
+                        <span className="text-[9px] text-rose-600">URL ntabwo ifunguka</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-600 space-y-1.5 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-slate-800 text-xs">Preview: Post Card & Social Media</span>
+                      {thumbImageStatus === 'loaded' ? (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-semibold text-[10px] inline-flex items-center space-x-1">
+                          <Check className="w-3 h-3 text-emerald-700" />
+                          <span>Verified & Ready</span>
+                        </span>
+                      ) : thumbImageStatus === 'loading' ? (
+                        <span className="px-2 py-0.5 bg-sky-100 text-sky-800 rounded font-semibold text-[10px] inline-flex items-center space-x-1">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-sky-700" />
+                          <span>Checking URL...</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-semibold text-[10px] inline-flex items-center space-x-1">
+                          <AlertCircle className="w-3 h-3 text-rose-700" />
+                          <span>Invalid Image</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-slate-500 leading-relaxed text-[11px]">
+                      Iyi foto niyo izakoreshwa nk'icyapa cy'inkuru kuri homepage, muri article yuzuye, no ku mbuga nkoranyambaga (WhatsApp, Facebook, Twitter/X, Telegram).
                     </p>
+                    <div className="pt-1 flex items-center space-x-3 text-teal-700 font-medium">
+                      {thumbImageStatus === 'loaded' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingSocialPost(editingPost)}
+                            className="hover:underline inline-flex items-center space-x-1 cursor-pointer"
+                          >
+                            <Share2 className="w-3 h-3" />
+                            <span>Preview Social Card</span>
+                          </button>
+                          <span className="text-slate-300">•</span>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleThumbnailUrlChange('')}
+                        className="text-rose-600 hover:underline cursor-pointer"
+                      >
+                        Clear URL
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
