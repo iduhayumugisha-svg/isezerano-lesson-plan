@@ -115,11 +115,8 @@ export const TopAnnouncementTicker: React.FC<TopAnnouncementTickerProps> = ({
     if (link.startsWith('http://') || link.startsWith('https://')) {
       window.open(link, '_blank', 'noopener,noreferrer');
     } else if (onNavigate) {
-      if (link.startsWith('/blog/')) {
-        const slug = link.replace('/blog/', '');
-        onNavigate('blog_post');
-      } else if (link === '/blog' || link === 'blog') {
-        onNavigate('blog');
+      if (link.startsWith('/blog/') || link === '/blog' || link === 'blog') {
+        onNavigate('home');
       } else if (link === '/dashboard' || link === 'dashboard') {
         onNavigate('dashboard');
       } else if (link === '/create' || link === 'create') {

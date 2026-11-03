@@ -44,11 +44,6 @@ export const Header: React.FC<HeaderProps> = ({
           title: t.savedPlansTitle || 'Saved Lesson Plans',
           subtitle: 'Browse, manage, print and export official PDF lesson plans'
         };
-      case 'students':
-        return {
-          title: t.studentsIdTitle || 'Student Identification',
-          subtitle: 'Learner enrollment, gender statistics, and class context'
-        };
       case 'dashboard':
         return {
           title: t.navAllTools || 'Dashboard / All Tools',

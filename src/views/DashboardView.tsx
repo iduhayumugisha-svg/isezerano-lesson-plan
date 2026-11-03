@@ -14,7 +14,6 @@ import {
   Sparkles, 
   ShieldCheck, 
   Home,
-  Users,
   Newspaper
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
@@ -25,7 +24,7 @@ import { FEATURE_FLAGS } from '../config/features';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];
-  onNavigate: (page: SaasNavPage | 'home' | 'students') => void;
+  onNavigate: (page: SaasNavPage | 'home') => void;
   onSelectPlanToEdit: (plan: LessonPlan) => void;
   onSelectPlanToPrint: (plan: LessonPlan) => void;
 }
@@ -64,16 +63,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       icon: FolderClock,
       iconColor: 'bg-slate-100 text-slate-800 group-hover:bg-slate-800 group-hover:text-white',
       buttonText: t.browsePlans || 'Browse Saved Plans'
-    },
-    {
-      id: 'students' as any,
-      title: 'Students Identification',
-      badge: 'CBC Demographics',
-      badgeColor: 'bg-indigo-50 text-indigo-900 border-indigo-200',
-      description: 'Manage class enrollment totals, gender distribution (boys & girls), and academic term learner counts for REB CBC compliance.',
-      icon: Users,
-      iconColor: 'bg-indigo-50 text-indigo-700 group-hover:bg-indigo-700 group-hover:text-white',
-      buttonText: 'Manage Student Records'
     },
     {
       id: 'settings' as SaasNavPage,
@@ -157,7 +146,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Teacher Application Dashboard
           </h1>
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-            ISEZERANO ONLINE is a specialized pedagogical platform designed to help primary and secondary school educators in Rwanda prepare structured, REB-compliant 8-column lesson plans with ease. Access your tools, saved records, student demographics, and clean, printable A4 exports directly from this dashboard.
+            ISEZERANO ONLINE is a specialized pedagogical platform designed to help primary and secondary school educators in Rwanda prepare structured, REB-compliant 8-column lesson plans with ease. Access your tools, saved records, and clean, printable A4 exports directly from this dashboard.
           </p>
 
           <div className="pt-2 flex flex-wrap gap-3">
@@ -174,13 +163,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <Search className="w-4 h-4 text-teal-400" />
               <span>{t.browsePlans || 'Browse Saved Plans'} ({totalPlans})</span>
-            </button>
-            <button
-              onClick={() => onNavigate('students')}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-900/60 hover:bg-indigo-900 text-indigo-200 transition-all border border-indigo-700 cursor-pointer"
-            >
-              <Users className="w-4 h-4 text-indigo-400" />
-              <span>Students Identification</span>
             </button>
           </div>
         </div>
@@ -206,10 +188,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
               <h3 className="text-base font-bold text-white mt-0.5">
-                Manage Homepage Photos, Blog, Ads & Administration
+                Manage Homepage Photos, Ads & Administration
               </h3>
               <p className="text-xs text-slate-300">
-                Create & edit blog articles, configure ads, customize website appearance, and manage hero photos.
+                Configure ads, customize website appearance, manage school announcements, and manage website categories.
               </p>
             </div>
           </div>
@@ -236,7 +218,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {educationModules.map((mod) => {
             const Icon = mod.icon;
             return (

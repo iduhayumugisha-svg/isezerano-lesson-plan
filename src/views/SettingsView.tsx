@@ -26,7 +26,7 @@ import {
   Check, 
   Server, 
   Key,
-  Users,
+  PlusCircle,
   FolderClock,
   ArrowLeft,
   Globe,
@@ -398,18 +398,18 @@ service cloud.firestore {
 
               <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-semibold uppercase text-[10px]">{t.studentsIdTitle}</span>
-                  <Users className="w-4 h-4 text-emerald-600" />
+                  <span className="text-slate-500 font-semibold uppercase text-[10px]">CBC Standard</span>
+                  <PlusCircle className="w-4 h-4 text-emerald-600" />
                 </div>
-                <p className="font-bold text-slate-900 text-base">{t.studentsIdTitle}</p>
+                <p className="font-bold text-slate-900 text-base">{t.navCreate || 'Create Lesson Plan'}</p>
                 <p className="text-slate-500">
-                  {t.studentsIdSubtext}
+                  Official 8-Column REB/MINEDUC curriculum generator
                 </p>
                 <button
-                  onClick={() => onNavigate('students')}
+                  onClick={() => onNavigate('create')}
                   className="text-emerald-600 hover:text-emerald-700 font-bold pt-1 block cursor-pointer"
                 >
-                  {t.studentsIdTitle} →
+                  {t.navCreate || 'Create Lesson Plan'} →
                 </button>
               </div>
             </div>

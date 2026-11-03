@@ -24,7 +24,7 @@ import { TopAnnouncementTicker } from './TopAnnouncementTicker';
 import { NewsCategory, DEFAULT_NEWS_CATEGORIES } from '../types/category';
 import { subscribeToNewsCategories } from '../services/categoryService';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'students' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'blog';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -127,7 +127,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     if (onSelectCategory) {
       onSelectCategory(categoryName);
     }
-    if (currentPage !== 'home' && currentPage !== 'blog') {
+    if (currentPage !== 'home') {
       onNavigate('home');
     }
     setExpandedCatId(null);
@@ -208,28 +208,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               >
                 <span>Newspaper</span>
                 {currentPage === 'home' && (
-                  <span 
-                    className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
-                    style={{ backgroundColor: colors.navLinkActive }}
-                  />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleNavClick('blog')}
-                style={{
-                  fontSize: `${typography.navMenuSize}px`,
-                  color: currentPage === 'blog' ? colors.navLinkActive : colors.headerText
-                }}
-                className={`px-3.5 py-2 rounded-lg font-semibold transition-all relative cursor-pointer ${
-                  currentPage === 'blog'
-                    ? 'font-bold bg-slate-100/70 shadow-2xs'
-                    : 'hover:opacity-80'
-                }`}
-              >
-                <span>News Archive</span>
-                {currentPage === 'blog' && (
                   <span 
                     className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
                     style={{ backgroundColor: colors.navLinkActive }}
@@ -324,7 +302,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-500 font-normal truncate">
-                            Lesson planner, classes, students & export
+                            Lesson planner, saved plans, preferences & export
                           </span>
                         </div>
                       </button>

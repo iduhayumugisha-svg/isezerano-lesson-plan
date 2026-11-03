@@ -1,111 +1,88 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import fs from 'fs';
 import { defineConfig, Plugin } from 'vite';
-import { 
-  syncPostsFromFirestore, 
-  getBlogPostForPrerender, 
-  renderBlogPostMetadata,
-  writePostsToDisk,
-  readPostsFromDisk
-} from './src/server/blogPrerender';
-import { auditAllBlogPosts } from './src/utils/thumbnailUtils';
 
 /**
- * Prerenders OpenGraph and Twitter card metadata for social crawlers (WhatsApp, Facebook, Telegram, X)
- * when accessing any blog post directly via URL.
- * Automatically synchronizes posts from Firestore, audits and normalizes thumbnail URLs,
- * and ensures each post serves its own verified high-definition featured image.
+ * Image resolver middleware for converting viewer URLs (ImgBB, Google Drive, Dropbox) into direct URLs
  */
-function seoCrawlerPrerenderPlugin(): Plugin {
+function imageResolverPlugin(): Plugin {
   return {
-    name: 'seo-social-crawler-prerender',
+    name: 'image-resolver-middleware',
     configureServer(server) {
-      // 1. Initial background sync of all Firestore posts on server boot
-      syncPostsFromFirestore().then((synced) => {
-        console.log(`[SEO Crawler Plugin] Synced ${synced.length} posts from Firestore for social card prerendering.`);
-      }).catch((err) => {
-        console.warn('[SEO Crawler Plugin] Initial Firestore sync warning:', err);
-      });
+      server.middlewares.use('/api/resolve-image-url', async (req, res) => {
+        try {
+          const parsed = new URL(req.url || '', 'http://localhost:3000');
+          const targetUrl = parsed.searchParams.get('url')?.trim();
 
-      // 2. Local sync endpoint to persist blog posts to disk
-      server.middlewares.use('/api/sync-blog', (req, res) => {
-        if (req.method === 'POST') {
-          let body = '';
-          req.on('data', chunk => { body += chunk; });
-          req.on('end', async () => {
-            try {
-              const payload = JSON.parse(body);
-              let currentPosts = readPostsFromDisk();
+          if (!targetUrl || !targetUrl.startsWith('http')) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'URL yuzuye ya HTTPS irakenewe.' }));
+            return;
+          }
 
-              if (payload.action === 'save' && payload.post) {
-                const idx = currentPosts.findIndex(p => p.id === payload.post.id || p.slug === payload.post.slug);
-                if (idx >= 0) {
-                  currentPosts[idx] = payload.post;
-                } else {
-                  currentPosts.unshift(payload.post);
-                }
-              } else if (payload.action === 'delete' && payload.postId) {
-                currentPosts = currentPosts.filter(p => p.id !== payload.postId);
-              }
+          // Check instant converts first (Google Drive, Dropbox)
+          const gdriveMatch = targetUrl.match(/^https?:\/\/drive\.google\.com\/(?:file\/d\/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+))/i);
+          if (gdriveMatch) {
+            const fileId = gdriveMatch[1] || gdriveMatch[2];
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, directUrl: `https://lh3.googleusercontent.com/d/${fileId}` }));
+            return;
+          }
 
-              writePostsToDisk(currentPosts);
-              // Also trigger fresh Firestore sync in background
-              syncPostsFromFirestore().catch(() => {});
+          if (/^https?:\/\/(?:www\.)?dropbox\.com\/.+[?&]dl=0/i.test(targetUrl)) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, directUrl: targetUrl.replace(/([?&])dl=0/, '$1raw=1') }));
+            return;
+          }
 
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ success: true, count: currentPosts.length }));
-              return;
-            } catch (err: any) {
-              res.statusCode = 500;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ success: false, error: err.message }));
-              return;
+          // Fetch page to extract og:image meta tag
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 6000);
+
+          const pageRes = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
             }
           });
-        } else {
-          res.statusCode = 404;
-          res.end();
-        }
-      });
+          clearTimeout(timer);
 
-      // 3. Audit endpoint to query all posts and report thumbnail statuses
-      server.middlewares.use('/api/audit-blog', async (req, res) => {
-        try {
-          const allPosts = await syncPostsFromFirestore();
-          const auditReport = auditAllBlogPosts(allPosts);
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ success: true, report: auditReport }));
+          if (!pageRes.ok) {
+            res.statusCode = pageRes.status;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: `Urubuga rwasubije: ${pageRes.status} ${pageRes.statusText}` }));
+            return;
+          }
+
+          const html = await pageRes.text();
+          const ogMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](https?:\/\/[^"']+)["']/i) ||
+                          html.match(/<meta\s+content=["'](https?:\/\/[^"']+)["']\s+property=["']og:image["']/i) ||
+                          html.match(/<meta\s+name=["']twitter:image["']\s+content=["'](https?:\/\/[^"']+)["']/i) ||
+                          html.match(/(https:\/\/i\.ibb\.co\/[a-zA-Z0-9_\/-]+\.(?:png|jpg|jpeg|webp))/i);
+
+          if (ogMatch && ogMatch[1]) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, directUrl: ogMatch[1] }));
+          } else {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Nta direct image yabonetse kuri iyi page.' }));
+          }
         } catch (err: any) {
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ success: false, error: err.message }));
+          res.end(JSON.stringify({ success: false, error: err.message || 'Ikosa mu gushaka direct image.' }));
         }
       });
-    },
-
-    async transformIndexHtml(html: string, ctx: any) {
-      const url = ctx?.originalUrl || ctx?.url || '';
-      if (!url.startsWith('/blog/')) {
-        return html;
-      }
-
-      const rawSlug = url.split('/blog/')[1]?.split('?')[0]?.replace(/\/$/, '');
-      if (!rawSlug) return html;
-
-      // Fetch the blog post directly from memory cache or Firestore
-      const post = await getBlogPostForPrerender(rawSlug);
-
-      // Render tailored metadata with the post's own featured image and full SEO tags
-      return renderBlogPostMetadata(html, post, rawSlug);
     }
   };
 }
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), seoCrawlerPrerenderPlugin()],
+    plugins: [react(), tailwindcss(), imageResolverPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

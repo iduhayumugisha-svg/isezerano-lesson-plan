@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Users, 
   PlusCircle, 
   FolderClock, 
   Settings, 
@@ -14,7 +13,7 @@ import {
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 
-export type NavPage = 'dashboard' | 'create' | 'saved' | 'students' | 'settings';
+export type NavPage = 'dashboard' | 'create' | 'saved' | 'settings';
 
 interface NavbarProps {
   currentPage: NavPage;

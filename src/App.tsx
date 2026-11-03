@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   ShieldCheck, 
   Home,
-  Users,
   Newspaper,
   ArrowLeft
 } from 'lucide-react';
@@ -27,8 +26,6 @@ import { AboutView } from './views/AboutView';
 import { ContactView } from './views/ContactView';
 import { PrivacyPolicyView } from './views/PrivacyPolicyView';
 import { TermsConditionsView } from './views/TermsConditionsView';
-import { BlogListView } from './views/BlogListView';
-import { BlogPostDetailView } from './views/BlogPostDetailView';
 import { AdSlot } from './components/AdSlot';
 
 // Central Protected Education Application Views
@@ -36,7 +33,6 @@ import { DashboardView } from './views/DashboardView';
 import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
-import { StudentsIdentificationView } from './views/StudentsIdentificationView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
 import { EducationLoginGate } from './components/EducationLoginGate';
@@ -52,19 +48,7 @@ import { FEATURE_FLAGS } from './config/features';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
 
-export type AppPage = WebsitePage | 'students' | 'admin' | 'blog' | 'blog_post';
-
-// Helper to extract initial blog post slug from URL
-const getInitialBlogSlug = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  const pathname = window.location.pathname;
-  if (pathname.startsWith('/blog/') && pathname.length > 6) {
-    return pathname.substring(6).replace(/\/$/, '');
-  }
-  const search = new URLSearchParams(window.location.search);
-  if (search.get('post')) return search.get('post');
-  return null;
-};
+export type AppPage = WebsitePage | 'admin';
 
 // Helper to determine initial page from browser URL or hash (/admin, /manage, #admin, etc.)
 const getPageFromUrl = (): AppPage => {
@@ -84,13 +68,11 @@ const getPageFromUrl = (): AppPage => {
   ) {
     return 'admin';
   }
-  if (pathname.startsWith('/blog/') && pathname.length > 6) return 'blog_post';
-  if (pathname === '/blog' || hash === '#blog' || search.get('page') === 'blog') return 'blog';
   if (pathname === '/dashboard' || hash === '#dashboard' || search.get('page') === 'dashboard') return 'dashboard';
   if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
   if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
   if (pathname === '/settings' || hash === '#settings' || search.get('page') === 'settings') return 'settings';
-  if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'students';
+  if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'dashboard';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -106,7 +88,6 @@ function AppContent() {
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
-  const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(() => getInitialBlogSlug());
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
 
   // Education state: Saved CBC Lesson Plans
@@ -126,9 +107,7 @@ function AppContent() {
     // Listen to browser navigation (back/forward button and hash changes)
     const handleUrlChange = () => {
       const detected = getPageFromUrl();
-      const slug = getInitialBlogSlug();
       setCurrentPage(detected);
-      setSelectedBlogSlug(slug);
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -235,9 +214,6 @@ function AppContent() {
   };
 
   const handleNavigate = (page: WebsitePage | AppPage | 'admin' | 'students') => {
-    if (page === 'blog') {
-      setSelectedBlogSlug(null);
-    }
     setCurrentPage(page as AppPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -257,22 +233,9 @@ function AppContent() {
     }
   };
 
-  const handleSelectBlogPost = (slug: string) => {
-    setSelectedBlogSlug(slug);
-    setCurrentPage('blog_post');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (typeof window !== 'undefined') {
-      try {
-        window.history.pushState({ page: 'blog_post', slug }, '', `/blog/${slug}`);
-      } catch {
-        // Fallback
-      }
-    }
-  };
-
   const handleSelectCategory = (cat: string) => {
     setSelectedCategory(cat);
-    if (currentPage !== 'home' && currentPage !== 'blog') {
+    if (currentPage !== 'home') {
       handleNavigate('home');
     }
   };
@@ -311,28 +274,8 @@ function AppContent() {
           <HomeView
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
-            onSelectBlogPost={handleSelectBlogPost}
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
-          />
-        )}
-
-        {/* PUBLIC PAGE: News Archive & Journal Articles List */}
-        {currentPage === 'blog' && (
-          <BlogListView
-            onSelectPost={handleSelectBlogPost}
-            onNavigate={handleNavigate}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleSelectCategory}
-          />
-        )}
-
-        {/* PUBLIC PAGE: News Article Detail Reader View */}
-        {currentPage === 'blog_post' && selectedBlogSlug && (
-          <BlogPostDetailView
-            slug={selectedBlogSlug}
-            onNavigate={handleNavigate}
-            onSelectPost={handleSelectBlogPost}
           />
         )}
 
@@ -373,7 +316,7 @@ function AppContent() {
             onNavigate={(page) => {
               if (page === 'home') {
                 handleNavigate('home');
-              } else if (page === 'create' || page === 'saved' || page === 'settings' || page === 'students') {
+              } else if (page === 'create' || page === 'saved' || page === 'settings') {
                 handleNavigate(page);
               } else if (page === 'admin') {
                 handleNavigate('admin');
@@ -452,21 +395,7 @@ function AppContent() {
                   )}
                 </button>
 
-                {/* Tab 3: Students Identification */}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('students')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                    currentPage === 'students'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Users className="w-4 h-4 text-teal-400" />
-                  <span>Students</span>
-                </button>
-
-                {/* Tab 4: Settings & Preferences */}
+                {/* Tab 3: Settings & Preferences */}
                 <button
                   type="button"
                   onClick={() => setCurrentPage('settings')}
@@ -510,22 +439,12 @@ function AppContent() {
               />
             )}
 
-            {/* Sub-View 3: Students Identification */}
-            {currentPage === 'students' && (
-              <StudentsIdentificationView
-                lessonPlans={lessonPlans}
-                onNavigate={(page) => handleNavigate(page as AppPage)}
-                onSelectPlanToEdit={handleEditPlan}
-                onCreateNewWithStudents={handleCreateNew}
-              />
-            )}
-
-            {/* Sub-View 4: Preferences / Settings */}
+            {/* Sub-View 3: Preferences / Settings */}
             {currentPage === 'settings' && (
               <SettingsView
                 totalPlansCount={lessonPlans.length}
                 onNavigate={(page) => {
-                  if (page === 'saved' || page === 'create' || page === 'settings' || page === 'students') {
+                  if (page === 'saved' || page === 'create' || page === 'settings') {
                     setCurrentPage(page);
                   } else {
                     setCurrentPage('dashboard');
@@ -545,7 +464,7 @@ function AppContent() {
               <AdminDashboardView
                 lessonPlans={lessonPlans}
                 onNavigate={(page) => {
-                  if (page === 'create' || page === 'saved' || page === 'settings' || page === 'students') {
+                  if (page === 'create' || page === 'saved' || page === 'settings') {
                     handleNavigate(page);
                   } else {
                     handleNavigate('dashboard');

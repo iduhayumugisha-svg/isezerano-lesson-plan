@@ -46,7 +46,6 @@ import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
-import { BlogManager } from '../components/BlogManager';
 import { CategoryManager } from '../components/CategoryManager';
 import { 
   getAnalyticsSummary, 
@@ -61,7 +60,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'slider' | 'blog' | 'categories' | 'ads' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'slider' | 'categories' | 'ads' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -412,21 +411,6 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
-          onClick={() => setActiveTab('blog')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'blog'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <FileText className="w-4 h-4 text-teal-300" />
-          <span>Blog & Articles</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'blog' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Rich-Text & SEO
-          </span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('categories')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'categories'
@@ -548,11 +532,6 @@ promoteToAdmin('admin@example.com');`;
       {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
       {activeTab === 'slider' && (
         <SliderManager />
-      )}
-
-      {/* ================= TAB: BLOG & ARTICLE MANAGER ================= */}
-      {activeTab === 'blog' && (
-        <BlogManager onViewLivePost={(slug) => onNavigate(`blog/${slug}` as any)} />
       )}
 
       {/* ================= TAB: DYNAMIC NEWS CATEGORIES ================= */}
@@ -909,25 +888,6 @@ promoteToAdmin('admin@example.com');`;
             </p>
 
             <div className="space-y-3 pt-1">
-              {/* Student Identification Module */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Student Identification Module</h4>
-                  <p className="text-[11px] text-slate-500">Learner demographics, boy/girl tally and class profiles</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleModule('studentIdentification')}
-                  className="text-purple-600 hover:text-purple-700 cursor-pointer"
-                >
-                  {settings.enabledModules.studentIdentification ? (
-                    <ToggleRight className="w-8 h-8 text-purple-600" />
-                  ) : (
-                    <ToggleLeft className="w-8 h-8 text-slate-400" />
-                  )}
-                </button>
-              </div>
-
               {/* AI Assistance Module */}
               <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
                 <div>

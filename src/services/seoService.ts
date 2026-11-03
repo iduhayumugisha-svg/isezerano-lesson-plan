@@ -1,5 +1,5 @@
 import { BlogPost } from '../types/blog';
-import { normalizeAndUpgradeThumbnailUrl, getSafeFallbackThumbnail, isValidHttpsImageUrl } from '../utils/thumbnailUtils';
+import { getSingleArticleThumbnailUrl } from '../utils/thumbnailUtils';
 
 const DEFAULT_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
 const DEFAULT_DESCRIPTION = 'Specialized pedagogical lesson-planning platform helping primary and secondary school teachers in Rwanda prepare official REB-compliant 8-column Competence-Based Curriculum (CBC) lesson plans.';
@@ -46,12 +46,7 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
   const postUrl = `${BASE_URL}/blog/${post.slug}`;
   
   // Ensure image URL is valid absolute HTTPS for WhatsApp, Facebook, Telegram, and X crawlers
-  let absoluteImageUrl = post.thumbnailUrl;
-  if (isValidHttpsImageUrl(absoluteImageUrl)) {
-    absoluteImageUrl = normalizeAndUpgradeThumbnailUrl(absoluteImageUrl);
-  } else {
-    absoluteImageUrl = getSafeFallbackThumbnail(post.category);
-  }
+  const absoluteImageUrl = getSingleArticleThumbnailUrl(post);
 
   const description = post.excerpt || post.title;
 

@@ -59,7 +59,7 @@ export interface AppSettings {
   academicYear: string;
   curriculumVersion: string;
   enabledModules: {
-    studentIdentification: boolean;
+    studentIdentification?: boolean;
     aiAssistance: boolean;
     cloudSync: boolean;
     printExport: boolean;

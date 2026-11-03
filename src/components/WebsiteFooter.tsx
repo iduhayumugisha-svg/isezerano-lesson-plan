@@ -118,15 +118,6 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
               <li>
                 <button
                   type="button"
-                  onClick={() => handleLink('blog')}
-                  className="text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  News Archive & Articles
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
                   onClick={() => handleLink('dashboard')}
                   className="text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer inline-flex items-center space-x-1"
                 >
