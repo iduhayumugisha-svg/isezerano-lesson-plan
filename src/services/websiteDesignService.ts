@@ -605,6 +605,13 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
   }
 
   const { colors, typography, logo } = settings;
+  const fontScale = typography.fontScale && typography.fontScale >= 0.7 && typography.fontScale <= 1.8 
+    ? typography.fontScale 
+    : 1.0;
+  const rootPx = Math.round(16 * fontScale * 100) / 100;
+
+  // Apply root font-size directly to documentElement for instant effect
+  document.documentElement.style.fontSize = `${rootPx}px`;
 
   const fontLineHeight = typography.lineHeight === 'tight' 
     ? '1.25' 
@@ -623,7 +630,12 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
   const bodyWeightValue = typography.bodyWeight === 'medium' ? '500' : '400';
 
   styleTag.textContent = `
+    html {
+      font-size: ${rootPx}px !important;
+    }
+
     :root {
+      --app-font-scale: ${fontScale};
       /* Colors */
       --app-header-bg: ${colors.headerBg};
       --app-header-text: ${colors.headerText};

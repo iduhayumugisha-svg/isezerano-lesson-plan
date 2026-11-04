@@ -9,7 +9,8 @@ import {
   sendPasswordReset as apiSendPasswordReset,
   signInWithGoogle as apiSignInWithGoogle,
   isAuthorizedAdminEmail,
-  getFirebaseAuth
+  getFirebaseAuth,
+  ensureAnonymousTeacherSession
 } from '../services/authService';
 
 interface AuthContextType {
@@ -32,6 +33,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    // Silently ensure an anonymous teacher session exists for Firestore
+    ensureAnonymousTeacherSession().catch(() => {});
+
     const unsubscribe = subscribeToAuth((profile) => {
       setUser(profile);
       setIsLoading(false);

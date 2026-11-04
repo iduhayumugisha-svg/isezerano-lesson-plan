@@ -62,6 +62,10 @@ export interface WebsiteTypographySettings {
   headingWeight: 'normal' | 'medium' | 'semibold' | 'bold';
   bodyWeight: 'normal' | 'medium';
   lineHeight: 'tight' | 'normal' | 'relaxed';
+
+  // Global Website Font Scale (Ingano y'Inyuguti kuri Website Yose)
+  fontScale: number;          // Relative scale factor (0.80 to 1.50, default: 1.0)
+  fontSizePreset: 'small' | 'normal' | 'medium' | 'large' | 'extra-large';
 }
 
 export interface WebsiteLogoSettings {
@@ -191,7 +195,9 @@ export const DEFAULT_WEBSITE_TYPOGRAPHY: WebsiteTypographySettings = {
   footerSize: 13,
   headingWeight: 'bold',
   bodyWeight: 'normal',
-  lineHeight: 'normal'
+  lineHeight: 'normal',
+  fontScale: 1.0,
+  fontSizePreset: 'normal'
 };
 
 export const DEFAULT_ANNOUNCEMENT_STRIP: AnnouncementStripSettings = {

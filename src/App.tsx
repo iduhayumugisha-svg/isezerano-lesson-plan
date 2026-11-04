@@ -7,7 +7,8 @@ import {
   ShieldCheck, 
   Home,
   Newspaper,
-  ArrowLeft
+  ArrowLeft,
+  Award
 } from 'lucide-react';
 import { LessonPlan } from './types/lessonPlan';
 import { 
@@ -33,9 +34,9 @@ import { DashboardView } from './views/DashboardView';
 import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
+import { NurseryReportsView } from './views/NurseryReportsView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
-import { EducationLoginGate } from './components/EducationLoginGate';
 
 // Admin Portal & Modals
 import { AdminDashboardView } from './views/AdminDashboardView';
@@ -72,6 +73,15 @@ const getPageFromUrl = (): AppPage => {
   if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
   if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
   if (pathname === '/settings' || hash === '#settings' || search.get('page') === 'settings') return 'settings';
+  if (
+    pathname === '/nursery' || 
+    pathname.startsWith('/nursery/') || 
+    pathname === '/nursery-reports' || 
+    hash === '#nursery' || 
+    search.get('page') === 'nursery'
+  ) {
+    return 'nursery';
+  }
   if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'dashboard';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
@@ -88,7 +98,6 @@ function AppContent() {
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
-  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -151,9 +160,9 @@ function AppContent() {
   const handleSaveLessonPlan = async (plan: LessonPlan): Promise<{ success: boolean; error?: string }> => {
     const enrichedPlan: LessonPlan = {
       ...plan,
-      ownerUid: user?.uid || plan.ownerUid,
-      ownerEmail: user?.email || plan.ownerEmail,
-      userId: user?.uid || plan.userId
+      ownerUid: user?.uid || plan.ownerUid || 'guest-teacher',
+      ownerEmail: user?.email || plan.ownerEmail || 'teacher@isezerano.rw',
+      userId: user?.uid || plan.userId || 'guest-teacher'
     };
 
     const result = await saveLessonPlanToFirestore(enrichedPlan);
@@ -233,16 +242,7 @@ function AppContent() {
     }
   };
 
-  const handleSelectCategory = (cat: string) => {
-    setSelectedCategory(cat);
-    if (currentPage !== 'home') {
-      handleNavigate('home');
-    }
-  };
-
-  // Protected education routes
-  const isProtectedEducationPage = ['dashboard', 'create', 'saved', 'settings', 'students'].includes(currentPage);
-  const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'students'].includes(currentPage);
+  const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'nursery'].includes(currentPage);
 
   return (
     <div 
@@ -258,9 +258,6 @@ function AppContent() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        selectedCategory={selectedCategory}
-        onSelectCategory={handleSelectCategory}
       />
 
       {/* Ad Placement: Below Header */}
@@ -274,8 +271,6 @@ function AppContent() {
           <HomeView
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleSelectCategory}
           />
         )}
 
@@ -299,24 +294,14 @@ function AppContent() {
           <TermsConditionsView onNavigate={handleNavigate} />
         )}
 
-        {/* ============================================================== */}
-        {/* PROTECTED EDUCATION PLATFORM: AUTHENTICATION GATE CHECK        */}
-        {/* ============================================================== */}
-        {isProtectedEducationPage && !user && (
-          <EducationLoginGate
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-            onNavigateHome={() => handleNavigate('home')}
-          />
-        )}
-
-        {/* AUTHENTICATED EDUCATION DASHBOARD VIEW */}
-        {currentPage === 'dashboard' && user && (
+        {/* EDUCATION DASHBOARD VIEW: Open & Free for All Teachers */}
+        {currentPage === 'dashboard' && (
           <DashboardView
             lessonPlans={lessonPlans}
             onNavigate={(page) => {
               if (page === 'home') {
                 handleNavigate('home');
-              } else if (page === 'create' || page === 'saved' || page === 'settings') {
+              } else if (page === 'create' || page === 'saved' || page === 'settings' || page === 'nursery') {
                 handleNavigate(page);
               } else if (page === 'admin') {
                 handleNavigate('admin');
@@ -329,8 +314,8 @@ function AppContent() {
           />
         )}
 
-        {/* AUTHENTICATED EDUCATION WORKSPACE: Lesson Plans, Students, and Settings */}
-        {isLessonPlanWorkspace && user && (
+        {/* EDUCATION WORKSPACE: Lesson Plans, Report Cards & Settings - Free & Open */}
+        {isLessonPlanWorkspace && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             
             {/* Dedicated Workspace Navigation Bar with Return to Newspaper */}
@@ -395,7 +380,21 @@ function AppContent() {
                   )}
                 </button>
 
-                {/* Tab 3: Settings & Preferences */}
+                {/* Tab 3: Nursery Student Report Cards */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage('nursery')}
+                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
+                    currentPage === 'nursery'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span>Nursery Reports</span>
+                </button>
+
+                {/* Tab 4: Settings & Preferences */}
                 <button
                   type="button"
                   onClick={() => setCurrentPage('settings')}
@@ -444,13 +443,21 @@ function AppContent() {
               <SettingsView
                 totalPlansCount={lessonPlans.length}
                 onNavigate={(page) => {
-                  if (page === 'saved' || page === 'create' || page === 'settings') {
-                    setCurrentPage(page);
+                  if (page === 'saved' || page === 'create' || page === 'settings' || (page as string) === 'nursery') {
+                    setCurrentPage(page as AppPage);
                   } else {
                     setCurrentPage('dashboard');
                   }
                 }}
                 onDataImported={refreshData}
+              />
+            )}
+
+            {/* Sub-View 4: Nursery Student Report Cards System */}
+            {currentPage === 'nursery' && (
+              <NurseryReportsView
+                onNavigateHome={() => handleNavigate('home')}
+                onNavigateDashboard={() => handleNavigate('dashboard')}
               />
             )}
 

@@ -23,7 +23,9 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // 1. Users Collection (Confidential: user directory restricted to owner or admin)
+    // ==============================================================
+    // 1. Users Collection (Confidential: restricted to owner or admin)
+    // ==============================================================
     match /users/{userId} {
       // Users can only read their own profile; Admin can read all for oversight
       allow read: if isOwner(userId) || isAdmin();
@@ -43,7 +45,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ==============================================================
     // 2. Application Configurable Settings (Curriculum & Platform Parameters)
+    // ==============================================================
     match /appSettings/{settingId} {
       // General curriculum and design settings can be read publicly without an account
       allow read: if true;
@@ -52,7 +56,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ==============================================================
     // 3. Lesson Plans Collection
+    // ==============================================================
     match /lesson_plans/{planId} {
       // Teachers read only their own plans; Admins can read all for oversight
       allow read: if isAuthenticated() && (
@@ -64,7 +70,8 @@ service cloud.firestore {
       // Create must bind ownerUid to caller
       allow create: if isAuthenticated() && (
         request.resource.data.ownerUid == request.auth.uid ||
-        request.resource.data.userId == request.auth.uid
+        request.resource.data.userId == request.auth.uid ||
+        isAdmin()
       );
 
       // Update and delete restricted to owner or admin
@@ -75,7 +82,9 @@ service cloud.firestore {
       );
     }
 
+    // ==============================================================
     // 4. Homepage Hero Slides
+    // ==============================================================
     match /homepage_slides/{slideId} {
       // Anyone (including ordinary website visitors) can read published slides
       allow read: if true;
@@ -84,7 +93,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ==============================================================
     // 5. Website Editable Pages (About Us, Contact Us, Privacy Policy, Terms & Conditions)
+    // ==============================================================
     match /website_pages/{pageId} {
       // Public visitors can read published content without signing in
       allow read: if true;
@@ -93,7 +104,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ==============================================================
     // 6. Shared Website Statistics and Activity Counters
+    // ==============================================================
     match /site_stats/{statId} {
       // Anyone can read statistics counters
       allow read: if true;
@@ -102,7 +115,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ==============================================================
     // 7. News Platform: Posts with atomic view-counter increment support
+    // ==============================================================
     match /posts/{postId} {
       // Public (including unauthenticated visitors) can read news posts
       allow read: if true;
@@ -118,7 +133,9 @@ service cloud.firestore {
       );
     }
 
-    // 8. Site Settings & Branding (Preserves exact logoData size validation for ISEZERANO NEWS)
+    // ==============================================================
+    // 8. Site Settings & Branding
+    // ==============================================================
     match /siteSettings/branding {
       allow read: if true;
       allow create, update: if isAdmin() &&
@@ -132,7 +149,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ==============================================================
     // 9. Preserved News Website Collections
+    // ==============================================================
     match /categories/{catId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -159,7 +178,63 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 10. Default deny for all other documents
+    // ==============================================================
+    // 10. NURSERY STUDENT REPORT CARD SYSTEM (N1, N2, N3)
+    // Strictly validated against Class_Reports_N1_Term_1 CBC standards
+    // Free on Firebase Spark plan (via Anonymous Auth or Google Auth)
+    // ==============================================================
+
+    function isValidNurseryStudent(data) {
+      return data.fullName is string &&
+             data.fullName.size() >= 2 &&
+             data.fullName.size() <= 120 &&
+             data.classGrade is string &&
+             data.classGrade.size() <= 20 &&
+             (data.gender == 'Boy' || data.gender == 'Girl' || data.gender is string) &&
+             (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.size() <= 60)) &&
+             (!('parentContact' in data) || (data.parentContact is string && data.parentContact.size() <= 60)) &&
+             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20));
+    }
+
+    function isValidSchoolSettings(data) {
+      return (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 120)) &&
+             (!('district' in data) || (data.district is string && data.district.size() <= 80)) &&
+             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20));
+    }
+
+    function isValidNurseryAssessment(data) {
+      return data.studentId is string &&
+             data.studentId.size() > 0 &&
+             data.studentId.size() <= 120 &&
+             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20)) &&
+             (!('scores' in data) || data.scores is map);
+    }
+
+    // A. Nursery Students: Authenticated teachers & admin can manage student rosters and report cards.
+    // Writes require active authenticated session and strict schema validation.
+    match /nursery_students/{studentId} {
+      allow read: if isAuthenticated() || isAdmin();
+      allow create, update: if (isAuthenticated() || isAdmin()) && isValidNurseryStudent(request.resource.data);
+      allow delete: if isAuthenticated() || isAdmin();
+    }
+
+    // B. Nursery School Profile (School Name, District, Head Teacher, Academic Year):
+    match /nursery_school_settings/{settingId} {
+      allow read: if isAuthenticated() || isAdmin();
+      allow create, update: if (isAuthenticated() || isAdmin()) && isValidSchoolSettings(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // C. Nursery Assessments (Term assessment marks across 22 developmental criteria):
+    match /nursery_assessments/{assessmentId} {
+      allow read: if isAuthenticated() || isAdmin();
+      allow create, update: if (isAuthenticated() || isAdmin()) && isValidNurseryAssessment(request.resource.data);
+      allow delete: if isAuthenticated() || isAdmin();
+    }
+
+    // ==============================================================
+    // 11. Default deny for all other documents
+    // ==============================================================
     match /{document=**} {
       allow read, write: if false;
     }

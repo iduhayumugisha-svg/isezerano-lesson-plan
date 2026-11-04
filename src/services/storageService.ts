@@ -1,6 +1,6 @@
 import { LessonPlan, SchoolInfo, TeacherInfo, StudentsIdentification, FirebaseConnectionConfig } from '../types/lessonPlan';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
@@ -490,6 +490,19 @@ export const getFirebaseAuth = () => {
   }
 };
 
+export const ensureAnonymousSession = async () => {
+  const auth = getFirebaseAuth();
+  if (!auth) return null;
+  if (auth.currentUser) return auth.currentUser;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (err: any) {
+    console.warn('Anonymous session initialization skipped:', err?.message || err);
+    return null;
+  }
+};
+
 export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ success: boolean; error?: string; isCloudSynced?: boolean }> => {
   // Always save locally first so public teachers can create, edit and download without any account requirement
   saveLessonPlanLocal(plan);
@@ -499,19 +512,23 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
     return { success: true, isCloudSynced: false };
   }
 
-  // Check if an authorized account is signed in (e.g. Website Owner / Admin)
+  // Ensure an authenticated session exists (Admin or Anonymous Teacher)
   try {
     const auth = getFirebaseAuth();
-    if (!auth || !auth.currentUser) {
-      // Unauthenticated teacher: plan safely stored in browser storage
+    let currentUser = auth?.currentUser;
+    if (!currentUser) {
+      currentUser = await ensureAnonymousSession();
+    }
+    if (!currentUser) {
+      // Offline fallback: plan is safely stored in browser storage
       return { success: true, isCloudSynced: false };
     }
 
     const docRef = doc(db, 'lesson_plans', plan.id);
     const enriched = {
       ...plan,
-      ownerUid: auth.currentUser.uid,
-      ownerEmail: auth.currentUser.email || plan.ownerEmail || ''
+      ownerUid: currentUser.uid,
+      ownerEmail: currentUser.email || plan.ownerEmail || ''
     };
     await setDoc(docRef, enriched);
     return { success: true, isCloudSynced: true };

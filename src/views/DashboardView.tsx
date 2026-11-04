@@ -14,7 +14,8 @@ import {
   Sparkles, 
   ShieldCheck, 
   Home,
-  Newspaper
+  Newspaper,
+  Award
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
 import { SaasNavPage } from '../components/Sidebar';
@@ -24,7 +25,7 @@ import { FEATURE_FLAGS } from '../config/features';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];
-  onNavigate: (page: SaasNavPage | 'home') => void;
+  onNavigate: (page: SaasNavPage | 'home' | 'nursery') => void;
   onSelectPlanToEdit: (plan: LessonPlan) => void;
   onSelectPlanToPrint: (plan: LessonPlan) => void;
 }
@@ -63,6 +64,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       icon: FolderClock,
       iconColor: 'bg-slate-100 text-slate-800 group-hover:bg-slate-800 group-hover:text-white',
       buttonText: t.browsePlans || 'Browse Saved Plans'
+    },
+    {
+      id: 'nursery' as any,
+      title: 'Nursery Student Report Cards',
+      badge: 'N1, N2, N3 CBC',
+      badgeColor: 'bg-amber-50 text-amber-900 border-amber-200',
+      description: 'Gacunga amakarita y\'abana b\'inshuke (Nursery) ukurikije template ya Class_Reports_N1_Term_1.pdf n\'ibyigwa 22 bya REB.',
+      icon: Award,
+      iconColor: 'bg-amber-50 text-amber-700 group-hover:bg-amber-700 group-hover:text-white',
+      buttonText: 'Open Nursery Reports'
     },
     {
       id: 'settings' as SaasNavPage,
@@ -164,6 +175,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Search className="w-4 h-4 text-teal-400" />
               <span>{t.browsePlans || 'Browse Saved Plans'} ({totalPlans})</span>
             </button>
+            <button
+              onClick={() => onNavigate('nursery')}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 transition-all border border-amber-500/30 cursor-pointer"
+            >
+              <Award className="w-4 h-4 text-amber-300" />
+              <span>Nursery Report Cards</span>
+            </button>
           </div>
         </div>
 
@@ -218,7 +236,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {educationModules.map((mod) => {
             const Icon = mod.icon;
             return (

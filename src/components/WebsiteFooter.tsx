@@ -134,6 +134,15 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                   CBC Lesson Plan Workspace
                 </button>
               </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => handleLink('nursery')}
+                  className="text-amber-400 hover:text-amber-300 transition-colors cursor-pointer inline-flex items-center space-x-1"
+                >
+                  <span>Nursery Report Cards (N1-N3)</span>
+                </button>
+              </li>
             </ul>
           </div>
 

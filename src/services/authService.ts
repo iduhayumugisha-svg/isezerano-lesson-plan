@@ -8,6 +8,7 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
+  signInAnonymously,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -422,6 +423,8 @@ export const signOut = async (): Promise<void> => {
   if (auth) {
     try {
       await fbSignOut(auth);
+      // Re-establish anonymous teacher session so teacher tools continue functioning
+      await ensureAnonymousTeacherSession();
     } catch (err) {
       console.warn('Firebase sign out warning:', err);
     }
@@ -529,6 +532,29 @@ export const listUsers = async (): Promise<UserProfile[]> => {
 };
 
 /**
+ * Ensures an active Firebase Auth session exists.
+ * If user is not logged in with an admin account, silently establishes an anonymous session.
+ * 100% free on Firebase Spark tier (requires no Blaze plan and zero cost).
+ */
+export const ensureAnonymousTeacherSession = async (): Promise<FirebaseUser | null> => {
+  const auth = getFirebaseAuth();
+  if (!auth) return null;
+
+  // If already authenticated (admin or existing anonymous user), reuse session
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (err: any) {
+    console.warn('Anonymous teacher session could not be established:', err?.message || err);
+    return null;
+  }
+};
+
+/**
  * Subscribe to Auth State changes
  * Strictly authenticated: Never returns an admin user unless authenticated in Firebase
  */
@@ -537,6 +563,14 @@ export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (
   if (auth) {
     return onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
       if (fbUser) {
+        // If it's an anonymous session for teacher tools, do NOT treat as admin or registered user profile
+        // This keeps the UI completely login-free while Firestore operations have request.auth != null
+        if (fbUser.isAnonymous) {
+          localStorage.removeItem(LOCAL_USER_KEY);
+          callback(null);
+          return;
+        }
+
         const profile = await getUserProfile(fbUser.uid);
         if (profile) {
           localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
@@ -544,7 +578,7 @@ export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (
           return;
         }
       }
-      // When Firebase user is null, ALWAYS purge any local admin session and signal null
+      // When Firebase user is null, purge any local admin session and signal null
       localStorage.removeItem(LOCAL_USER_KEY);
       callback(null);
     });

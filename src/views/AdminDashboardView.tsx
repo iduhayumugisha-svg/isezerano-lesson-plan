@@ -46,7 +46,6 @@ import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
-import { CategoryManager } from '../components/CategoryManager';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -60,7 +59,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'slider' | 'categories' | 'ads' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -411,21 +410,6 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
-          onClick={() => setActiveTab('categories')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'categories'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <Layers className="w-4 h-4 text-emerald-300" />
-          <span>News Categories</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'categories' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Header Nav
-          </span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('ads')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'ads'
@@ -532,11 +516,6 @@ promoteToAdmin('admin@example.com');`;
       {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
       {activeTab === 'slider' && (
         <SliderManager />
-      )}
-
-      {/* ================= TAB: DYNAMIC NEWS CATEGORIES ================= */}
-      {activeTab === 'categories' && (
-        <CategoryManager />
       )}
 
       {/* ================= TAB: ADS MANAGEMENT ================= */}

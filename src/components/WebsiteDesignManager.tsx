@@ -1351,7 +1351,7 @@ export const WebsiteDesignManager: React.FC = () => {
             <div>
               <h3 className="text-lg font-bold text-slate-900">Typography & Font Sizing Manager</h3>
               <p className="text-xs text-slate-500">
-                Adjust font families, font sizes, weights, and line heights with built-in responsive boundaries to keep the website clean and legible on phones and laptops.
+                Guhindura ingano y'inyuguti (Font Size) kuri website yose, amoko y'inyuguti, n'imiterere y'inyandiko kuri mudasobwa no kuri telefoni.
               </p>
             </div>
 
@@ -1363,6 +1363,148 @@ export const WebsiteDesignManager: React.FC = () => {
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Typography to Default</span>
             </button>
+          </div>
+
+          {/* PRIORITY FEATURE: GLOBAL WEBSITE FONT SCALE (INGANO Y'INYUGUTI KURI WEBSITE YOSE) */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-teal-50/80 via-white to-slate-50 border-2 border-teal-600/40 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-100 pb-3">
+              <div>
+                <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[11px] font-bold mb-1">
+                  <Type className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Ingano y'Inyuguti Rusange (Global Font Size)</span>
+                </div>
+                <h4 className="text-base font-bold text-slate-900">
+                  Kongera cyangwa Kugabanya Ingano y'Inyuguti kuri Website Yose
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Iyi setting ihita igabanya cyangwa yongera ingano y'amagambo yose agaragara ku rubuga (Home, Lesson Plans, Report Cards, Footer) kuri mudasobwa na telefoni.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-xs font-bold text-slate-500">Gipimo kiriho:</span>
+                <span className="px-3 py-1 rounded-xl bg-teal-700 text-white font-mono font-extrabold text-sm shadow-xs">
+                  {Math.round((draftSettings.typography.fontScale || 1.0) * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Hitamo Ingano Byihuse (Quick Presets):
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {[
+                  { label: 'Ntoya', scale: 0.88, preset: 'small', desc: '88% (Compact)' },
+                  { label: 'Bisanzwe', scale: 1.0, preset: 'normal', desc: '100% (Default)' },
+                  { label: 'Nini', scale: 1.12, preset: 'medium', desc: '112% (Medium)' },
+                  { label: 'Nini Cyane', scale: 1.25, preset: 'large', desc: '125% (Large)' },
+                  { label: 'Ikinyuranye', scale: 1.40, preset: 'extra-large', desc: '140% (XL)' }
+                ].map((item) => {
+                  const currentScale = draftSettings.typography.fontScale || 1.0;
+                  const isCurrent = Math.abs(currentScale - item.scale) < 0.04;
+                  return (
+                    <button
+                      key={item.preset}
+                      type="button"
+                      onClick={() => updateDraftTypography({ 
+                        fontScale: item.scale, 
+                        fontSizePreset: item.preset as any 
+                      })}
+                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-teal-700 text-white border-teal-700 shadow-md ring-2 ring-teal-400/40 font-bold'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-teal-400 hover:bg-teal-50/40'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{item.label}</div>
+                      <div className={`text-[10px] ${isCurrent ? 'text-teal-100' : 'text-slate-400'}`}>
+                        {item.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Interactive Slider with Increment / Decrement Buttons */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span>Hindura Ingano Buhoro Buhoro (Fine-tune Scale):</span>
+                <span className="font-mono text-teal-800 font-bold">
+                  {Math.round((draftSettings.typography.fontScale || 1.0) * 100)}% (x{(draftSettings.typography.fontScale || 1.0).toFixed(2)})
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = draftSettings.typography.fontScale || 1.0;
+                    const next = Math.max(0.80, Math.round((current - 0.05) * 100) / 100);
+                    updateDraftTypography({ fontScale: next });
+                  }}
+                  className="w-9 h-9 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs active:scale-95"
+                  title="Gabanya ingano y'inyuguti (-5%)"
+                >
+                  -
+                </button>
+
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min="80"
+                    max="150"
+                    step="5"
+                    value={Math.round((draftSettings.typography.fontScale || 1.0) * 100)}
+                    onChange={(e) => {
+                      const scale = Number(e.target.value) / 100;
+                      updateDraftTypography({ fontScale: scale });
+                    }}
+                    className="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 px-0.5 mt-1 font-mono">
+                    <span>80% (Ntoya)</span>
+                    <span>100% (Bisanzwe)</span>
+                    <span>120% (Nini)</span>
+                    <span>150% (Nini Cyane)</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = draftSettings.typography.fontScale || 1.0;
+                    const next = Math.min(1.50, Math.round((current + 0.05) * 100) / 100);
+                    updateDraftTypography({ fontScale: next });
+                  }}
+                  className="w-9 h-9 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs active:scale-95"
+                  title="Ongera ingano y'inyuguti (+5%)"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Live Visual Preview Box */}
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 flex items-center space-x-1.5">
+                <Eye className="w-3.5 h-3.5" />
+                <span>Icyitegererezo cy'inyuguti mu buryo bugaragara ako kanya (Live Preview)</span>
+              </span>
+              <div 
+                className="p-3 rounded-lg bg-slate-50 border border-slate-100 space-y-1 transition-all"
+                style={{ fontSize: `${15 * (draftSettings.typography.fontScale || 1.0)}px` }}
+              >
+                <p className="font-bold text-slate-900 leading-snug">
+                  ISEZERANO ONLINE – GS GITUMBA (Buyoga Sector, Rulindo District)
+                </p>
+                <p className="text-slate-600 leading-relaxed text-[0.9em]">
+                  Urubuga rwo gutegura imfashanyigisho z'amasomo (CBC Lesson Plans) n'indangamanota z'abanyeshuri (Nursery Report Cards).
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Font Family Selection */}
