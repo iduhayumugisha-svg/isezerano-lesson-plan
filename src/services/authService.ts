@@ -8,7 +8,6 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
-  signInAnonymously,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -285,6 +284,10 @@ export const signIn = async (
 
 /**
  * Sign In with Google Popup (With account picker prompt)
+ * - Every teacher can sign in immediately with their Google account.
+ * - Sole administrator is twizerefelix90@gmail.com.
+ * - All other accounts receive the 'teacher' role with active status.
+ * - Teachers cannot promote themselves to admin.
  */
 export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string; code?: string }> => {
   const auth = getFirebaseAuth();
@@ -321,62 +324,61 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
       console.warn('Could not read ID token claims:', claimErr);
     }
 
-    const userEmail = user.email || '';
+    const userEmail = (user.email || '').toLowerCase().trim();
     const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
+    const resolvedRole: UserRole = isSuperAdmin ? 'admin' : 'teacher';
 
-    // Strict requirement: Only the explicitly authorized administrator account may enter the Admin Dashboard.
-    // If an unauthorized person selects another Google account, deny access and return them to the public website.
-    if (!isSuperAdmin) {
-      try {
-        await fbSignOut(auth);
-      } catch (soErr) {
-        console.warn('Sign out warning for unauthorized account:', soErr);
-      }
-      localStorage.removeItem(LOCAL_USER_KEY);
-      return { 
-        success: false, 
-        isAdmin: false,
-        error: 'This Google account is not authorized to access the Admin Portal.',
-        code: 'UNAUTHORIZED_ACCOUNT'
-      };
-    }
-
-    const profile = await getUserProfile(user.uid);
-    if (profile) {
-      if (profile.status === 'inactive') {
-        await fbSignOut(auth);
-        return { success: false, error: 'Your account has been deactivated by an Administrator.' };
-      }
-      if (isSuperAdmin && profile.role !== 'admin') {
-        profile.role = 'admin';
-      }
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-      return { success: true, user: profile, isAdmin: true };
-    }
-
-    // If document does not exist yet in Firestore, create default profile record
     const db = initFirestoreIfConfigured();
-    const defaultProfile: UserProfile = {
+
+    // Check existing profile in Firestore
+    let existingProfile: UserProfile | null = null;
+    if (db) {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const d = userDoc.data();
+          if (d.status === 'inactive' && !isSuperAdmin) {
+            await fbSignOut(auth);
+            return { success: false, error: 'Your account has been deactivated by an Administrator.' };
+          }
+          existingProfile = {
+            uid: user.uid,
+            email: userEmail,
+            displayName: user.displayName || d.displayName || userEmail.split('@')[0],
+            role: resolvedRole, // Strictly enforced: only authorized admin can be admin
+            status: 'active',
+            schoolName: d.schoolName || (isSuperAdmin ? 'GS GITUMBA' : ''),
+            createdAt: d.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+        }
+      } catch (e) {
+        console.warn('Could not read user profile during Google sign-in:', e);
+      }
+    }
+
+    const finalProfile: UserProfile = existingProfile || {
       uid: user.uid,
       email: userEmail,
-      displayName: user.displayName || userEmail.split('@')[0] || 'Administrator',
-      role: 'admin',
+      displayName: user.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
+      role: resolvedRole,
       status: 'active',
-      schoolName: 'GS GITUMBA',
+      schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
+    // Persist or sync user document to Firestore users/{uid}
     if (db) {
       try {
-        await setDoc(doc(db, 'users', user.uid), defaultProfile);
+        await setDoc(doc(db, 'users', user.uid), finalProfile, { merge: true });
       } catch (e) {
-        console.warn('Failed to auto-create user document in Firestore:', e);
+        console.warn('Failed to sync user document in Firestore:', e);
       }
     }
 
-    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
-    return { success: true, user: defaultProfile, isAdmin: true };
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(finalProfile));
+    return { success: true, user: finalProfile, isAdmin: isSuperAdmin };
   } catch (err: unknown) {
     const fbError = err as { code?: string; message?: string };
     const errCode = fbError.code || '';
@@ -416,15 +418,13 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
 };
 
 /**
- * Sign out
+ * Sign out (Completely terminates session with NO automatic anonymous login)
  */
 export const signOut = async (): Promise<void> => {
   const auth = getFirebaseAuth();
   if (auth) {
     try {
       await fbSignOut(auth);
-      // Re-establish anonymous teacher session so teacher tools continue functioning
-      await ensureAnonymousTeacherSession();
     } catch (err) {
       console.warn('Firebase sign out warning:', err);
     }
@@ -532,53 +532,23 @@ export const listUsers = async (): Promise<UserProfile[]> => {
 };
 
 /**
- * Ensures an active Firebase Auth session exists.
- * If user is not logged in with an admin account, silently establishes an anonymous session.
- * 100% free on Firebase Spark tier (requires no Blaze plan and zero cost).
- */
-export const ensureAnonymousTeacherSession = async (): Promise<FirebaseUser | null> => {
-  const auth = getFirebaseAuth();
-  if (!auth) return null;
-
-  // If already authenticated (admin or existing anonymous user), reuse session
-  if (auth.currentUser) {
-    return auth.currentUser;
-  }
-
-  try {
-    const cred = await signInAnonymously(auth);
-    return cred.user;
-  } catch (err: any) {
-    console.warn('Anonymous teacher session could not be established:', err?.message || err);
-    return null;
-  }
-};
-
-/**
  * Subscribe to Auth State changes
- * Strictly authenticated: Never returns an admin user unless authenticated in Firebase
+ * Provides authenticated profile for teachers and administrators.
+ * Returns null if user is signed out.
  */
 export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (() => void) => {
   const auth = getFirebaseAuth();
   if (auth) {
     return onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
-      if (fbUser) {
-        // If it's an anonymous session for teacher tools, do NOT treat as admin or registered user profile
-        // This keeps the UI completely login-free while Firestore operations have request.auth != null
-        if (fbUser.isAnonymous) {
-          localStorage.removeItem(LOCAL_USER_KEY);
-          callback(null);
-          return;
-        }
-
+      if (fbUser && !fbUser.isAnonymous) {
         const profile = await getUserProfile(fbUser.uid);
-        if (profile) {
+        if (profile && profile.status === 'active') {
           localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
           callback(profile);
           return;
         }
       }
-      // When Firebase user is null, purge any local admin session and signal null
+      // When Firebase user is null or unauthenticated, clear local session and signal null
       localStorage.removeItem(LOCAL_USER_KEY);
       callback(null);
     });

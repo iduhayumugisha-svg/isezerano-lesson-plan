@@ -1,6 +1,6 @@
 import { LessonPlan, SchoolInfo, TeacherInfo, StudentsIdentification, FirebaseConnectionConfig } from '../types/lessonPlan';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
@@ -490,21 +490,8 @@ export const getFirebaseAuth = () => {
   }
 };
 
-export const ensureAnonymousSession = async () => {
-  const auth = getFirebaseAuth();
-  if (!auth) return null;
-  if (auth.currentUser) return auth.currentUser;
-  try {
-    const cred = await signInAnonymously(auth);
-    return cred.user;
-  } catch (err: any) {
-    console.warn('Anonymous session initialization skipped:', err?.message || err);
-    return null;
-  }
-};
-
 export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ success: boolean; error?: string; isCloudSynced?: boolean }> => {
-  // Always save locally first so public teachers can create, edit and download without any account requirement
+  // Always save locally first so public teachers can create, edit and download without disruption
   saveLessonPlanLocal(plan);
 
   const db = initFirestoreIfConfigured();
@@ -512,15 +499,12 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
     return { success: true, isCloudSynced: false };
   }
 
-  // Ensure an authenticated session exists (Admin or Anonymous Teacher)
+  // Save to Firestore for authenticated teachers or administrators
   try {
     const auth = getFirebaseAuth();
-    let currentUser = auth?.currentUser;
-    if (!currentUser) {
-      currentUser = await ensureAnonymousSession();
-    }
-    if (!currentUser) {
-      // Offline fallback: plan is safely stored in browser storage
+    const currentUser = auth?.currentUser;
+    if (!currentUser || currentUser.isAnonymous) {
+      // Local fallback: plan is safely stored in browser storage
       return { success: true, isCloudSynced: false };
     }
 

@@ -21,8 +21,12 @@ import {
   X,
   ExternalLink,
   Award,
-  Layers
+  Layers,
+  ShieldCheck,
+  Lock,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { 
   NurseryStudent, 
   StudentTermAssessment, 
@@ -59,20 +63,25 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   onNavigateHome,
   onNavigateDashboard
 }) => {
+  const { user, isAdmin, signInWithGoogle, isLoading } = useAuth();
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
   // Main Navigation Tab
   const [activeTab, setActiveTab] = useState<NurseryTab>('students');
 
   // School Information State (Starts Blank)
-  const [schoolInfo, setSchoolInfo] = useState<NurserySchoolInfo>(() => getLocalNurserySchoolInfo());
+  const [schoolInfo, setSchoolInfo] = useState<NurserySchoolInfo>(() => getLocalNurserySchoolInfo(user?.uid));
   const [schoolSaveStatus, setSchoolSaveStatus] = useState<string | null>(null);
 
   // Students State (Starts strictly empty until real students are added)
-  const [students, setStudents] = useState<NurseryStudent[]>(() => getLocalNurseryStudents());
+  const [students, setStudents] = useState<NurseryStudent[]>(() => getLocalNurseryStudents(user?.uid));
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('ALL');
+  const [adminTeacherFilter, setAdminTeacherFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Assessment Records State
-  const [assessments, setAssessments] = useState<StudentTermAssessment[]>(() => getLocalNurseryAssessments());
+  const [assessments, setAssessments] = useState<StudentTermAssessment[]>(() => getLocalNurseryAssessments(user?.uid));
   
   // Marks Entry States
   const [selectedStudentForMarks, setSelectedStudentForMarks] = useState<NurseryStudent | null>(null);
@@ -106,24 +115,33 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   // Ref for printable area
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to real-time updates from Firestore
+  // Subscribe to real-time updates from Firestore (Scoped per authenticated teacher or full for admin)
   useEffect(() => {
+    if (!user && !isAdmin) {
+      setSchoolInfo(EMPTY_NURSERY_SCHOOL_INFO);
+      setStudents([]);
+      setAssessments([]);
+      return;
+    }
+
     const unsubSchool = subscribeToNurserySchoolInfo((fresh) => {
       setSchoolInfo(fresh);
-    });
+    }, user?.uid, isAdmin);
+
     const unsubStudents = subscribeToNurseryStudents((fresh) => {
       setStudents(fresh);
-    });
+    }, user?.uid, isAdmin);
+
     const unsubAssessments = subscribeToNurseryAssessments((fresh) => {
       setAssessments(fresh);
-    });
+    }, user?.uid, isAdmin);
 
     return () => {
       unsubSchool();
       unsubStudents();
       unsubAssessments();
     };
-  }, []);
+  }, [user?.uid, isAdmin]);
 
   // Set default preview student when students load
   useEffect(() => {
@@ -156,6 +174,18 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     }
   }, [selectedStudentForMarks, selectedTerm, assessments]);
 
+  // Distinct teachers when Admin is viewing
+  const availableTeachers = useMemo(() => {
+    if (!isAdmin) return [];
+    const teacherMap = new Map<string, string>();
+    students.forEach(s => {
+      if (s.ownerUid) {
+        teacherMap.set(s.ownerUid, s.ownerEmail || `Teacher (${s.ownerUid.slice(0, 6)})`);
+      }
+    });
+    return Array.from(teacherMap.entries()).map(([uid, email]) => ({ uid, email }));
+  }, [students, isAdmin]);
+
   // Filtered Students
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
@@ -167,9 +197,14 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
         selectedClassFilter === 'ALL' || 
         student.classGrade.toUpperCase() === selectedClassFilter.toUpperCase();
 
-      return matchesSearch && matchesClass;
+      const matchesTeacher = 
+        !isAdmin || 
+        adminTeacherFilter === 'ALL' || 
+        student.ownerUid === adminTeacherFilter;
+
+      return matchesSearch && matchesClass && matchesTeacher;
     });
-  }, [students, searchTerm, selectedClassFilter]);
+  }, [students, searchTerm, selectedClassFilter, adminTeacherFilter, isAdmin]);
 
   // Distinct classes present in student records
   const availableClasses = useMemo(() => {
@@ -181,11 +216,31 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     return Array.from(dynamicClasses);
   }, [students]);
 
+  // Google Sign-In Handler for Teachers & Admin
+  const handleSignInGoogle = async () => {
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      const res = await signInWithGoogle();
+      if (!res.success) {
+        setAuthError(res.error || 'Gusinya na Google ntibyakunze. Nyamuneka ongera ugerageze.');
+      }
+    } catch (err: any) {
+      setAuthError(err?.message || 'Habaye ikosa mu kwinjira na Google.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
   // Save School Information Handler
   const handleSaveSchoolInfo = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setSchoolSaveStatus('Nyamuneka banza winjire na Konti ya Google.');
+      return;
+    }
     setSchoolSaveStatus('Saving to database...');
-    const result = await saveNurserySchoolInfo(schoolInfo);
+    const result = await saveNurserySchoolInfo(schoolInfo, user.uid, user.email);
     if (result.success) {
       setSchoolSaveStatus('Amakuru y\'ikigo yabitswe neza muri Firestore!');
       setTimeout(() => setSchoolSaveStatus(null), 4000);
@@ -221,6 +276,10 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   // Submit Student Form
   const handleSaveStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setStudentFormError('Nyamuneka banza winjire na Konti ya Google.');
+      return;
+    }
     if (!studentFormData.fullName || !studentFormData.fullName.trim()) {
       setStudentFormError('Amazina y\'umunyeshuri arakenewe (Full name is required).');
       return;
@@ -237,11 +296,13 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
       parentContact: studentFormData.parentContact?.trim() || '',
       photoUrl: studentFormData.photoUrl?.trim() || '',
       academicYear: schoolInfo.academicYear || '2026',
+      ownerUid: editingStudent?.ownerUid || user.uid,
+      ownerEmail: editingStudent?.ownerEmail || user.email || '',
       createdAt: editingStudent?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    const result = await saveNurseryStudent(studentToSave);
+    const result = await saveNurseryStudent(studentToSave, user.uid, user.email);
     if (result.success) {
       setIsStudentModalOpen(false);
       setEditingStudent(null);
@@ -258,8 +319,8 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
 
   // Delete Student Handler
   const handleConfirmDeleteStudent = async () => {
-    if (!studentToDelete) return;
-    const result = await deleteNurseryStudent(studentToDelete.id);
+    if (!studentToDelete || !user) return;
+    const result = await deleteNurseryStudent(studentToDelete.id, user.uid);
     if (result.success) {
       setStudentToDelete(null);
       if (previewStudentId === studentToDelete.id) {
@@ -292,7 +353,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
 
   // Save current term marks to Firestore
   const handleSaveCurrentTermScores = async () => {
-    if (!selectedStudentForMarks) return;
+    if (!selectedStudentForMarks || !user) return;
 
     setMarksSaveStatus('Birimo kubikwa...');
     const existing = assessments.find(a => a.studentId === selectedStudentForMarks.id);
@@ -304,10 +365,12 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
       term1Scores: selectedTerm === 'term1' ? currentScores : (existing?.term1Scores || {}),
       term2Scores: selectedTerm === 'term2' ? currentScores : (existing?.term2Scores || {}),
       term3Scores: selectedTerm === 'term3' ? currentScores : (existing?.term3Scores || {}),
+      ownerUid: existing?.ownerUid || selectedStudentForMarks.ownerUid || user.uid,
+      ownerEmail: existing?.ownerEmail || selectedStudentForMarks.ownerEmail || user.email || '',
       updatedAt: new Date().toISOString()
     };
 
-    const result = await saveStudentAssessment(payload);
+    const result = await saveStudentAssessment(payload, user.uid, user.email);
     if (result.success) {
       setMarksSaveStatus('Amanota yabitswe neza muri Firestore!');
       setTimeout(() => setMarksSaveStatus(null), 3000);
@@ -385,16 +448,20 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-semibold text-slate-500">
-            Abanyeshuri bose: <strong className="text-slate-900 font-mono">{students.length}</strong>
-          </span>
-          <button
-            onClick={handleOpenAddStudent}
-            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-2xs cursor-pointer active:scale-95"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Ongeramo Umunyeshuri</span>
-          </button>
+          {user && (
+            <>
+              <span className="text-xs font-semibold text-slate-500">
+                Abanyeshuri bose: <strong className="text-slate-900 font-mono">{students.length}</strong>
+              </span>
+              <button
+                onClick={handleOpenAddStudent}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-2xs cursor-pointer active:scale-95"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Ongeramo Umunyeshuri</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -414,7 +481,124 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
         </div>
       </div>
 
-      {/* NAVIGATION TABS */}
+      {/* 1. AUTHENTICATION REQUIRED PROMPT FOR TEACHERS & ADMIN */}
+      {!user ? (
+        <div className="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm text-center max-w-2xl mx-auto space-y-6">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-700 mx-auto flex items-center justify-center border border-amber-200 shadow-2xs">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              <span>Konti ya Mwarimu Irakenerwa (Teacher Account Required)</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+              Injira na Konti ya Google kugira ngo utangire
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
+              Kugira ngo amakuru y'abanyeshuri bawe arindwe mu buryo bwite (Private Workspace) kandi atavangwa n'ay'abandi barimu, banza winjire na Konti yawe ya Google.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left space-y-3 text-xs text-slate-700 max-w-lg mx-auto">
+            <div className="flex items-start space-x-2.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <span><strong>Amakuru bwite:</strong> Buri mwarimu abona kandi agacunga gusa abanyeshuri n'indangamanota byo mu ishuri rye.</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <span><strong>Kwinjira ako kanya:</strong> Nta kwemeza cyangwa gutegereza umuyobozi bisabwa. Konti zose zihita zihabwa inshingano za Mwarimu (Teacher).</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <span><strong>Uburenganzira bw'Umuyobozi:</strong> twizerefelix90@gmail.com ni we wenyine ufite uburenganzira bwo kureba amakuru y'abarimu bose.</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <span><strong>Ku buntu:</strong> Bikora 100% ku buntu kuri Firebase Spark Plan nta kiguzi icyo ari cyo cyose.</span>
+            </div>
+          </div>
+
+          {authError && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium text-left flex items-start space-x-2 max-w-lg mx-auto">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleSignInGoogle}
+              disabled={isSigningIn}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-md flex items-center justify-center space-x-3 cursor-pointer disabled:opacity-60 active:scale-95"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
+                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
+                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.2s.7 5.5 1.9 7.9l3.7-2.9z" />
+                <path fill="#34A853" d="M12 23.5c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.5C3.7 20.2 7.5 23.5 12 23.5z" />
+              </svg>
+              <span>{isSigningIn ? 'Birimo kwinjira...' : 'Injira na Konti ya Google (Sign in with Google)'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              className="w-full sm:w-auto px-5 py-3 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
+            >
+              Subira ku rupapuro rw'itangiriro
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* TEACHER ACCOUNT ISOLATION BANNER */}
+          <div className="no-print bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 border ${
+                isAdmin ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-teal-100 text-teal-900 border-teal-300'
+              }`}>
+                {isAdmin ? <ShieldCheck className="w-5 h-5 text-amber-700" /> : <GraduationCap className="w-5 h-5 text-teal-700" />}
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-slate-900">{user.displayName || user.email?.split('@')[0]}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase ${
+                    isAdmin ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-teal-100 text-teal-800 border border-teal-200'
+                  }`}>
+                    {isAdmin ? 'Umuyobozi (Super Admin)' : 'Konti ya Mwarimu'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-mono">
+                  {user.email} • {isAdmin ? 'Uburenganzira bw\'ubugenzuzi ku barimu bose' : 'Amakuru y\'abanyeshuri bawe arinzwe mu buryo bwite'}
+                </p>
+              </div>
+            </div>
+
+            {/* If Admin: Filter by Teacher */}
+            {isAdmin && availableTeachers.length > 0 && (
+              <div className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+                <Filter className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-xs font-bold text-slate-700">Mwarimu:</span>
+                <select
+                  value={adminTeacherFilter}
+                  onChange={(e) => setAdminTeacherFilter(e.target.value)}
+                  className="text-xs bg-transparent font-medium text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">Abarimu bose ({students.length} abanyeshuri)</option>
+                  {availableTeachers.map(t => (
+                    <option key={t.uid} value={t.uid}>
+                      {t.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* NAVIGATION TABS */}
       <div className="no-print flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('students')}
@@ -599,6 +783,11 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                           {student.registrationNumber && (
                             <span className="block text-[10px] font-normal text-slate-500 font-mono">
                               Reg: {student.registrationNumber}
+                            </span>
+                          )}
+                          {isAdmin && student.ownerEmail && (
+                            <span className="block text-[10px] font-semibold text-teal-700 font-mono">
+                              Mwarimu: {student.ownerEmail}
                             </span>
                           )}
                         </td>
@@ -1408,6 +1597,9 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+        </>
       )}
 
     </div>

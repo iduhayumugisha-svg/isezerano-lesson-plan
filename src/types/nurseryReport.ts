@@ -218,6 +218,8 @@ export interface NurseryStudent {
   photoUrl?: string;
   parentContact?: string;
   academicYear?: string;
+  ownerUid: string;
+  ownerEmail?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -240,6 +242,8 @@ export interface StudentTermAssessment {
   teacherCommentTerm2?: string;
   teacherCommentTerm3?: string;
   headTeacherRemark?: string;
+  ownerUid: string;
+  ownerEmail?: string;
   updatedAt: string;
 }
 
@@ -254,6 +258,8 @@ export interface NurserySchoolInfo {
   headTeacherPhone: string;
   logoUrl?: string;
   stampText?: string;
+  ownerUid?: string;
+  ownerEmail?: string;
   updatedAt?: string;
 }
 

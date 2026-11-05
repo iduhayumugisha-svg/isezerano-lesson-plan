@@ -159,12 +159,11 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         if (res.isAdmin) {
           setSuccessMsg('Authenticated successfully as Administrator! Opening Dashboard...');
         } else {
-          // If an unauthorized person selects another Google account, deny access and return to public website
-          await signOutUser();
-          setErrorMsg('Access Denied: This Google account is not authorized to access the Admin Portal. Returning to public website...');
+          // If a teacher signs in from the admin gateway, route them to their Nursery workspace
+          setSuccessMsg('Konti ya Mwarimu yemejwe neza! Birimo gufungura Nursery Reports...');
           setTimeout(() => {
-            onNavigate('home');
-          }, 2500);
+            onNavigate('nursery');
+          }, 1500);
         }
       } else {
         if (res.code === 'auth/unauthorized-domain') {
