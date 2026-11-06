@@ -85,15 +85,20 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
       return <span className="text-slate-400 font-mono text-xs">-</span>;
     }
 
-    let bgStyle = 'bg-slate-300';
-    if (level === 'EXCELLENT') bgStyle = 'bg-[#48bb78]'; // Vibrant green matching PDF
-    if (level === 'VERY_GOOD') bgStyle = 'bg-[#3182ce]'; // Clear blue matching PDF
-    if (level === 'DEVELOPING') bgStyle = 'bg-[#ecc94b]'; // Yellow matching PDF
-    if (level === 'NEEDS_IMPROVEMENT') bgStyle = 'bg-[#e53e3e]'; // Red matching PDF
+    let colorHex = '#cbd5e1';
+    if (level === 'EXCELLENT') colorHex = '#48bb78'; // Vibrant green matching PDF
+    if (level === 'VERY_GOOD') colorHex = '#3182ce'; // Clear blue matching PDF
+    if (level === 'DEVELOPING') colorHex = '#ecc94b'; // Yellow matching PDF
+    if (level === 'NEEDS_IMPROVEMENT') colorHex = '#e53e3e'; // Red matching PDF
 
     return (
       <div 
-        className={`w-11 h-3.5 mx-auto rounded-full ${bgStyle} shadow-2xs border border-black/10`}
+        className="w-11 h-3.5 mx-auto rounded-full shadow-2xs border border-black/20"
+        style={{
+          backgroundColor: colorHex,
+          WebkitPrintColorAdjust: 'exact',
+          printColorAdjust: 'exact'
+        }}
         title={PERFORMANCE_LEGEND[level]?.label || ''}
       />
     );
@@ -106,7 +111,9 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
       }`}
       style={{
         pageBreakAfter: 'always',
-        breakAfter: 'page'
+        breakAfter: 'page',
+        WebkitPrintColorAdjust: 'exact',
+        printColorAdjust: 'exact'
       }}
     >
       {/* 1. HEADER SECTION (Logo, School Details, QR Code) */}
@@ -118,6 +125,7 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
               src={schoolInfo.logoUrl} 
               alt={schoolDisplayName} 
               className="w-16 h-16 object-contain rounded-full border border-slate-300"
+              crossOrigin="anonymous"
               referrerPolicy="no-referrer"
             />
           ) : (
@@ -190,6 +198,7 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
               src={student.photoUrl} 
               alt={student.fullName} 
               className="w-full h-full object-cover" 
+              crossOrigin="anonymous"
               referrerPolicy="no-referrer"
             />
           ) : (
@@ -207,19 +216,31 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
         </p>
         <div className="flex flex-wrap items-center gap-4 text-[10px] font-medium text-slate-800">
           <div className="flex items-center space-x-1.5">
-            <span className="w-5 h-2.5 bg-[#48bb78] inline-block rounded-2xs" />
+            <span 
+              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
+              style={{ backgroundColor: '#48bb78', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
+            />
             <span>Excellent</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <span className="w-5 h-2.5 bg-[#3182ce] inline-block rounded-2xs" />
+            <span 
+              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
+              style={{ backgroundColor: '#3182ce', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
+            />
             <span>Very Good</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <span className="w-5 h-2.5 bg-[#ecc94b] inline-block rounded-2xs" />
+            <span 
+              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
+              style={{ backgroundColor: '#ecc94b', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
+            />
             <span>Developing</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <span className="w-5 h-2.5 bg-[#e53e3e] inline-block rounded-2xs" />
+            <span 
+              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
+              style={{ backgroundColor: '#e53e3e', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
+            />
             <span>Needs Improvement</span>
           </div>
         </div>
@@ -229,7 +250,7 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
       <div className="border-t border-l border-slate-900">
         <table className="w-full border-collapse text-[10px]">
           <thead>
-            <tr className="bg-slate-100 font-bold text-slate-900">
+            <tr className="bg-slate-100 font-bold text-slate-900" style={{ backgroundColor: '#f1f5f9', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
               <th className="border-r border-b border-slate-900 py-1 px-2 text-left uppercase w-[58%]">
                 IBYIGWA N'IMYITWARIRE
               </th>
@@ -258,7 +279,7 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
               return (
                 <React.Fragment key={criterion.id}>
                   {showSectionHeader && (
-                    <tr className="bg-slate-50 font-bold text-slate-900 uppercase">
+                    <tr className="bg-slate-50 font-bold text-slate-900 uppercase" style={{ backgroundColor: '#f8fafc', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                       <td className="border-r border-b border-slate-900 py-0.5 px-2 font-bold text-[10px]">
                         {criterion.sectionTitle}
                       </td>

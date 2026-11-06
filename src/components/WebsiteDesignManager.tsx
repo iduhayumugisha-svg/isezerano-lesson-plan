@@ -22,13 +22,20 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
-  X
+  X,
+  ArrowUp,
+  ArrowDown,
+  EyeOff,
+  LayoutGrid,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { 
   DEFAULT_WEBSITE_COLORS, 
   DEFAULT_WEBSITE_TYPOGRAPHY, 
   DEFAULT_WEBSITE_LOGO,
+  DEFAULT_HOMEPAGE_SECTIONS,
   WebsiteColorSettings,
   WebsiteTypographySettings,
   WebsiteLogoSettings
@@ -152,6 +159,12 @@ export const WebsiteDesignManager: React.FC = () => {
     updateDraftColors,
     updateDraftTypography,
     updateDraftLogo,
+    homepageSections,
+    updateDraftHomepageSections,
+    reorderHomepageSection,
+    toggleHomepageSection,
+    updateHomepageSectionOption,
+    resetHomepageSectionsToDefault,
     resetSectionToDefault,
     resetSingleField,
     cancelDraft,
@@ -161,7 +174,7 @@ export const WebsiteDesignManager: React.FC = () => {
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'preview'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'preview'>('branding');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -478,6 +491,19 @@ export const WebsiteDesignManager: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setActiveTab('layout')}
+            className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'layout'
+                ? 'border-teal-600 text-teal-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-indigo-600" />
+            <span>6. Website Sections & Layout</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('preview')}
             className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'preview'
@@ -486,7 +512,7 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Eye className="w-4 h-4" />
-            <span>6. Live Preview</span>
+            <span>7. Live Preview</span>
           </button>
         </div>
 
@@ -1670,7 +1696,201 @@ export const WebsiteDesignManager: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: LIVE PREVIEW (Desktop & Mobile Simulation) */}
+      {/* TAB 6: WEBSITE SECTIONS & HOMEPAGE LAYOUT MANAGEMENT */}
+      {activeTab === 'layout' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                <span className="text-xs font-bold text-indigo-750 uppercase tracking-wider">
+                  Admin Layout Manager • Imiterere y'Urubuga
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mt-1">
+                Guhindura Ibibanza n'Ibyiciro by'Urubuga (Website Sections & Options)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
+                Hano umuyobozi w'urubuga ashobora guhindura urutonde rw'ibice bigaragara kuri website, kwimurira hejuru cyangwa hasi (reorder), guhisha (hide) cyangwa kugaragaza (show) igice icyo ari cyo cyose. Ibihinduwe bihita bibikwa muri Firebase bikagaragara kuri buri muntu wese ukoresha urubuga.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetHomepageSectionsToDefault}
+              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shrink-0"
+              title="Subiza ibice byose ku myanya yabyo y'umwimerere"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Subiza Ku Myanya Isanzwe</span>
+            </button>
+          </div>
+
+          {/* Sections List */}
+          <div className="space-y-4">
+            {(() => {
+              const currentSections = [...(draftSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS)];
+              currentSections.sort((a, b) => a.order - b.order);
+
+              return currentSections.map((sec, idx) => {
+                const isFirst = idx === 0;
+                const isLast = idx === currentSections.length - 1;
+
+                return (
+                  <div
+                    key={sec.id}
+                    className={`rounded-2xl border transition-all p-4 sm:p-5 ${
+                      sec.enabled
+                        ? 'border-slate-200 bg-white shadow-2xs hover:border-indigo-300'
+                        : 'border-slate-200 bg-slate-50/70 opacity-75'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Left: Position badge, title & description */}
+                      <div className="flex items-start space-x-3.5">
+                        <div className={`w-8 h-8 rounded-xl font-mono text-xs font-black flex items-center justify-center shrink-0 ${
+                          sec.enabled ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          #{idx + 1}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="text-sm font-bold text-slate-900">
+                              {sec.label}
+                            </h4>
+                            {sec.enabled ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                                Visible / Biragaragara
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                                Hidden / Byahishwe
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {sec.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right: Actions (Move Up, Move Down, Toggle Show/Hide) */}
+                      <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+                        {/* Move Up */}
+                        <button
+                          type="button"
+                          onClick={() => reorderHomepageSection(sec.id, 'up')}
+                          disabled={isFirst}
+                          className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                            isFirst
+                              ? 'text-slate-300 border-slate-200 bg-slate-50 cursor-not-allowed'
+                              : 'text-slate-700 border-slate-300 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300'
+                          }`}
+                          title="Imura ujyane hejuru (Move Up)"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+
+                        {/* Move Down */}
+                        <button
+                          type="button"
+                          onClick={() => reorderHomepageSection(sec.id, 'down')}
+                          disabled={isLast}
+                          className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                            isLast
+                              ? 'text-slate-300 border-slate-200 bg-slate-50 cursor-not-allowed'
+                              : 'text-slate-700 border-slate-300 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300'
+                          }`}
+                          title="Imura ujyane hasi (Move Down)"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+
+                        {/* Toggle Visibility */}
+                        <button
+                          type="button"
+                          onClick={() => toggleHomepageSection(sec.id)}
+                          className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            sec.enabled
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-teal-600 hover:bg-teal-500 text-white'
+                          }`}
+                          title={sec.enabled ? 'Hisha iki gice kuri website' : 'Garagaza iki gice kuri website'}
+                        >
+                          {sec.enabled ? (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" />
+                              <span>Hisha (Hide)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Garagaza (Show)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Section Options (Granular controls) */}
+                    {sec.enabled && sec.options && (
+                      <div className="mt-3.5 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                        {Object.entries(sec.options).map(([optKey, optVal]) => {
+                          const optLabels: Record<string, string> = {
+                            showDateLocationTicker: "Garagaza Itariki n'Akarere (Date & Location Ticker)",
+                            showInstitutionalBadge: "Garagaza Ikimenyetso cy'Uburezi (Institutional Badge)",
+                            showLessonPlanButton: "Buto ya 'Tangira Gutegura Isomo'",
+                            showReportCardsButton: "Buto ya 'Indangamanota z'Inshuke'",
+                            showDashboardButton: "Buto ya 'Dashboard y'Uburezi'",
+                            showGuaranteeBadges: "Amagambo y'ubwishingizi (100% Free / CBC / Mobile)",
+                            showLessonPlannerCard: "Ikarita ya 'Lesson Preparation (8 Inkingi)'",
+                            showReportCardsCard: "Ikarita ya 'Nursery Report Cards (Ibipimo 22)'",
+                            showAboutButton: "Buto ya 'Ibyerekeye GS GITUMBA (About Us)'",
+                            showContactButton: "Buto ya 'Twandikire cyangwa Duhamagare'"
+                          };
+
+                          const labelText = optLabels[optKey] || optKey;
+
+                          return (
+                            <label
+                              key={optKey}
+                              className="flex items-center space-x-2 p-2 rounded-lg bg-slate-50 hover:bg-slate-100 cursor-pointer select-none border border-slate-200/60"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={optVal}
+                                onChange={(e) => updateHomepageSectionOption(sec.id, optKey, e.target.checked)}
+                                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                              />
+                              <span className="text-[11px] font-medium text-slate-700">
+                                {labelText}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Quick Notice */}
+          <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs text-indigo-900 flex items-start space-x-2.5">
+            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Uburyo bwo kubika impinduka (Saving your layout):</p>
+              <p className="text-[11px] text-indigo-800 mt-0.5">
+                Iyo urangije guhindura imyanya n'ibyiciro, kanda buto y'umuhondo iri hejuru yitwa <strong>"Publish Draft Changes"</strong>. Impinduka zihita zibitswe muri Cloud Firestore kandi zihita zigaragara ku rubuga rwa buri mwarimu n'umusomyi wese.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: LIVE PREVIEW (Desktop & Mobile Simulation) */}
       {activeTab === 'preview' && (
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
           

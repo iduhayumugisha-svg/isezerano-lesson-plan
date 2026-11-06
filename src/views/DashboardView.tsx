@@ -14,7 +14,6 @@ import {
   Sparkles, 
   ShieldCheck, 
   Home,
-  Newspaper,
   Award
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
@@ -112,8 +111,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onClick={() => onNavigate('home')}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            <Newspaper className="w-3.5 h-3.5 text-teal-700" />
-            <span>← Return to Public Newspaper</span>
+            <Home className="w-3.5 h-3.5 text-teal-700" />
+            <span>← Ahabanza (Home)</span>
           </button>
           <span className="text-slate-300">/</span>
           <span className="text-xs font-bold text-slate-900">

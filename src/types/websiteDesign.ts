@@ -123,12 +123,22 @@ export interface AnnouncementStripSettings {
   heightPadding: 'compact' | 'normal' | 'spacious';
 }
 
+export interface HomepageSectionConfig {
+  id: string; // 'masthead' | 'hero' | 'quick_tools' | 'school_profile'
+  label: string;
+  description: string;
+  enabled: boolean;
+  order: number;
+  options?: Record<string, boolean>;
+}
+
 export interface WebsiteDesignSettings {
   branding: WebsiteBrandingSettings;
   colors: WebsiteColorSettings;
   typography: WebsiteTypographySettings;
   logo: WebsiteLogoSettings;
   announcements?: AnnouncementStripSettings;
+  homepageSections?: HomepageSectionConfig[];
   updatedAt: string;
   updatedBy: string;
 }
@@ -251,12 +261,63 @@ export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
   updateFavicon: true
 };
 
+export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
+  {
+    id: 'masthead',
+    label: "Umutwe w'Urubuga (Institutional Masthead Banner)",
+    description: "Ikirango cy'ikigo, itariki y'uyu munsi, akarere, n'amazina y'ishuri hejuru",
+    enabled: true,
+    order: 1,
+    options: {
+      showDateLocationTicker: true,
+      showInstitutionalBadge: true
+    }
+  },
+  {
+    id: 'hero',
+    label: "Hero Banner: Ikaze & Buto zo Gutangira (Welcome & CTA)",
+    description: "Ibaruwa y'ikaze, ubusobanuro bw'urubuga, na buto zihutisha mwarimu kugana ku masomo cyangwa indangamanota",
+    enabled: true,
+    order: 2,
+    options: {
+      showLessonPlanButton: true,
+      showReportCardsButton: true,
+      showDashboardButton: true,
+      showGuaranteeBadges: true
+    }
+  },
+  {
+    id: 'quick_tools',
+    label: "Ibikoresho Byihuse: Lesson Preparation & Report Cards",
+    description: "Amakarita abiri y'ingenzi: Gutegura Amasomo ya CBC (inkingi 8) n'Indangamanota z'inshuke (ibipimo 22)",
+    enabled: true,
+    order: 3,
+    options: {
+      showLessonPlannerCard: true,
+      showReportCardsCard: true
+    }
+  },
+  {
+    id: 'school_profile',
+    label: "Amakuru y'Ikigo cy'Amashuri (School Profile & Credentials)",
+    description: "Amakuru ya GS GITUMBA, amarembo y'itumanaho, n'ibisobanuro by'umwimerere w'urubuga",
+    enabled: true,
+    order: 4,
+    options: {
+      showAboutButton: true,
+      showContactButton: true
+    }
+  }
+];
+
 export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   branding: DEFAULT_WEBSITE_BRANDING,
   colors: DEFAULT_WEBSITE_COLORS,
   typography: DEFAULT_WEBSITE_TYPOGRAPHY,
   logo: DEFAULT_WEBSITE_LOGO,
   announcements: DEFAULT_ANNOUNCEMENT_STRIP,
+  homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
   updatedAt: '2026-01-01T00:00:00.000Z',
   updatedBy: 'system'
 };
+

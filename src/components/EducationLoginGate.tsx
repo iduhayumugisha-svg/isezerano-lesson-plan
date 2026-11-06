@@ -117,7 +117,7 @@ export const EducationLoginGate: React.FC<EducationLoginGateProps> = ({
               className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-5 py-3 rounded-xl border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-xs sm:text-sm font-semibold transition-all cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>← Return to Public Newspaper Homepage</span>
+              <span>← Ahabanza (Home)</span>
             </button>
 
             <button

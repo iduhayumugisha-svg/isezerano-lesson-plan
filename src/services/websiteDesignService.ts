@@ -9,7 +9,8 @@ import { getAuth } from 'firebase/auth';
 import { 
   WebsiteDesignSettings, 
   DEFAULT_WEBSITE_DESIGN,
-  DEFAULT_ANNOUNCEMENT_STRIP
+  DEFAULT_ANNOUNCEMENT_STRIP,
+  DEFAULT_HOMEPAGE_SECTIONS
 } from '../types/websiteDesign';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 
@@ -80,6 +81,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(parsed.typography || {}) },
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
+        homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
       };
@@ -101,6 +103,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
+          homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
@@ -151,6 +154,7 @@ export const subscribeToWebsiteDesign = (
           typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
+          homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };

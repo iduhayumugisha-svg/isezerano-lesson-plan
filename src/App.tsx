@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   ShieldCheck, 
   Home,
-  Newspaper,
   ArrowLeft,
   Award
 } from 'lucide-react';
@@ -266,7 +265,7 @@ function AppContent() {
       {/* 2. Main Content Area */}
       <main className="flex-1 w-full overflow-x-hidden">
         
-        {/* PUBLIC PAGE 1: Digital Newspaper Home View (Default opening page at /) */}
+        {/* PUBLIC PAGE 1: Home View (Default opening page at /) */}
         {currentPage === 'home' && (
           <HomeView
             onNavigate={handleNavigate}
@@ -318,19 +317,19 @@ function AppContent() {
         {isLessonPlanWorkspace && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             
-            {/* Dedicated Workspace Navigation Bar with Return to Newspaper */}
+            {/* Dedicated Workspace Navigation Bar with Return to Home */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
               <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
                 
-                {/* Return to Public Newspaper */}
+                {/* Return to Home */}
                 <button
                   type="button"
                   onClick={() => handleNavigate('home')}
                   className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shrink-0 text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer border border-slate-200"
-                  title="Return to Public Newspaper Homepage"
+                  title="Return to Homepage"
                 >
-                  <Newspaper className="w-4 h-4 text-teal-700" />
-                  <span>Newspaper</span>
+                  <Home className="w-4 h-4 text-teal-700" />
+                  <span>Ahabanza (Home)</span>
                 </button>
 
                 {/* Dashboard Home */}

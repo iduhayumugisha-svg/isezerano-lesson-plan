@@ -24,8 +24,14 @@ import {
   Layers,
   ShieldCheck,
   Lock,
-  LogIn
+  LogIn,
+  Upload,
+  Image as ImageIcon,
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { useAuth } from '../context/AuthContext';
 import { 
   NurseryStudent, 
@@ -50,6 +56,7 @@ import {
   saveStudentAssessment, 
   subscribeToNurseryAssessments 
 } from '../services/nurseryStorageService';
+import { compressLogoFile } from '../services/websiteDesignService';
 import { NurseryReportCardDocument } from '../components/NurseryReportCardDocument';
 
 interface NurseryReportsViewProps {
@@ -110,7 +117,13 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   const [printTargetMode, setPrintTargetMode] = useState<'single' | 'batch'>('single');
   const [previewStudentId, setPreviewStudentId] = useState<string>('');
   const [batchClassFilter, setBatchClassFilter] = useState<string>('ALL');
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [printSuccessFeedback, setPrintSuccessFeedback] = useState<string | null>(null);
+
+  // School Logo Upload State
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
+  const [logoStatusNote, setLogoStatusNote] = useState<string | null>(null);
 
   // Ref for printable area
   const printableAreaRef = useRef<HTMLDivElement>(null);
@@ -379,9 +392,257 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     }
   };
 
-  // Print Handler (Using browser native print engine with tailored print CSS)
+  // Handle School Logo Device Upload (JPG, PNG, WebP)
+  const handleSchoolLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate type: JPG, PNG, WebP
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const validExts = ['jpg', 'jpeg', 'png', 'webp'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      setLogoStatusNote('Habaye ikosa: Hitamo ifoto yo mu bwoko bwa JPG, PNG cyangwa WebP gusa.');
+      setTimeout(() => setLogoStatusNote(null), 5000);
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoStatusNote('Habaye ikosa: Ifoto irengeje ingano yemewe (5MB). Hitamo ifoto ntoya.');
+      setTimeout(() => setLogoStatusNote(null), 5000);
+      return;
+    }
+
+    setIsProcessingLogo(true);
+    setLogoStatusNote('Ifoto irimo gutunganywa...');
+
+    try {
+      // Compress to high-fidelity base64 data URI (400x400 max)
+      const dataUri = await compressLogoFile(file, 400);
+      setSchoolInfo(prev => ({
+        ...prev,
+        logoUrl: dataUri
+      }));
+      setLogoStatusNote('Ikirango cy\'ikigo cyatoranijwe neza! Kanda buto ya "Bika Amakuru y\'Ikigo muri Firestore" hasi.');
+      setTimeout(() => setLogoStatusNote(null), 6000);
+    } catch (err: any) {
+      console.error('Logo upload error:', err);
+      setLogoStatusNote('Habaye ikosa ryo gutunganya ifoto: ' + (err?.message || 'Ntibyashobotse'));
+      setTimeout(() => setLogoStatusNote(null), 5000);
+    } finally {
+      setIsProcessingLogo(false);
+      if (logoFileInputRef.current) logoFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveSchoolLogo = () => {
+    setSchoolInfo(prev => ({
+      ...prev,
+      logoUrl: ''
+    }));
+    setLogoStatusNote('Ikirango cyakuwemo. Kanda buto ya "Bika Amakuru y\'Ikigo muri Firestore" hasi kugira ngo bibikwe.');
+    setTimeout(() => setLogoStatusNote(null), 5000);
+  };
+
+  // Standalone isolated iframe print engine (guaranteed zero blank pages & exact colors)
   const handleTriggerPrint = () => {
-    window.print();
+    const container = printableAreaRef.current;
+    if (!container) {
+      window.print();
+      return;
+    }
+
+    const documentTitle = printTargetMode === 'single'
+      ? `Indangamanota_${(students.find(s => s.id === previewStudentId)?.fullName || 'Umunyeshuri').replace(/\s+/g, '_')}_${schoolInfo.academicYear || '2026'}`
+      : `Amakarita_Yose_Inshuke_${batchClassFilter}_${schoolInfo.academicYear || '2026'}`;
+
+    try {
+      // Remove any previously injected print frames
+      const existingFrame = document.getElementById('nursery-reports-print-frame');
+      if (existingFrame && existingFrame.parentNode) {
+        existingFrame.parentNode.removeChild(existingFrame);
+      }
+
+      // Create hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.id = 'nursery-reports-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.zIndex = '-9999';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow?.document;
+      if (!frameDoc) {
+        window.print();
+        return;
+      }
+
+      // Build standalone complete HTML document
+      const standaloneHtml = `<!DOCTYPE html>
+<html lang="rw">
+<head>
+  <meta charset="utf-8" />
+  <title>${documentTitle}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm 8mm 10mm;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-size: 11px !important;
+      line-height: 1.25 !important;
+      width: 100% !important;
+    }
+    .nursery-report-page {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 0 10mm 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      page-break-after: always !important;
+      break-after: page !important;
+      box-sizing: border-box !important;
+    }
+    table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      font-size: 10px !important;
+    }
+    th, td {
+      border: 1px solid #0f172a !important;
+      padding: 2px 4px !important;
+      box-sizing: border-box !important;
+    }
+    th {
+      background-color: #f1f5f9 !important;
+    }
+    thead {
+      display: table-header-group !important;
+    }
+    tr {
+      page-break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body>
+  ${container.innerHTML}
+</body>
+</html>`;
+
+      frameDoc.open();
+      frameDoc.write(standaloneHtml);
+      frameDoc.close();
+
+      // Wait for all images inside iframe to load before printing
+      const images = Array.from(frameDoc.images);
+      const imagePromises = images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+
+      Promise.all(imagePromises).then(() => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            setPrintSuccessFeedback('Urupapuro rw\'icapiro rwafunguwe neza!');
+            setTimeout(() => setPrintSuccessFeedback(null), 4000);
+          } catch (err) {
+            console.error('Print iframe invocation error:', err);
+            window.print();
+          } finally {
+            setTimeout(() => {
+              if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            }, 5000);
+          }
+        }, 300);
+      });
+
+    } catch (err) {
+      console.error('Print execution error:', err);
+      window.print();
+    }
+  };
+
+  // Direct high-fidelity PDF export using html2canvas & jsPDF
+  const handleDownloadPdf = async () => {
+    const container = printableAreaRef.current;
+    if (!container) return;
+
+    const pageElements = Array.from(container.querySelectorAll<HTMLElement>('.nursery-report-page'));
+    if (pageElements.length === 0) {
+      alert('Nta karita ibonetse yo gukuramo PDF.');
+      return;
+    }
+
+    setIsExportingPdf(true);
+    setPrintSuccessFeedback('PDF irimo gutegurwa no gukorwa neza...');
+
+    try {
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i];
+
+        const canvas = await html2canvas(pageEl, {
+          scale: 2, // High resolution for crisp print output
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgWidth = pdfWidth - 16; // 8mm margin each side
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (i > 0) {
+          pdf.addPage('a4', 'portrait');
+        }
+
+        pdf.addImage(imgData, 'JPEG', 8, 8, imgWidth, Math.min(imgHeight, pdfHeight - 16));
+      }
+
+      const fileName = printTargetMode === 'single'
+        ? `Indangamanota_${(students.find(s => s.id === previewStudentId)?.fullName || 'Umunyeshuri').replace(/\s+/g, '_')}_${schoolInfo.academicYear || '2026'}.pdf`
+        : `Amakarita_Yose_Inshuke_${batchClassFilter}_${schoolInfo.academicYear || '2026'}.pdf`;
+
+      pdf.save(fileName);
+      setPrintSuccessFeedback('🎉 PDF yakozwe neza kandi yabitswe muri telefone/mudasobwa yawe!');
+      setTimeout(() => setPrintSuccessFeedback(null), 5000);
+    } catch (err: any) {
+      console.error('PDF export error:', err);
+      alert('Habaye ikosa ryo gukora PDF: ' + (err?.message || 'Ntibyashobotse'));
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   // Students for batch printing
@@ -396,31 +657,50 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
       {/* Print-specific style injected into DOM to ensure exact A4 layout with page breaks */}
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm 8mm 10mm;
           }
-          .printable-report-container, .printable-report-container * {
-            visibility: visible;
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          header, nav, footer, .no-print, button, input, select, form {
+            display: none !important;
+          }
+          body, html, main {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            height: auto !important;
+          }
+          .nursery-report-system {
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
           }
           .printable-report-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
-            padding: 0 !important;
+            display: block !important;
+            visibility: visible !important;
+            width: 100% !important;
             margin: 0 !important;
+            padding: 0 !important;
           }
           .nursery-report-page {
-            box-shadow: none !important;
-            border: none !important;
-            margin: 0 !important;
-            padding: 1.5cm 1.5cm !important;
+            display: block !important;
+            visibility: visible !important;
             page-break-after: always !important;
             break-after: page !important;
-          }
-          .no-print, header, nav, footer, button {
-            display: none !important;
+            margin: 0 0 10mm 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
           }
         }
       `}</style>
@@ -1167,18 +1447,46 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                     </button>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
+                      type="button"
                       onClick={handleTriggerPrint}
-                      className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md cursor-pointer active:scale-95"
+                      disabled={isExportingPdf}
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md cursor-pointer active:scale-95"
                     >
                       <Printer className="w-4 h-4" />
                       <span>
-                        {printTargetMode === 'single' ? 'Print / Export Ikarita (A4)' : `Print Amakarita Yose (${batchStudents.length})`}
+                        {printTargetMode === 'single' ? 'Print Ikarita (A4)' : `Print Amakarita (${batchStudents.length})`}
                       </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      disabled={isExportingPdf}
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-md cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                      {isExportingPdf ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-teal-400" />
+                          <span>Gukora PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 text-teal-300" />
+                          <span>Gukuramo PDF (Download)</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
+
+                {printSuccessFeedback && (
+                  <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span>{printSuccessFeedback}</span>
+                  </div>
+                )}
 
                 {/* Sub-selector for single or batch */}
                 {printTargetMode === 'single' ? (
@@ -1362,21 +1670,100 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
               </div>
             </div>
 
-            {/* Logo URL */}
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Ifoto / Logo y'Ikigo (Direct Image URL - Optional):
-              </label>
+            {/* School Logo Device Upload (JPG, PNG, WebP) */}
+            <div className="space-y-2.5 p-4 rounded-2xl border border-slate-200 bg-slate-50/70">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block font-bold text-slate-800 text-xs flex items-center space-x-1.5">
+                    <ImageIcon className="w-4 h-4 text-teal-600" />
+                    <span>Ikirango cy'Ikigo / Logo (Upload from Device):</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Shyiramo ifoto y'ikirango cy'ishuri ryawe ivuye muri telefone cyangwa mudasobwa (JPG, PNG, WebP).
+                  </p>
+                </div>
+
+                {schoolInfo.logoUrl && (
+                  <span className="self-start sm:self-auto inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Logo Irakora</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Hidden file input strictly for image types */}
               <input
-                type="url"
-                value={schoolInfo.logoUrl || ''}
-                onChange={(e) => setSchoolInfo({ ...schoolInfo, logoUrl: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs font-mono"
+                ref={logoFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                onChange={handleSchoolLogoFileChange}
+                className="hidden"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Ushobora gushyiramo direct HTTPS URL y'ikirango cy'ikigo cyangwa ukabisiga birimo ubusa.
-              </p>
+
+              {schoolInfo.logoUrl ? (
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="w-20 h-20 shrink-0 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center p-1 overflow-hidden shadow-2xs">
+                    <img
+                      src={schoolInfo.logoUrl}
+                      alt="School Logo Preview"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 flex-1 text-center sm:text-left">
+                    <p className="text-xs font-bold text-slate-900">
+                      Ikirango cy'ishuri cyateguwe (School Logo Ready)
+                    </p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Iki kirango kizajya kigaragara mu mutwe w'ikarita (Header ya Report Card) no mu gihe uyicapa (Print & PDF). Cyihariye kuri konti yawe gusa.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1 justify-center sm:justify-start">
+                      <button
+                        type="button"
+                        onClick={() => logoFileInputRef.current?.click()}
+                        disabled={isProcessingLogo}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Hindura Logo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveSchoolLogo}
+                        disabled={isProcessingLogo}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Siba Logo</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => logoFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-300 hover:border-teal-500 hover:bg-teal-50/40 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group bg-white"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 mx-auto flex items-center justify-center group-hover:scale-105 transition-transform shadow-2xs">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      Kanda hano kugira ngo ushyiremo Logo y'ikigo ivuye ku gikoresho cyawe
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Ubwoko bwemewe: JPG, PNG, WebP (Iragabanywa mu bunini mu buryo bwikora)
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {logoStatusNote && (
+                <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-[11px] font-semibold flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-teal-600" />
+                  <span>{logoStatusNote}</span>
+                </div>
+              )}
             </div>
 
             {schoolSaveStatus && (

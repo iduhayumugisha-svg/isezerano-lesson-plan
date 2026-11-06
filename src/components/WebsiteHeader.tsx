@@ -85,11 +85,11 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
             
-            {/* 1. Newspaper Brand Identity & Masthead Logo */}
+            {/* 1. Brand Identity & Masthead Logo */}
             <div 
               onClick={() => handleNavClick('home')}
               className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group select-none min-w-0 shrink"
-              title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – Digital Newspaper`}
+              title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – GS GITUMBA`}
             >
               {logoSettings.showInHeader && (
                 <div 
@@ -118,14 +118,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   className="font-semibold tracking-wider uppercase leading-none mt-0.5 truncate text-[10px] sm:text-xs text-teal-700"
                   style={{ color: colors.navLinkActive }}
                 >
-                  {branding?.platformSubtitle || 'GS GITUMBA'} • Digital Press
+                  {branding?.platformSubtitle || 'GS GITUMBA'}
                 </span>
               </div>
             </div>
 
-            {/* 2. Direct Navigation Links (Newspaper, Lesson Preparation, Nursery Report Cards, Admin Portal) */}
+            {/* 2. Direct Navigation Links (Home, Lesson Preparation, Nursery Report Cards, Admin Portal) */}
             <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
-              {/* Home / Newspaper */}
+              {/* Home */}
               <button
                 type="button"
                 onClick={() => handleNavClick('home')}
@@ -139,7 +139,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     : 'hover:opacity-80 hover:bg-slate-50'
                 }`}
               >
-                <span>Newspaper</span>
+                <span>Ahabanza (Home)</span>
                 {currentPage === 'home' && (
                   <span 
                     className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 

@@ -6,7 +6,6 @@ import {
   Mail, 
   Lock, 
   FileCheck, 
-  Newspaper,
   BookOpen,
   MapPin
 } from 'lucide-react';
@@ -78,13 +77,13 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                   className="font-semibold tracking-wider uppercase mt-0.5 text-xs text-teal-400"
                   style={{ color: colors.footerLinkColor }}
                 >
-                  {branding?.platformSubtitle || 'GS GITUMBA'} • Digital Press & CBC Platform
+                  {branding?.platformSubtitle || 'GS GITUMBA'} • CBC & Educational Platform
                 </span>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md">
-              {branding?.footerTagline || 'Serving Rwandan educators and communities from GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province). Providing pedagogical news, CBC curriculum guidance, and educational excellence.'}
+              {branding?.footerTagline || 'Serving Rwandan educators and communities from GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province). Providing pedagogical tools, CBC curriculum guidance, and educational excellence.'}
             </p>
 
             <div className="space-y-1.5 pt-1 text-xs text-slate-400">
@@ -99,11 +98,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* Column 2: Digital Newspaper Navigation */}
+          {/* Column 2: Educational Platform Navigation */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
-              <Newspaper className="w-3.5 h-3.5 text-teal-400" />
-              <span>Digital Newsroom</span>
+              <BookOpen className="w-3.5 h-3.5 text-teal-400" />
+              <span>Uburezi n'Amasomo</span>
             </h3>
             <ul className="space-y-2 text-xs sm:text-sm">
               <li>
@@ -112,7 +111,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                   onClick={() => handleLink('home')}
                   className="text-slate-300 hover:text-white transition-colors cursor-pointer"
                 >
-                  {t.navHome || 'Newspaper Homepage'}
+                  {t.navHome || 'Ahabanza (Home)'}
                 </button>
               </li>
               <li>

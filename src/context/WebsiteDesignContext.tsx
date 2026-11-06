@@ -7,12 +7,14 @@ import {
   WebsiteBrandingSettings,
   AnnouncementStripSettings,
   AnnouncementItem,
+  HomepageSectionConfig,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_WEBSITE_BRANDING,
-  DEFAULT_ANNOUNCEMENT_STRIP
+  DEFAULT_ANNOUNCEMENT_STRIP,
+  DEFAULT_HOMEPAGE_SECTIONS
 } from '../types/websiteDesign';
 import { 
   getWebsiteDesignSettings, 
@@ -45,8 +47,13 @@ interface WebsiteDesignContextType {
   updateAnnouncementMessage: (id: string, updates: Partial<AnnouncementItem>) => void;
   deleteAnnouncementMessage: (id: string) => void;
   reorderAnnouncementMessage: (id: string, direction: 'up' | 'down') => void;
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'all') => void;
-  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements', fieldKey: string) => void;
+  updateDraftHomepageSections: (sections: HomepageSectionConfig[]) => void;
+  reorderHomepageSection: (sectionId: string, direction: 'up' | 'down') => void;
+  toggleHomepageSection: (sectionId: string, enabled?: boolean) => void;
+  updateHomepageSectionOption: (sectionId: string, optionKey: string, value: boolean) => void;
+  resetHomepageSectionsToDefault: () => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'all') => void;
+  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   publishSettings: () => Promise<{ success: boolean; error?: string }>;
@@ -56,6 +63,7 @@ interface WebsiteDesignContextType {
   // Convenience Getters
   branding: WebsiteBrandingSettings;
   announcements: AnnouncementStripSettings;
+  homepageSections: HomepageSectionConfig[];
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
   colors: WebsiteColorSettings;
@@ -292,7 +300,102 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'all') => {
+  const updateDraftHomepageSections = (sections: HomepageSectionConfig[]) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      homepageSections: sections
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const reorderHomepageSection = (sectionId: string, direction: 'up' | 'down') => {
+    setDraftSettings(prev => {
+      const currentSections = [...(prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS)];
+      currentSections.sort((a, b) => a.order - b.order);
+      const index = currentSections.findIndex(s => s.id === sectionId);
+      if (index === -1) return prev;
+
+      if (direction === 'up' && index > 0) {
+        const prevItem = currentSections[index - 1];
+        const currentItem = currentSections[index];
+        const tempOrder = prevItem.order;
+        prevItem.order = currentItem.order;
+        currentItem.order = tempOrder;
+      } else if (direction === 'down' && index < currentSections.length - 1) {
+        const nextItem = currentSections[index + 1];
+        const currentItem = currentSections[index];
+        const tempOrder = nextItem.order;
+        nextItem.order = currentItem.order;
+        currentItem.order = tempOrder;
+      } else {
+        return prev;
+      }
+
+      currentSections.sort((a, b) => a.order - b.order);
+      const reindexed = currentSections.map((s, idx) => ({ ...s, order: idx + 1 }));
+
+      return {
+        ...prev,
+        homepageSections: reindexed
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const toggleHomepageSection = (sectionId: string, enabled?: boolean) => {
+    setDraftSettings(prev => {
+      const currentSections = [...(prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS)];
+      const updated = currentSections.map(s => {
+        if (s.id === sectionId) {
+          return { ...s, enabled: enabled !== undefined ? enabled : !s.enabled };
+        }
+        return s;
+      });
+      return {
+        ...prev,
+        homepageSections: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateHomepageSectionOption = (sectionId: string, optionKey: string, value: boolean) => {
+    setDraftSettings(prev => {
+      const currentSections = [...(prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS)];
+      const updated = currentSections.map(s => {
+        if (s.id === sectionId) {
+          return {
+            ...s,
+            options: {
+              ...(s.options || {}),
+              [optionKey]: value
+            }
+          };
+        }
+        return s;
+      });
+      return {
+        ...prev,
+        homepageSections: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetHomepageSectionsToDefault = () => {
+    setDraftSettings(prev => ({
+      ...prev,
+      homepageSections: [...DEFAULT_HOMEPAGE_SECTIONS]
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -310,6 +413,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       if (section === 'announcements' || section === 'all') {
         updated.announcements = { ...DEFAULT_ANNOUNCEMENT_STRIP };
       }
+      if (section === 'layout' || section === 'all') {
+        updated.homepageSections = [...DEFAULT_HOMEPAGE_SECTIONS];
+      }
       applyDesignCssVariables(updated);
       return updated;
     });
@@ -317,7 +423,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements', fieldKey: string) => {
+  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => {
     setDraftSettings(prev => {
       const updated = { ...prev };
       if (section === 'branding') {
@@ -330,6 +436,8 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         (updated.logo as any)[fieldKey] = (DEFAULT_WEBSITE_LOGO as any)[fieldKey];
       } else if (section === 'announcements') {
         (updated.announcements as any)[fieldKey] = (DEFAULT_ANNOUNCEMENT_STRIP as any)[fieldKey];
+      } else if (section === 'layout') {
+        updated.homepageSections = [...DEFAULT_HOMEPAGE_SECTIONS];
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -434,6 +542,11 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         updateAnnouncementMessage,
         deleteAnnouncementMessage,
         reorderAnnouncementMessage,
+        updateDraftHomepageSections,
+        reorderHomepageSection,
+        toggleHomepageSection,
+        updateHomepageSectionOption,
+        resetHomepageSectionsToDefault,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
@@ -443,6 +556,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         reloadSettings: loadSettings,
         branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
         announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,
+        homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,
         colors: activeSettings.colors,
