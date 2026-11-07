@@ -35,11 +35,20 @@ import {
   Globe,
   FileText,
   Megaphone,
-  Layers
+  Layers,
+  User,
+  Mail,
+  Phone,
+  School,
+  MapPin,
+  Calendar,
+  X
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
+import { TeacherProfile } from '../types/teacherProfile';
 import { getAppSettings, saveAppSettings } from '../services/appSettingsService';
 import { listUsers, setUserStatus, setUserRole } from '../services/authService';
+import { getAllTeacherProfiles } from '../services/teacherProfileService';
 import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
 import { SliderManager } from '../components/SliderManager';
@@ -76,6 +85,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [copiedScript, setCopiedScript] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [analyticsData, setAnalyticsData] = useState<AnalyticsSummary>(() => getAnalyticsSummary());
+  const [teacherProfiles, setTeacherProfiles] = useState<Record<string, TeacherProfile>>({});
+  const [selectedTeacherProfile, setSelectedTeacherProfile] = useState<TeacherProfile | null>(null);
 
   // Curriculum editing local states
   const [newSubject, setNewSubject] = useState('');
@@ -97,12 +108,20 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
-      const [appSettingsData, fetchedUsers] = await Promise.all([
+      const [appSettingsData, fetchedUsers, allProfiles] = await Promise.all([
         getAppSettings(),
-        listUsers()
+        listUsers(),
+        getAllTeacherProfiles()
       ]);
       setSettings(appSettingsData);
       setUsersList(fetchedUsers);
+      const profilesMap: Record<string, TeacherProfile> = {};
+      allProfiles.forEach(p => {
+        if (p.ownerUid) {
+          profilesMap[p.ownerUid] = p;
+        }
+      });
+      setTeacherProfiles(profilesMap);
       setAnalyticsData(getAnalyticsSummary());
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -1073,6 +1092,7 @@ promoteToAdmin('admin@example.com');`;
                     <th className="p-3">User / Name</th>
                     <th className="p-3">Email Address</th>
                     <th className="p-3">School</th>
+                    <th className="p-3">Teacher Profile</th>
                     <th className="p-3">Role</th>
                     <th className="p-3">Status</th>
                     <th className="p-3 text-right">Actions</th>
@@ -1081,6 +1101,7 @@ promoteToAdmin('admin@example.com');`;
                 <tbody className="divide-y divide-slate-100">
                   {filteredUsers.map((u) => {
                     const isSelf = u.uid === user?.uid;
+                    const teacherProf = teacherProfiles[u.uid];
                     return (
                       <tr key={u.uid} className="hover:bg-slate-50/70 transition-colors">
                         <td className="p-3 font-semibold text-slate-900">
@@ -1090,7 +1111,39 @@ promoteToAdmin('admin@example.com');`;
                           {u.email}
                         </td>
                         <td className="p-3 text-slate-600">
-                          {u.schoolName || '—'}
+                          {teacherProf?.schoolName || u.schoolName || '—'}
+                        </td>
+                        <td className="p-3">
+                          {teacherProf ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTeacherProfile(teacherProf)}
+                              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 cursor-pointer"
+                              title="View full Teacher Profile"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-teal-600" />
+                              <span>View Profile</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTeacherProfile({
+                                ownerUid: u.uid,
+                                email: u.email,
+                                fullName: u.displayName || u.email.split('@')[0],
+                                schoolName: u.schoolName || 'GS GITUMBA',
+                                phone: '',
+                                gender: '',
+                                qualification: 'Not provided yet',
+                                subjectsTaught: [],
+                                classesTaught: [],
+                                bio: 'No extra profile details provided yet.'
+                              })}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer"
+                            >
+                              <span>View Details</span>
+                            </button>
+                          )}
                         </td>
                         <td className="p-3">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1243,6 +1296,186 @@ promoteToAdmin('admin@example.com');`;
           </div>
         </div>
       )}
+
+      {/* ================= TEACHER PROFILE INSPECTION MODAL (ADMIN GLOBAL OVERSIGHT) ================= */}
+      {selectedTeacherProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl space-y-5 p-6 animate-in zoom-in-95">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-lg border border-teal-200">
+                  {selectedTeacherProfile.fullName ? selectedTeacherProfile.fullName.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      {selectedTeacherProfile.fullName || 'Mwarimu'}
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold uppercase">
+                      Teacher Profile
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {selectedTeacherProfile.email}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTeacherProfile(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                title="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              
+              {/* Phone */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <Phone className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Phone Number</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.phone || '— (Ntabwo yashyizwemo)'}
+                </p>
+              </div>
+
+              {/* Gender */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <User className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Gender (Igitsina)</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.gender === 'Gabo' ? 'Gabo (Male)' : selectedTeacherProfile.gender === 'Gore' ? 'Gore (Female)' : selectedTeacherProfile.gender || '—'}
+                </p>
+              </div>
+
+              {/* School */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <School className="w-3.5 h-3.5 text-teal-600" />
+                  <span>School Name</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.schoolName || 'GS GITUMBA'}
+                </p>
+              </div>
+
+              {/* Qualification */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <GraduationCap className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Qualification</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.qualification || '—'}
+                </p>
+              </div>
+
+              {/* Location */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Location</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.district ? `${selectedTeacherProfile.district}${selectedTeacherProfile.sector ? `, ${selectedTeacherProfile.sector}` : ''}` : 'Rulindo, Gitumba'}
+                </p>
+              </div>
+
+              {/* Experience */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
+                  <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Teaching Experience</span>
+                </span>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {selectedTeacherProfile.experienceYears ? `${selectedTeacherProfile.experienceYears} imyaka` : '—'}
+                </p>
+              </div>
+
+            </div>
+
+            {/* Classes Taught */}
+            <div className="space-y-1.5 pt-1">
+              <span className="font-bold text-slate-700 text-xs block">
+                Classes Taught (Imyaka Wigisha):
+              </span>
+              {selectedTeacherProfile.classesTaught && selectedTeacherProfile.classesTaught.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedTeacherProfile.classesTaught.map((cls) => (
+                    <span
+                      key={cls}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-100 text-teal-900 border border-teal-200"
+                    >
+                      {cls}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">No classes listed yet.</p>
+              )}
+            </div>
+
+            {/* Subjects Taught */}
+            <div className="space-y-1.5 pt-1">
+              <span className="font-bold text-slate-700 text-xs block">
+                Subjects Taught (Amasomo Wigisha):
+              </span>
+              {selectedTeacherProfile.subjectsTaught && selectedTeacherProfile.subjectsTaught.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedTeacherProfile.subjectsTaught.map((sub) => (
+                    <span
+                      key={sub}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                    >
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">No subjects listed yet.</p>
+              )}
+            </div>
+
+            {/* Bio & Responsibilities */}
+            {selectedTeacherProfile.bio && (
+              <div className="space-y-1 pt-1 border-t border-slate-100">
+                <span className="font-bold text-slate-700 text-xs block">
+                  Professional Bio & Responsibilities:
+                </span>
+                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200/80 leading-relaxed whitespace-pre-wrap">
+                  {selectedTeacherProfile.bio}
+                </p>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+              <span>
+                Owner UID: <code className="text-slate-600 font-mono text-[10px]">{selectedTeacherProfile.ownerUid}</code>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedTeacherProfile(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition-all cursor-pointer"
+              >
+                Funga (Close)
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

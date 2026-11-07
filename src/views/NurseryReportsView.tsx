@@ -31,7 +31,7 @@ import {
   FileDown
 } from 'lucide-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { useAuth } from '../context/AuthContext';
 import { 
   NurseryStudent, 
@@ -445,7 +445,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     setTimeout(() => setLogoStatusNote(null), 5000);
   };
 
-  // Standalone isolated iframe print engine (guaranteed zero blank pages & exact colors)
+  // Standalone isolated iframe print engine (guaranteed zero blank pages, preserved styles & exact colors)
   const handleTriggerPrint = () => {
     const container = printableAreaRef.current;
     if (!container) {
@@ -463,6 +463,11 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
       if (existingFrame && existingFrame.parentNode) {
         existingFrame.parentNode.removeChild(existingFrame);
       }
+
+      // Collect all compiled styles from the current document so Tailwind rules carry over
+      const documentStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(el => el.outerHTML)
+        .join('\n');
 
       // Create hidden iframe
       const iframe = document.createElement('iframe');
@@ -483,16 +488,17 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
         return;
       }
 
-      // Build standalone complete HTML document
+      // Build standalone complete HTML document with full CSS rules
       const standaloneHtml = `<!DOCTYPE html>
 <html lang="rw">
 <head>
   <meta charset="utf-8" />
   <title>${documentTitle}</title>
+  ${documentStyles}
   <style>
     @page {
       size: A4 portrait;
-      margin: 8mm 10mm 8mm 10mm;
+      margin: 6mm 8mm 6mm 8mm;
     }
     *, *::before, *::after {
       box-sizing: border-box !important;
@@ -505,44 +511,79 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
       padding: 0 !important;
       background: #ffffff !important;
       color: #0f172a !important;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-      font-size: 11px !important;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      font-size: 10px !important;
       line-height: 1.25 !important;
       width: 100% !important;
     }
+    .printable-report-container {
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
     .nursery-report-page {
       width: 100% !important;
-      max-width: 100% !important;
-      margin: 0 0 10mm 0 !important;
-      padding: 0 !important;
+      max-width: 194mm !important;
+      margin: 0 auto !important;
+      padding: 16px 20px !important;
       background: #ffffff !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
       page-break-after: always !important;
       break-after: page !important;
       box-sizing: border-box !important;
     }
+    .nursery-report-page:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+      margin-bottom: 0 !important;
+    }
+    /* Strictly bound school logo dimensions */
+    .school-logo-container {
+      width: 64px !important;
+      height: 64px !important;
+      max-width: 64px !important;
+      max-height: 64px !important;
+      min-width: 64px !important;
+      min-height: 64px !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    .school-logo-img {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 60px !important;
+      max-height: 60px !important;
+      object-fit: contain !important;
+      object-position: center !important;
+      display: block !important;
+    }
     table {
       width: 100% !important;
       border-collapse: collapse !important;
-      font-size: 10px !important;
+      table-layout: fixed !important;
     }
     th, td {
       border: 1px solid #0f172a !important;
-      padding: 2px 4px !important;
       box-sizing: border-box !important;
-    }
-    th {
-      background-color: #f1f5f9 !important;
     }
     thead {
       display: table-header-group !important;
     }
     tr {
       page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
   </style>
 </head>
 <body>
-  ${container.innerHTML}
+  <div class="printable-report-container">
+    ${container.innerHTML}
+  </div>
 </body>
 </html>`;
 
@@ -573,7 +614,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
           } finally {
             setTimeout(() => {
               if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-            }, 5000);
+            }, 6000);
           }
         }, 300);
       });
@@ -584,7 +625,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     }
   };
 
-  // Direct high-fidelity PDF export using html2canvas & jsPDF
+  // Direct high-fidelity PDF export using html2canvas & jsPDF with exact proportional fit
   const handleDownloadPdf = async () => {
     const container = printableAreaRef.current;
     if (!container) return;
@@ -608,6 +649,10 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
 
       const pdfWidth = 210;
       const pdfHeight = 297;
+      const marginX = 8;
+      const marginY = 8;
+      const maxAvailableWidth = pdfWidth - marginX * 2; // 194 mm
+      const maxAvailableHeight = pdfHeight - marginY * 2; // 281 mm
 
       for (let i = 0; i < pageElements.length; i++) {
         const pageEl = pageElements[i];
@@ -619,15 +664,27 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
           backgroundColor: '#ffffff'
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const imgWidth = pdfWidth - 16; // 8mm margin each side
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        // Use PNG to prevent compression artifacts, preserve crisp table lines & transparent logos
+        const imgData = canvas.toDataURL('image/png');
+
+        // Calculate proportional scale to fit exactly within 1 A4 page with ZERO bottom clipping
+        let renderedWidth = maxAvailableWidth;
+        let renderedHeight = (canvas.height * renderedWidth) / canvas.width;
+
+        if (renderedHeight > maxAvailableHeight) {
+          renderedHeight = maxAvailableHeight;
+          renderedWidth = (canvas.width * renderedHeight) / canvas.height;
+        }
+
+        // Center horizontally on page
+        const posX = (pdfWidth - renderedWidth) / 2;
+        const posY = marginY;
 
         if (i > 0) {
           pdf.addPage('a4', 'portrait');
         }
 
-        pdf.addImage(imgData, 'JPEG', 8, 8, imgWidth, Math.min(imgHeight, pdfHeight - 16));
+        pdf.addImage(imgData, 'PNG', posX, posY, renderedWidth, renderedHeight, undefined, 'FAST');
       }
 
       const fileName = printTargetMode === 'single'
@@ -659,7 +716,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm 8mm 10mm;
+            margin: 6mm 8mm 6mm 8mm;
           }
           *, *::before, *::after {
             -webkit-print-color-adjust: exact !important;
@@ -693,14 +750,43 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
           .nursery-report-page {
             display: block !important;
             visibility: visible !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
             page-break-after: always !important;
             break-after: page !important;
-            margin: 0 0 10mm 0 !important;
-            padding: 0 !important;
+            margin: 0 0 4mm 0 !important;
+            padding: 16px 20px !important;
             box-shadow: none !important;
             border: none !important;
             width: 100% !important;
             max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .nursery-report-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+            margin-bottom: 0 !important;
+          }
+          .school-logo-container {
+            width: 64px !important;
+            height: 64px !important;
+            max-width: 64px !important;
+            max-height: 64px !important;
+            min-width: 64px !important;
+            min-height: 64px !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          .school-logo-img {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 60px !important;
+            max-height: 60px !important;
+            object-fit: contain !important;
+            object-position: center !important;
+            display: block !important;
           }
         }
       `}</style>

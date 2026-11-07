@@ -33,17 +33,15 @@
   }
 }
 
-/* Print Specific Formatting for Official Rwanda CBC Lesson Plans */
+/* Print Specific Formatting */
 @media print {
   @page {
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 6mm 8mm 6mm 8mm;
   }
 
-  /* CRITICAL: Completely hide #root from the print layout tree.
-     This completely eliminates leaked website headers, footers, navigation,
-     sidebars, dashboard cards, modal overlays, or duplicated phantom pages. */
-  body > #root {
+  /* Only hide #root when the dedicated Rwanda CBC Lesson Plan print portal is actively mounted */
+  body:has(#rwanda-cbc-print-portal) > #root {
     display: none !important;
     visibility: hidden !important;
   }
@@ -67,11 +65,42 @@
   footer,
   aside,
   button,
+  input,
+  select,
   .print-controls {
     display: none !important;
   }
 
-  /* Dedicated print portal container */
+  /* Nursery Report Card print styling */
+  .printable-report-container {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .nursery-report-page {
+    display: block !important;
+    visibility: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    margin: 0 0 4mm 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .nursery-report-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Dedicated print portal container for lesson plans */
   #rwanda-cbc-print-portal {
     display: block !important;
     visibility: visible !important;

@@ -365,7 +365,61 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 11. Default deny for all other documents
+    // 11. Teacher Profiles Collection (Private per teacher via ownerUid; Admin global oversight)
+    // ==============================================================
+    function isValidTeacherProfile(data) {
+      return data.ownerUid is string &&
+             data.ownerUid.size() > 0 &&
+             data.email is string &&
+             data.email.size() > 0 &&
+             (!('admin' in data)) &&
+             (!('isAdmin' in data)) &&
+             (!('isSuperAdmin' in data)) &&
+             (!('permissions' in data)) &&
+             (!('role' in data) || data.role == 'teacher') &&
+             (!('fullName' in data) || (data.fullName is string && data.fullName.size() <= 120)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             (!('gender' in data) || (data.gender is string && data.gender.size() <= 20)) &&
+             (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 120)) &&
+             (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 100)) &&
+             (!('experienceYears' in data) || (data.experienceYears is string && data.experienceYears.size() <= 30) || data.experienceYears is int) &&
+             (!('district' in data) || (data.district is string && data.district.size() <= 80)) &&
+             (!('sector' in data) || (data.sector is string && data.sector.size() <= 80)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 2000));
+    }
+
+    match /teacher_profiles/{profileId} {
+      // Each teacher can only read their own profile; Admin has global oversight
+      allow read: if isOwner(resource.data.ownerUid) || isAdmin();
+
+      // On creation, ownerUid must equal caller UID, email must equal auth token email, and no admin claims
+      allow create: if (
+        (
+          isOwner(request.resource.data.ownerUid) &&
+          request.resource.data.ownerUid == request.auth.uid &&
+          request.resource.data.email == request.auth.token.email &&
+          isValidTeacherProfile(request.resource.data)
+        ) ||
+        (isAdmin() && isValidTeacherProfile(request.resource.data))
+      );
+
+      // On update, ownership and email cannot be changed by teachers, no admin claims allowed
+      allow update: if (
+        (
+          isOwner(resource.data.ownerUid) &&
+          request.resource.data.ownerUid == resource.data.ownerUid &&
+          request.resource.data.email == resource.data.email &&
+          isValidTeacherProfile(request.resource.data)
+        ) ||
+        (isAdmin() && isValidTeacherProfile(request.resource.data))
+      );
+
+      // Only admin can delete teacher profiles
+      allow delete: if isAdmin();
+    }
+
+    // ==============================================================
+    // 12. Default deny for all other documents
     // ==============================================================
     match /{document=**} {
       allow read, write: if false;

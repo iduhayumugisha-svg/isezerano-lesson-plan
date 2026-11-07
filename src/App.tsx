@@ -7,7 +7,8 @@ import {
   ShieldCheck, 
   Home,
   ArrowLeft,
-  Award
+  Award,
+  User
 } from 'lucide-react';
 import { LessonPlan } from './types/lessonPlan';
 import { 
@@ -34,6 +35,7 @@ import { CreateLessonPlanView } from './views/CreateLessonPlanView';
 import { SavedLessonPlansView } from './views/SavedLessonPlansView';
 import { SettingsView } from './views/SettingsView';
 import { NurseryReportsView } from './views/NurseryReportsView';
+import { TeacherProfileView } from './views/TeacherProfileView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
 
@@ -82,6 +84,7 @@ const getPageFromUrl = (): AppPage => {
     return 'nursery';
   }
   if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'dashboard';
+  if (pathname === '/profile' || pathname.startsWith('/profile') || hash === '#profile' || search.get('page') === 'profile') return 'profile';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -304,6 +307,8 @@ function AppContent() {
                 handleNavigate(page);
               } else if (page === 'admin') {
                 handleNavigate('admin');
+              } else if ((page as string) === 'profile') {
+                handleNavigate('profile');
               } else {
                 handleNavigate('dashboard');
               }
@@ -406,6 +411,19 @@ function AppContent() {
                   <SettingsIcon className="w-4 h-4 text-teal-400" />
                   <span>{t.navSettings || 'Preferences'}</span>
                 </button>
+
+                {/* Tab 5: Teacher Profile */}
+                {user && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('profile')}
+                    className="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                    title="Fungura umwirondoro wawe (Teacher Profile)"
+                  >
+                    <User className="w-4 h-4 text-teal-700" />
+                    <span>Profil ya Mwarimu</span>
+                  </button>
+                )}
               </div>
 
               {/* Status info */}
@@ -488,6 +506,14 @@ function AppContent() {
               />
             )}
           </div>
+        )}
+
+        {/* TEACHER PROFILE VIEW: Private per Teacher & Saved to Firestore */}
+        {currentPage === 'profile' && (
+          <TeacherProfileView
+            onNavigateHome={() => handleNavigate('home')}
+            onNavigateDashboard={() => handleNavigate('dashboard')}
+          />
         )}
 
       </main>

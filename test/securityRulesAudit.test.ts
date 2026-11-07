@@ -398,6 +398,54 @@ class FirestoreRulesEngine {
   public canDeleteComment(auth: AuthContext | null, commentId: string): boolean {
     return this.isAdmin(auth);
   }
+
+  // 8. Teacher Profiles collection
+  private isValidTeacherProfile(data: any): boolean {
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.ownerUid !== 'string' || data.ownerUid.length === 0) return false;
+    if (typeof data.email !== 'string' || data.email.length === 0) return false;
+    if ('admin' in data || 'isAdmin' in data || 'isSuperAdmin' in data || 'permissions' in data) return false;
+    if ('role' in data && data.role !== 'teacher') return false;
+    if ('fullName' in data && (typeof data.fullName !== 'string' || data.fullName.length > 120)) return false;
+    if ('phone' in data && (typeof data.phone !== 'string' || data.phone.length > 40)) return false;
+    if ('gender' in data && (typeof data.gender !== 'string' || data.gender.length > 20)) return false;
+    if ('schoolName' in data && (typeof data.schoolName !== 'string' || data.schoolName.length > 120)) return false;
+    if ('qualification' in data && (typeof data.qualification !== 'string' || data.qualification.length > 100)) return false;
+    if ('district' in data && (typeof data.district !== 'string' || data.district.length > 80)) return false;
+    if ('sector' in data && (typeof data.sector !== 'string' || data.sector.length > 80)) return false;
+    if ('bio' in data && (typeof data.bio !== 'string' || data.bio.length > 2000)) return false;
+    return true;
+  }
+
+  public canReadTeacherProfile(auth: AuthContext | null, profileId: string): boolean {
+    const existing = this.getDoc(`teacher_profiles/${profileId}`);
+    if (!existing) return false;
+    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
+  }
+
+  public canCreateTeacherProfile(auth: AuthContext | null, profileId: string, data: any): boolean {
+    if (!this.isValidTeacherProfile(data)) return false;
+    if (this.isAdmin(auth)) return true;
+    return (
+      this.isOwner(auth, data.ownerUid) &&
+      data.ownerUid === auth?.uid &&
+      data.email === auth?.token?.email
+    );
+  }
+
+  public canUpdateTeacherProfile(auth: AuthContext | null, profileId: string, existing: any, updated: any): boolean {
+    if (!this.isValidTeacherProfile(updated)) return false;
+    if (this.isAdmin(auth)) return true;
+    return (
+      this.isOwner(auth, existing.ownerUid) &&
+      updated.ownerUid === existing.ownerUid &&
+      updated.email === existing.email
+    );
+  }
+
+  public canDeleteTeacherProfile(auth: AuthContext | null, profileId: string): boolean {
+    return this.isAdmin(auth);
+  }
 }
 
 function targetUidOrSelf(targetUserId: string): string {
@@ -586,6 +634,21 @@ export function runSecurityAuditTests() {
       status: 'active',
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z'
+    },
+    // Seed Teacher Profile for Teacher B
+    'teacher_profiles/teacher-b-uid': {
+      ownerUid: 'teacher-b-uid',
+      email: 'teacher.b@gmail.com',
+      fullName: 'Teacher B Marie',
+      schoolName: 'GS Gitumba',
+      phone: '0782971258',
+      gender: 'Gore',
+      qualification: 'A0 – Bachelor of Education (B.Ed)',
+      subjectsTaught: ['Mathematics', 'SET'],
+      classesTaught: ['P1', 'P2'],
+      district: 'Rulindo',
+      sector: 'Gitumba',
+      bio: 'Head of Mathematics Department'
     }
   });
 
@@ -1014,6 +1077,114 @@ export function runSecurityAuditTests() {
   assert('Unauthenticated visitor CANNOT read Teacher B student', !engine.canReadNurseryStudent(unauthenticated, 'student-b-1'));
   assert('Anonymous user CANNOT read Teacher B assessment', !engine.canReadNurseryAssessment(anonymousUser, 'assessment_student-b-1'));
   assert('Unauthenticated visitor CANNOT read Teacher B school settings', !engine.canReadSchoolSettings(unauthenticated, 'teacher-b-uid'));
+
+  // -----------------------------------------------------------------------
+  // TEST SUITE 11: TEACHER PROFILES ISOLATION & PRIVILEGE GUARDS
+  // -----------------------------------------------------------------------
+  console.log('\n--- 11. TEACHER PROFILES ISOLATION & PRIVILEGE TESTS ---');
+  assert('Teacher B CAN read own teacher profile', engine.canReadTeacherProfile(teacherB, 'teacher-b-uid'));
+  assert('Teacher A CANNOT read Teacher B teacher profile', !engine.canReadTeacherProfile(teacherA, 'teacher-b-uid'));
+  assert('Admin twizerefelix90@gmail.com CAN read Teacher B profile', engine.canReadTeacherProfile(admin, 'teacher-b-uid'));
+  assert('Anonymous user CANNOT read teacher profile', !engine.canReadTeacherProfile(anonymousUser, 'teacher-b-uid'));
+  assert('Unauthenticated visitor CANNOT read teacher profile', !engine.canReadTeacherProfile(unauthenticated, 'teacher-b-uid'));
+
+  assert(
+    'Teacher A CAN create own valid teacher profile',
+    engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
+      ownerUid: 'teacher-a-uid',
+      email: 'teacher.a@gmail.com',
+      fullName: 'Teacher A Mugisha',
+      schoolName: 'GS Gitumba',
+      phone: '0788123456',
+      gender: 'Gabo',
+      qualification: 'A0 – Bachelor of Education (B.Ed)',
+      subjectsTaught: ['English', 'Kinyarwanda'],
+      classesTaught: ['P3', 'P4']
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT create profile for Teacher B (ownerUid mismatch)',
+    !engine.canCreateTeacherProfile(teacherA, 'teacher-b-uid', {
+      ownerUid: 'teacher-b-uid',
+      email: 'teacher.b@gmail.com',
+      fullName: 'Impersonated Teacher'
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT create profile forging another email',
+    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
+      ownerUid: 'teacher-a-uid',
+      email: 'victim@gmail.com',
+      fullName: 'Teacher A'
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT inject admin: true into teacher profile',
+    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
+      ownerUid: 'teacher-a-uid',
+      email: 'teacher.a@gmail.com',
+      fullName: 'Teacher A',
+      admin: true
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT inject role: "admin" into teacher profile',
+    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
+      ownerUid: 'teacher-a-uid',
+      email: 'teacher.a@gmail.com',
+      fullName: 'Teacher A',
+      role: 'admin'
+    })
+  );
+
+  const teacherBExistingProfile = engine.getDoc('teacher_profiles/teacher-b-uid')!;
+
+  assert(
+    'Teacher B CAN update own teacher profile',
+    engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
+      ...teacherBExistingProfile,
+      phone: '0782999999',
+      qualification: 'Master of Education (M.Ed)'
+    })
+  );
+
+  assert(
+    'Teacher B CANNOT change ownerUid on profile',
+    !engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
+      ...teacherBExistingProfile,
+      ownerUid: 'teacher-a-uid'
+    })
+  );
+
+  assert(
+    'Teacher B CANNOT change email on profile',
+    !engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
+      ...teacherBExistingProfile,
+      email: 'different@gmail.com'
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT update Teacher B profile',
+    !engine.canUpdateTeacherProfile(teacherA, 'teacher-b-uid', teacherBExistingProfile, {
+      ...teacherBExistingProfile,
+      fullName: 'Hijacked Name'
+    })
+  );
+
+  assert(
+    'Teacher B CANNOT delete own profile (Admin only)',
+    !engine.canDeleteTeacherProfile(teacherB, 'teacher-b-uid')
+  );
+
+  assert(
+    'Admin CAN delete teacher profile',
+    engine.canDeleteTeacherProfile(admin, 'teacher-b-uid')
+  );
 
   // Summary
   console.log('===========================================================');

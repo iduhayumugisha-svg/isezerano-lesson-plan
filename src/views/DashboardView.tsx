@@ -14,7 +14,8 @@ import {
   Sparkles, 
   ShieldCheck, 
   Home,
-  Award
+  Award,
+  User
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
 import { SaasNavPage } from '../components/Sidebar';
@@ -24,7 +25,7 @@ import { FEATURE_FLAGS } from '../config/features';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];
-  onNavigate: (page: SaasNavPage | 'home' | 'nursery') => void;
+  onNavigate: (page: SaasNavPage | 'home' | 'nursery' | 'profile') => void;
   onSelectPlanToEdit: (plan: LessonPlan) => void;
   onSelectPlanToPrint: (plan: LessonPlan) => void;
 }
@@ -36,7 +37,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectPlanToPrint
 }) => {
   const { t } = useLanguage();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   const totalPlans = lessonPlans.length;
   const primaryPlans = lessonPlans.filter((p) => p.educationLevel === 'Primary').length;
@@ -73,6 +74,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       icon: Award,
       iconColor: 'bg-amber-50 text-amber-700 group-hover:bg-amber-700 group-hover:text-white',
       buttonText: 'Open Nursery Reports'
+    },
+    {
+      id: 'profile' as any,
+      title: 'Profil ya Mwarimu (Teacher Profile)',
+      badge: user ? 'Active Profile' : 'Google Account',
+      badgeColor: 'bg-teal-50 text-teal-900 border-teal-200',
+      description: 'Injiza cyangwa uvugurure amazina yawe, amashuri wigisha, amasomo, impamyabumenyi na nimero ya telefoni (GS GITUMBA).',
+      icon: User,
+      iconColor: 'bg-teal-50 text-teal-700 group-hover:bg-teal-700 group-hover:text-white',
+      buttonText: 'Fungura Umwirondoro'
     },
     {
       id: 'settings' as SaasNavPage,
@@ -135,6 +146,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <FolderClock className="w-3.5 h-3.5" />
             <span>Saved ({totalPlans})</span>
           </button>
+          {user && (
+            <button
+              onClick={() => onNavigate('profile' as any)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-teal-900 bg-teal-50 hover:bg-teal-100 transition-colors border border-teal-200 cursor-pointer"
+              title="Fungura umwirondoro wawe (Teacher Profile)"
+            >
+              <User className="w-3.5 h-3.5 text-teal-700" />
+              <span>Profil yanjye</span>
+            </button>
+          )}
         </div>
       </div>
 

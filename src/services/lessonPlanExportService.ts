@@ -14,7 +14,7 @@ import {
   VerticalAlign
 } from 'docx';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { LessonPlan } from '../types/lessonPlan';
 
 export type ExportLangMode = 'en' | 'rw' | 'fr' | 'bi';

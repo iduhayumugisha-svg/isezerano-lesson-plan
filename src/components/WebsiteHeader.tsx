@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { TopAnnouncementTicker } from './TopAnnouncementTicker';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -279,6 +279,18 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                               {user.email}
                             </p>
                           </div>
+                        </div>
+                        {/* Direct link to Teacher Profile */}
+                        <div className="mt-2.5 pt-2 border-t border-slate-200/70">
+                          <button
+                            type="button"
+                            onClick={() => handleNavClick('profile')}
+                            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
+                            title="Fungura umwirondoro wawe (Open Teacher Profile)"
+                          >
+                            <User className="w-3.5 h-3.5 text-teal-700" />
+                            <span>Profil ya Mwarimu (Teacher Profile)</span>
+                          </button>
                         </div>
                       </div>
                     ) : (
