@@ -20,12 +20,17 @@ interface WebsiteFooterProps {
 
 export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
-  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
 
   const handleLink = (page: WebsitePage) => {
     onNavigate(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Dynamic footer links
+  const footerNavItems = (navigationMenus || [])
+    .filter(item => item.enabled && (item.location === 'footer' || item.location === 'both'))
+    .sort((a, b) => a.order - b.order);
 
   return (
     <footer 
@@ -98,50 +103,57 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* Column 2: Educational Platform Navigation */}
+          {/* Column 2: Educational Platform Navigation (Configurable) */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
               <BookOpen className="w-3.5 h-3.5 text-teal-400" />
-              <span>Uburezi n'Amasomo</span>
+              <span>Ibice by'Urubuga & Uburezi</span>
             </h3>
             <ul className="space-y-2 text-xs sm:text-sm">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('home')}
-                  className="text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {t.navHome || 'Ahabanza (Home)'}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('dashboard')}
-                  className="text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer inline-flex items-center space-x-1"
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5" />
-                  <span>Teacher Portal & Dashboard</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('create')}
-                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-                >
-                  CBC Lesson Plan Workspace
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('nursery')}
-                  className="text-amber-400 hover:text-amber-300 transition-colors cursor-pointer inline-flex items-center space-x-1"
-                >
-                  <span>Nursery Report Cards (N1-N3)</span>
-                </button>
-              </li>
+              {footerNavItems.map((item) => {
+                const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
+
+                if (isExternal) {
+                  return (
+                    <li key={item.id}>
+                      <a
+                        href={item.path}
+                        target={item.openInNewTab ? '_blank' : '_self'}
+                        rel="noopener noreferrer"
+                        className="text-slate-300 hover:text-white transition-colors inline-flex items-center space-x-1.5"
+                      >
+                        <span>{item.label}</span>
+                        {item.badge && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-extrabold">
+                            {item.badge}
+                          </span>
+                        )}
+                      </a>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleLink(item.path as WebsitePage)}
+                      className="text-slate-300 hover:text-white transition-colors cursor-pointer inline-flex items-center space-x-1.5 text-left"
+                    >
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
+                          item.badgeColor === 'amber'
+                            ? 'bg-amber-400/20 text-amber-300'
+                            : 'bg-teal-400/20 text-teal-300'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

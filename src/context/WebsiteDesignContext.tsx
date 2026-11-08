@@ -8,17 +8,22 @@ import {
   AnnouncementStripSettings,
   AnnouncementItem,
   HomepageSectionConfig,
+  SectionCustomContent,
+  NavigationMenuItem,
+  WebsiteDesignVersion,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_WEBSITE_BRANDING,
   DEFAULT_ANNOUNCEMENT_STRIP,
-  DEFAULT_HOMEPAGE_SECTIONS
+  DEFAULT_HOMEPAGE_SECTIONS,
+  DEFAULT_NAVIGATION_MENUS
 } from '../types/websiteDesign';
 import { 
   getWebsiteDesignSettings, 
   saveWebsiteDesignSettings, 
+  restoreWebsiteDesignVersion,
   applyDesignCssVariables,
   updateBrowserFavicon,
   subscribeToWebsiteDesign,
@@ -47,16 +52,35 @@ interface WebsiteDesignContextType {
   updateAnnouncementMessage: (id: string, updates: Partial<AnnouncementItem>) => void;
   deleteAnnouncementMessage: (id: string) => void;
   reorderAnnouncementMessage: (id: string, direction: 'up' | 'down') => void;
+
+  // No-Code Section Actions
   updateDraftHomepageSections: (sections: HomepageSectionConfig[]) => void;
+  addHomepageSection: (section: HomepageSectionConfig) => void;
+  updateHomepageSection: (sectionId: string, updates: Partial<HomepageSectionConfig>) => void;
+  deleteHomepageSection: (sectionId: string) => void;
   reorderHomepageSection: (sectionId: string, direction: 'up' | 'down') => void;
   toggleHomepageSection: (sectionId: string, enabled?: boolean) => void;
   updateHomepageSectionOption: (sectionId: string, optionKey: string, value: boolean) => void;
+  updateHomepageSectionContent: (sectionId: string, contentUpdates: Partial<SectionCustomContent>) => void;
   resetHomepageSectionsToDefault: () => void;
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'all') => void;
+
+  // No-Code Navigation Menu Actions
+  updateDraftNavigationMenus: (menus: NavigationMenuItem[]) => void;
+  addNavigationMenuItem: (item: Omit<NavigationMenuItem, 'id' | 'order'>) => void;
+  updateNavigationMenuItem: (id: string, updates: Partial<NavigationMenuItem>) => void;
+  deleteNavigationMenuItem: (id: string) => void;
+  reorderNavigationMenuItem: (id: string, direction: 'up' | 'down') => void;
+  toggleNavigationMenuItem: (id: string, enabled?: boolean) => void;
+  resetNavigationMenusToDefault: () => void;
+
+  // Reset & Undo Actions
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'all') => void;
   resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
-  publishSettings: () => Promise<{ success: boolean; error?: string }>;
+  undoDraftChanges: () => void;
+  restoreVersion: (version: WebsiteDesignVersion) => Promise<{ success: boolean; error?: string }>;
+  publishSettings: (summaryNote?: string) => Promise<{ success: boolean; error?: string }>;
   uploadLogoFile: (file: File, onProgress?: (progress: LogoUploadProgress) => void) => Promise<LogoUploadResult>;
   reloadSettings: () => Promise<void>;
 
@@ -64,6 +88,8 @@ interface WebsiteDesignContextType {
   branding: WebsiteBrandingSettings;
   announcements: AnnouncementStripSettings;
   homepageSections: HomepageSectionConfig[];
+  navigationMenus: NavigationMenuItem[];
+  versionHistory: WebsiteDesignVersion[];
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
   colors: WebsiteColorSettings;
@@ -395,7 +421,202 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'all') => {
+  // --- NO-CODE SECTION ACTIONS ---
+  const addHomepageSection = (newSec: HomepageSectionConfig) => {
+    setDraftSettings(prev => {
+      const current = prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS;
+      const maxOrder = current.reduce((max, s) => Math.max(max, s.order || 0), 0);
+      const sectionWithOrder: HomepageSectionConfig = {
+        ...newSec,
+        order: maxOrder + 1
+      };
+      return {
+        ...prev,
+        homepageSections: [...current, sectionWithOrder]
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateHomepageSection = (sectionId: string, updates: Partial<HomepageSectionConfig>) => {
+    setDraftSettings(prev => {
+      const current = prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS;
+      const updated = current.map(s => {
+        if (s.id === sectionId) {
+          return {
+            ...s,
+            ...updates,
+            content: updates.content ? { ...(s.content || {}), ...updates.content } : s.content,
+            options: updates.options ? { ...(s.options || {}), ...updates.options } : s.options
+          };
+        }
+        return s;
+      });
+      return {
+        ...prev,
+        homepageSections: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const deleteHomepageSection = (sectionId: string) => {
+    setDraftSettings(prev => {
+      const current = prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS;
+      const filtered = current.filter(s => s.id !== sectionId);
+      const reindexed = filtered.map((s, idx) => ({ ...s, order: idx + 1 }));
+      return {
+        ...prev,
+        homepageSections: reindexed
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateHomepageSectionContent = (sectionId: string, contentUpdates: Partial<SectionCustomContent>) => {
+    setDraftSettings(prev => {
+      const current = prev.homepageSections || DEFAULT_HOMEPAGE_SECTIONS;
+      const updated = current.map(s => {
+        if (s.id === sectionId) {
+          return {
+            ...s,
+            content: {
+              ...(s.content || {}),
+              ...contentUpdates
+            }
+          };
+        }
+        return s;
+      });
+      return {
+        ...prev,
+        homepageSections: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  // --- NO-CODE NAVIGATION MENU ACTIONS ---
+  const updateDraftNavigationMenus = (menus: NavigationMenuItem[]) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      navigationMenus: menus
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const addNavigationMenuItem = (item: Omit<NavigationMenuItem, 'id' | 'order'>) => {
+    setDraftSettings(prev => {
+      const current = prev.navigationMenus || DEFAULT_NAVIGATION_MENUS;
+      const maxOrder = current.reduce((max, m) => Math.max(max, m.order || 0), 0);
+      const newItem: NavigationMenuItem = {
+        ...item,
+        id: `nav-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        order: maxOrder + 1
+      };
+      return {
+        ...prev,
+        navigationMenus: [...current, newItem]
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateNavigationMenuItem = (id: string, updates: Partial<NavigationMenuItem>) => {
+    setDraftSettings(prev => {
+      const current = prev.navigationMenus || DEFAULT_NAVIGATION_MENUS;
+      const updated = current.map(m => m.id === id ? { ...m, ...updates } : m);
+      return {
+        ...prev,
+        navigationMenus: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const deleteNavigationMenuItem = (id: string) => {
+    setDraftSettings(prev => {
+      const current = prev.navigationMenus || DEFAULT_NAVIGATION_MENUS;
+      const filtered = current.filter(m => m.id !== id);
+      const reindexed = filtered.map((m, idx) => ({ ...m, order: idx + 1 }));
+      return {
+        ...prev,
+        navigationMenus: reindexed
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const reorderNavigationMenuItem = (id: string, direction: 'up' | 'down') => {
+    setDraftSettings(prev => {
+      const current = [...(prev.navigationMenus || DEFAULT_NAVIGATION_MENUS)];
+      current.sort((a, b) => a.order - b.order);
+      const idx = current.findIndex(m => m.id === id);
+      if (idx === -1) return prev;
+
+      if (direction === 'up' && idx > 0) {
+        const prevItem = current[idx - 1];
+        const currentItem = current[idx];
+        const temp = prevItem.order;
+        prevItem.order = currentItem.order;
+        currentItem.order = temp;
+      } else if (direction === 'down' && idx < current.length - 1) {
+        const nextItem = current[idx + 1];
+        const currentItem = current[idx];
+        const temp = nextItem.order;
+        nextItem.order = currentItem.order;
+        currentItem.order = temp;
+      } else {
+        return prev;
+      }
+
+      current.sort((a, b) => a.order - b.order);
+      const reindexed = current.map((m, i) => ({ ...m, order: i + 1 }));
+      return {
+        ...prev,
+        navigationMenus: reindexed
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const toggleNavigationMenuItem = (id: string, enabled?: boolean) => {
+    setDraftSettings(prev => {
+      const current = prev.navigationMenus || DEFAULT_NAVIGATION_MENUS;
+      const updated = current.map(m => {
+        if (m.id === id) {
+          return { ...m, enabled: enabled !== undefined ? enabled : !m.enabled };
+        }
+        return m;
+      });
+      return {
+        ...prev,
+        navigationMenus: updated
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetNavigationMenusToDefault = () => {
+    setDraftSettings(prev => ({
+      ...prev,
+      navigationMenus: [...DEFAULT_NAVIGATION_MENUS]
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -415,6 +636,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (section === 'layout' || section === 'all') {
         updated.homepageSections = [...DEFAULT_HOMEPAGE_SECTIONS];
+      }
+      if (section === 'menus' || section === 'all') {
+        updated.navigationMenus = [...DEFAULT_NAVIGATION_MENUS];
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -454,11 +678,38 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     applyDesignCssVariables(publishedSettings);
   };
 
-  const publishSettings = async (): Promise<{ success: boolean; error?: string; isLocalFallback?: boolean }> => {
+  const undoDraftChanges = () => {
+    cancelDraft();
+  };
+
+  const restoreVersion = async (version: WebsiteDesignVersion): Promise<{ success: boolean; error?: string }> => {
     setIsPublishing(true);
     try {
       const adminUid = user?.uid || user?.email || 'admin';
-      const result = await saveWebsiteDesignSettings(draftSettings, adminUid);
+      const result = await restoreWebsiteDesignVersion(version, adminUid);
+      if (result.success && result.restoredSettings) {
+        setPublishedSettings(result.restoredSettings);
+        setDraftSettings(result.restoredSettings);
+        setIsDraftDirty(false);
+        isDraftDirtyRef.current = false;
+        setIsPreviewingDraft(false);
+        applyDesignCssVariables(result.restoredSettings);
+        return { success: true };
+      }
+      return { success: false, error: result.error || 'Failed to restore previous version' };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Restore error';
+      return { success: false, error: message };
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const publishSettings = async (summaryNote?: string): Promise<{ success: boolean; error?: string; isLocalFallback?: boolean }> => {
+    setIsPublishing(true);
+    try {
+      const adminUid = user?.uid || user?.email || 'admin';
+      const result = await saveWebsiteDesignSettings(draftSettings, adminUid, summaryNote);
       
       // Update published settings and sync DOM immediately
       setPublishedSettings(draftSettings);
@@ -543,20 +794,35 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         deleteAnnouncementMessage,
         reorderAnnouncementMessage,
         updateDraftHomepageSections,
+        addHomepageSection,
+        updateHomepageSection,
+        deleteHomepageSection,
         reorderHomepageSection,
         toggleHomepageSection,
         updateHomepageSectionOption,
+        updateHomepageSectionContent,
         resetHomepageSectionsToDefault,
+        updateDraftNavigationMenus,
+        addNavigationMenuItem,
+        updateNavigationMenuItem,
+        deleteNavigationMenuItem,
+        reorderNavigationMenuItem,
+        toggleNavigationMenuItem,
+        resetNavigationMenusToDefault,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
         cancelDraft,
+        undoDraftChanges,
+        restoreVersion,
         publishSettings,
         uploadLogoFile,
         reloadSettings: loadSettings,
         branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
         announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,
         homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
+        navigationMenus: activeSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+        versionHistory: activeSettings.versionHistory || [],
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,
         colors: activeSettings.colors,

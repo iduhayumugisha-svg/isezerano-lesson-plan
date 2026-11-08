@@ -123,13 +123,79 @@ export interface AnnouncementStripSettings {
   heightPadding: 'compact' | 'normal' | 'spacious';
 }
 
+export type SectionType = 
+  | 'masthead' 
+  | 'hero' 
+  | 'quick_tools' 
+  | 'school_profile' 
+  | 'announcement_banner' 
+  | 'callout' 
+  | 'rich_text' 
+  | 'custom_cards' 
+  | 'faq' 
+  | 'contact_card';
+
+export interface SectionCardItem {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+  icon?: string;
+  buttonText?: string;
+  buttonLink?: string;
+  buttonStyle?: 'primary' | 'secondary' | 'amber' | 'outline';
+  items?: string[];
+}
+
+export interface SectionCustomContent {
+  headline?: string;
+  subheadline?: string;
+  bodyText?: string;
+  badgeText?: string;
+  bgStyle?: 'default' | 'white' | 'slate_dark' | 'teal_gradient' | 'amber_soft' | 'blue_soft';
+  textColor?: string;
+  customBgColor?: string;
+  customTextColor?: string;
+  imageUrl?: string;
+  primaryButtonText?: string;
+  primaryButtonLink?: string;
+  secondaryButtonText?: string;
+  secondaryButtonLink?: string;
+  cards?: SectionCardItem[];
+  itemsList?: string[];
+}
+
 export interface HomepageSectionConfig {
-  id: string; // 'masthead' | 'hero' | 'quick_tools' | 'school_profile'
+  id: string;
+  type?: SectionType;
   label: string;
   description: string;
   enabled: boolean;
   order: number;
   options?: Record<string, boolean>;
+  content?: SectionCustomContent;
+}
+
+export interface NavigationMenuItem {
+  id: string;
+  label: string;
+  path: string; // 'home' | 'dashboard' | 'create' | 'saved' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile' or custom URL
+  isExternal?: boolean;
+  icon?: string; // 'Home' | 'BookOpen' | 'Award' | 'ShieldCheck' | 'FileText' | 'GraduationCap' | 'User' | 'Compass' | 'MapPin'
+  badge?: string;
+  badgeColor?: 'teal' | 'amber' | 'blue' | 'rose';
+  enabled: boolean;
+  order: number;
+  openInNewTab?: boolean;
+  location: 'header' | 'footer' | 'both';
+}
+
+export interface WebsiteDesignVersion {
+  id: string;
+  timestamp: string;
+  publishedBy: string;
+  note?: string;
+  snapshot: WebsiteDesignSettings;
 }
 
 export interface WebsiteDesignSettings {
@@ -139,6 +205,8 @@ export interface WebsiteDesignSettings {
   logo: WebsiteLogoSettings;
   announcements?: AnnouncementStripSettings;
   homepageSections?: HomepageSectionConfig[];
+  navigationMenus?: NavigationMenuItem[];
+  versionHistory?: WebsiteDesignVersion[];
   updatedAt: string;
   updatedBy: string;
 }
@@ -261,9 +329,70 @@ export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
   updateFavicon: true
 };
 
+export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
+  {
+    id: 'nav-home',
+    label: 'Ahabanza (Home)',
+    path: 'home',
+    enabled: true,
+    order: 1,
+    location: 'both'
+  },
+  {
+    id: 'nav-lesson-prep',
+    label: 'Lesson Preparation',
+    path: 'dashboard',
+    icon: 'BookOpen',
+    badge: 'CBC',
+    badgeColor: 'teal',
+    enabled: true,
+    order: 2,
+    location: 'both'
+  },
+  {
+    id: 'nav-report-cards',
+    label: 'Report Cards',
+    path: 'nursery',
+    icon: 'Award',
+    badge: 'N1-N3',
+    badgeColor: 'amber',
+    enabled: true,
+    order: 3,
+    location: 'both'
+  },
+  {
+    id: 'nav-about',
+    label: 'Ibyerekeye GS GITUMBA',
+    path: 'about',
+    icon: 'Compass',
+    enabled: true,
+    order: 4,
+    location: 'footer'
+  },
+  {
+    id: 'nav-contact',
+    label: 'Twandikire (Contact)',
+    path: 'contact',
+    icon: 'MapPin',
+    enabled: true,
+    order: 5,
+    location: 'footer'
+  },
+  {
+    id: 'nav-admin',
+    label: 'Admin Portal',
+    path: 'admin',
+    icon: 'ShieldCheck',
+    enabled: true,
+    order: 6,
+    location: 'both'
+  }
+];
+
 export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
   {
     id: 'masthead',
+    type: 'masthead',
     label: "Umutwe w'Urubuga (Institutional Masthead Banner)",
     description: "Ikirango cy'ikigo, itariki y'uyu munsi, akarere, n'amazina y'ishuri hejuru",
     enabled: true,
@@ -271,10 +400,17 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
     options: {
       showDateLocationTicker: true,
       showInstitutionalBadge: true
+    },
+    content: {
+      headline: 'ISEZERANO ONLINE',
+      subheadline: 'GS GITUMBA',
+      badgeText: "Urubuga rw'Uburezi • Imfashanyigisho za CBC n'Indangamanota",
+      bodyText: "GS GITUMBA — Imfashanyigisho za CBC n'Indangamanota z'Inshuke mu Rwanda"
     }
   },
   {
     id: 'hero',
+    type: 'hero',
     label: "Hero Banner: Ikaze & Buto zo Gutangira (Welcome & CTA)",
     description: "Ibaruwa y'ikaze, ubusobanuro bw'urubuga, na buto zihutisha mwarimu kugana ku masomo cyangwa indangamanota",
     enabled: true,
@@ -284,10 +420,25 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
       showReportCardsButton: true,
       showDashboardButton: true,
       showGuaranteeBadges: true
+    },
+    content: {
+      headline: "Urubuga rw'Abarimu: Gutegura Amasomo (CBC) n'Indangamanota z'Abanyeshuri ku Buntu",
+      badgeText: "GS GITUMBA • Umurenge wa Buyoga, Akarere ka Rulindo",
+      bodyText: "Ikaze kuri ISEZERANO ONLINE. Umwarimu cyangwa undi wese akoresha ibice byose bya Lesson Preparation na Report Cards ku buntu nta kiguzi, nta konti cyangwa ijambobanga asabwe.",
+      primaryButtonText: "Tangira Gutegura Isomo (Lesson Plan)",
+      primaryButtonLink: "create",
+      secondaryButtonText: "Indangamanota z'Inshuke (Report Cards)",
+      secondaryButtonLink: "nursery",
+      itemsList: [
+        "Nta konti cyangwa password bikenewe",
+        "Byubahirije amabwiriza ya REB & MINEDUC",
+        "Bikora neza kuri Telefoni no kuri Mudasobwa"
+      ]
     }
   },
   {
     id: 'quick_tools',
+    type: 'quick_tools',
     label: "Ibikoresho Byihuse: Lesson Preparation & Report Cards",
     description: "Amakarita abiri y'ingenzi: Gutegura Amasomo ya CBC (inkingi 8) n'Indangamanota z'inshuke (ibipimo 22)",
     enabled: true,
@@ -295,10 +446,16 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
     options: {
       showLessonPlannerCard: true,
       showReportCardsCard: true
+    },
+    content: {
+      headline: "Hitamo Igice Ushaka Gukoresha Ako Kanya",
+      badgeText: "Ibikoresho by'Ingenzi ku Barezi (Primary Teacher Tools)",
+      bodyText: "Kanda kuri kimwe muri ibi bice bibiri kugira ngo utangire gutegura amasomo yawe cyangwa gutegura indangamanota z'abanyeshuri b'inshuke."
     }
   },
   {
     id: 'school_profile',
+    type: 'school_profile',
     label: "Amakuru y'Ikigo cy'Amashuri (School Profile & Credentials)",
     description: "Amakuru ya GS GITUMBA, amarembo y'itumanaho, n'ibisobanuro by'umwimerere w'urubuga",
     enabled: true,
@@ -306,6 +463,15 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
     options: {
       showAboutButton: true,
       showContactButton: true
+    },
+    content: {
+      headline: "Groupe Scolaire GITUMBA – Umurenge wa Buyoga",
+      badgeText: "Amakuru y'Ikigo cy'Amashuri (School Profile)",
+      bodyText: "Urubuga rwa ISEZERANO ONLINE rwateguwe n'umwarimu wigisha muri GS GITUMBA (Akarere ka Rulindo, Intara y'Amajyaruguru) hagamijwe korohereza abarezi bose b'u Rwanda kubona ibikoresho by'uburezi byujuje ubuziranenge bwa REB na MINEDUC ku buntu.",
+      primaryButtonText: "Twandikire cyangwa Duhamagare",
+      primaryButtonLink: "contact",
+      secondaryButtonText: "Ibyerekeye GS GITUMBA (About Us)",
+      secondaryButtonLink: "about"
     }
   }
 ];
@@ -317,6 +483,8 @@ export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   logo: DEFAULT_WEBSITE_LOGO,
   announcements: DEFAULT_ANNOUNCEMENT_STRIP,
   homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
+  navigationMenus: DEFAULT_NAVIGATION_MENUS,
+  versionHistory: [],
   updatedAt: '2026-01-01T00:00:00.000Z',
   updatedBy: 'system'
 };

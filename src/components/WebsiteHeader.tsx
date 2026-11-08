@@ -32,7 +32,25 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
+
+  // Helper for dynamic navigation icons
+  const renderNavIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'BookOpen': return <BookOpen className="w-4 h-4 text-teal-700" />;
+      case 'Award': return <Award className="w-4 h-4 text-amber-600" />;
+      case 'ShieldCheck': return <ShieldCheck className="w-4 h-4 text-teal-600" />;
+      case 'FileText': return <FileText className="w-4 h-4 text-teal-700" />;
+      case 'GraduationCap': return <GraduationCap className="w-4 h-4 text-teal-700" />;
+      case 'User': return <User className="w-4 h-4 text-slate-700" />;
+      default: return null;
+    }
+  };
+
+  // Header active items sorted by order
+  const headerNavItems = (navigationMenus || [])
+    .filter(item => item.enabled && (item.location === 'header' || item.location === 'both'))
+    .sort((a, b) => a.order - b.order);
 
   // Three-dot dropdown state & ref for click-outside
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -123,89 +141,81 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               </div>
             </div>
 
-            {/* 2. Direct Navigation Links (Home, Lesson Preparation, Nursery Report Cards, Admin Portal) */}
+            {/* 2. Direct Navigation Links (Configurable via No-Code Admin System) */}
             <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
-              {/* Home */}
-              <button
-                type="button"
-                onClick={() => handleNavClick('home')}
-                style={{
-                  fontSize: `${typography.navMenuSize}px`,
-                  color: currentPage === 'home' ? colors.navLinkActive : colors.headerText
-                }}
-                className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer ${
-                  currentPage === 'home'
-                    ? 'font-bold bg-slate-100/80 shadow-2xs'
-                    : 'hover:opacity-80 hover:bg-slate-50'
-                }`}
-              >
-                <span>Ahabanza (Home)</span>
-                {currentPage === 'home' && (
-                  <span 
-                    className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
-                    style={{ backgroundColor: colors.navLinkActive }}
-                  />
-                )}
-              </button>
+              {headerNavItems.map((item) => {
+                const isCurrent = currentPage === item.path || 
+                  (item.path === 'dashboard' && (currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings'));
 
-              {/* Lesson Preparation (Direct Free Access) */}
-              <button
-                type="button"
-                onClick={() => handleNavClick('dashboard')}
-                style={{
-                  fontSize: `${typography.navMenuSize}px`,
-                  color: (currentPage === 'dashboard' || currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings')
-                    ? colors.navLinkActive 
-                    : colors.headerText
-                }}
-                className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer inline-flex items-center space-x-1.5 ${
-                  currentPage === 'dashboard' || currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings'
-                    ? 'font-bold bg-teal-50 shadow-2xs text-teal-900'
-                    : 'hover:opacity-80 hover:bg-slate-50'
-                }`}
-              >
-                <BookOpen className="w-4 h-4 text-teal-700" />
-                <span>Lesson Preparation</span>
-              </button>
+                const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
 
-              {/* Nursery Student Report Cards (Direct Free Access) */}
-              <button
-                type="button"
-                onClick={() => handleNavClick('nursery')}
-                style={{
-                  fontSize: `${typography.navMenuSize}px`,
-                  color: currentPage === 'nursery' ? colors.navLinkActive : colors.headerText
-                }}
-                className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer inline-flex items-center space-x-1.5 ${
-                  currentPage === 'nursery'
-                    ? 'font-bold bg-amber-50 shadow-2xs text-amber-900'
-                    : 'hover:opacity-80 hover:bg-slate-50'
-                }`}
-              >
-                <Award className="w-4 h-4 text-amber-600" />
-                <span>Report Cards</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-extrabold">
-                  N1-N3
-                </span>
-              </button>
+                if (isExternal) {
+                  return (
+                    <a
+                      key={item.id}
+                      href={item.path}
+                      target={item.openInNewTab ? '_blank' : '_self'}
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: `${typography.navMenuSize}px`,
+                        color: colors.headerText
+                      }}
+                      className="px-3 py-2 rounded-lg font-semibold transition-all relative hover:opacity-80 hover:bg-slate-50 inline-flex items-center space-x-1.5"
+                    >
+                      {renderNavIcon(item.icon)}
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
+                          item.badgeColor === 'amber'
+                            ? 'bg-amber-100 text-amber-900'
+                            : item.badgeColor === 'rose'
+                            ? 'bg-rose-100 text-rose-900'
+                            : 'bg-teal-100 text-teal-900'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </a>
+                  );
+                }
 
-              {/* Admin Portal Gateway */}
-              <button
-                type="button"
-                onClick={() => handleNavClick('admin')}
-                style={{
-                  fontSize: `${typography.navMenuSize}px`,
-                  color: currentPage === 'admin' ? colors.navLinkActive : colors.headerText
-                }}
-                className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer inline-flex items-center space-x-1.5 ${
-                  currentPage === 'admin'
-                    ? 'font-bold bg-slate-900 text-white shadow-2xs'
-                    : 'hover:opacity-80 hover:bg-slate-50'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-teal-600" />
-                <span>Admin</span>
-              </button>
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleNavClick(item.path as WebsitePage)}
+                    style={{
+                      fontSize: `${typography.navMenuSize}px`,
+                      color: isCurrent ? colors.navLinkActive : colors.headerText
+                    }}
+                    className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer inline-flex items-center space-x-1.5 ${
+                      isCurrent
+                        ? 'font-bold bg-slate-100/90 shadow-2xs'
+                        : 'hover:opacity-80 hover:bg-slate-50'
+                    }`}
+                  >
+                    {renderNavIcon(item.icon)}
+                    <span>{item.label}</span>
+                    {item.badge && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
+                        item.badgeColor === 'amber'
+                          ? 'bg-amber-100 text-amber-900'
+                          : item.badgeColor === 'rose'
+                          ? 'bg-rose-100 text-rose-900'
+                          : 'bg-teal-100 text-teal-900'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                    {isCurrent && (
+                      <span 
+                        className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
+                        style={{ backgroundColor: colors.navLinkActive }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </nav>
 
             {/* 3. Right Section: Language Switcher & Three-Dot Menu (⋮) */}

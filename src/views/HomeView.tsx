@@ -402,9 +402,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }
 
         // 4. INSTITUTIONAL & COMMUNITY CREDENTIALS
-        if (sec.id === 'school_profile') {
+        if (sec.id === 'school_profile' || sec.type === 'school_profile') {
           const showAboutBtn = sec.options?.showAboutButton !== false;
           const showContactBtn = sec.options?.showContactButton !== false;
+          const headline = sec.content?.headline || 'Groupe Scolaire GITUMBA – Umurenge wa Buyoga';
+          const badgeText = sec.content?.badgeText || "Amakuru y'Ikigo cy'Amashuri (School Profile)";
+          const bodyText = sec.content?.bodyText || "Urubuga rwa ISEZERANO ONLINE rwateguwe n'umwarimu wigisha muri GS GITUMBA (Akarere ka Rulindo, Intara y'Amajyaruguru) hagamijwe korohereza abarezi bose b'u Rwanda kubona ibikoresho by'uburezi byujuje ubuziranenge bwa REB na MINEDUC ku buntu.";
 
           return (
             <section key={sec.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -414,16 +417,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="lg:col-span-2 space-y-3">
                     <div className="inline-flex items-center space-x-2 text-teal-400 text-xs font-bold uppercase tracking-wider">
                       <School className="w-4 h-4" />
-                      <span>Amakuru y'Ikigo cy'Amashuri (School Profile)</span>
+                      <span>{badgeText}</span>
                     </div>
                     <h4 className="font-serif text-xl sm:text-2xl font-bold text-white">
-                      Groupe Scolaire GITUMBA – Umurenge wa Buyoga
+                      {headline}
                     </h4>
                     <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                      Urubuga rwa ISEZERANO ONLINE rwateguwe n'umwarimu wigisha muri GS GITUMBA (Akarere ka Rulindo, Intara y'Amajyaruguru) hagamijwe korohereza abarezi bose b'u Rwanda kubona ibikoresho by'uburezi byujuje ubuziranenge bwa REB na MINEDUC ku buntu.
+                      {bodyText}
                     </p>
                     <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-400">
-                      <span>📍 Buyoga, Rulindo, Amajyaruguru</span>
+                      <span>📍 {branding?.schoolLocation || 'Buyoga, Rulindo, Amajyaruguru'}</span>
                       <span>✉️ twizerefelix90@gmail.com</span>
                       <span>🇷🇼 REB Competence-Based Curriculum</span>
                     </div>
@@ -433,27 +436,197 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     {showAboutBtn && (
                       <button
                         type="button"
-                        onClick={() => onNavigate('about')}
+                        onClick={() => onNavigate(sec.content?.secondaryButtonLink || 'about')}
                         className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all border border-slate-700 text-center cursor-pointer flex items-center justify-center space-x-2"
                       >
                         <Compass className="w-4 h-4 text-teal-400" />
-                        <span>Ibyerekeye GS GITUMBA (About Us)</span>
+                        <span>{sec.content?.secondaryButtonText || 'Ibyerekeye GS GITUMBA (About Us)'}</span>
                       </button>
                     )}
 
                     {showContactBtn && (
                       <button
                         type="button"
-                        onClick={() => onNavigate('contact')}
+                        onClick={() => onNavigate(sec.content?.primaryButtonLink || 'contact')}
                         className="py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold transition-all text-center cursor-pointer flex items-center justify-center space-x-2"
                       >
                         <MapPin className="w-4 h-4 text-white" />
-                        <span>Twandikire cyangwa Duhamagare</span>
+                        <span>{sec.content?.primaryButtonText || 'Twandikire cyangwa Duhamagare'}</span>
                       </button>
                     )}
                   </div>
 
                 </div>
+              </div>
+            </section>
+          );
+        }
+
+        // 5. CUSTOM SECTION TYPE: CALLOUT / BANNER
+        if (sec.type === 'callout' || sec.type === 'announcement_banner') {
+          const bgClass = sec.content?.bgStyle === 'slate_dark'
+            ? 'bg-slate-900 text-white border-slate-800'
+            : sec.content?.bgStyle === 'amber_soft'
+            ? 'bg-amber-50 text-slate-900 border-amber-200'
+            : sec.content?.bgStyle === 'blue_soft'
+            ? 'bg-sky-50 text-slate-900 border-sky-200'
+            : 'bg-teal-800 text-white border-teal-700';
+
+          return (
+            <section key={sec.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className={`rounded-3xl p-6 sm:p-8 border shadow-sm ${bgClass}`}>
+                <div className="max-w-3xl space-y-3">
+                  {sec.content?.badgeText && (
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-white/20">
+                      {sec.content.badgeText}
+                    </span>
+                  )}
+                  {sec.content?.headline && (
+                    <h3 className="font-serif text-2xl sm:text-3xl font-extrabold tracking-tight">
+                      {sec.content.headline}
+                    </h3>
+                  )}
+                  {sec.content?.bodyText && (
+                    <p className="text-xs sm:text-sm leading-relaxed opacity-90">
+                      {sec.content.bodyText}
+                    </p>
+                  )}
+                  {sec.content?.primaryButtonText && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(sec.content?.primaryButtonLink || 'home')}
+                        className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-xs sm:text-sm shadow-md hover:bg-slate-100 transition-all cursor-pointer inline-flex items-center space-x-2"
+                      >
+                        <span>{sec.content.primaryButtonText}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          );
+        }
+
+        // 6. CUSTOM SECTION TYPE: RICH TEXT / EDITORIAL ARTICLE
+        if (sec.type === 'rich_text') {
+          return (
+            <section key={sec.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm space-y-4">
+                {sec.content?.badgeText && (
+                  <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                    {sec.content.badgeText}
+                  </span>
+                )}
+                {sec.content?.headline && (
+                  <h3 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900">
+                    {sec.content.headline}
+                  </h3>
+                )}
+                {sec.content?.subheadline && (
+                  <p className="text-sm font-semibold text-slate-600">
+                    {sec.content.subheadline}
+                  </p>
+                )}
+                {sec.content?.bodyText && (
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed space-y-3 whitespace-pre-line">
+                    {sec.content.bodyText}
+                  </div>
+                )}
+              </div>
+            </section>
+          );
+        }
+
+        // 7. CUSTOM SECTION TYPE: CUSTOM CARDS GRID
+        if (sec.type === 'custom_cards' && sec.content?.cards && sec.content.cards.length > 0) {
+          return (
+            <section key={sec.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+              {(sec.content.headline || sec.content.badgeText) && (
+                <div className="text-center max-w-3xl mx-auto space-y-2">
+                  {sec.content.badgeText && (
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                      {sec.content.badgeText}
+                    </span>
+                  )}
+                  {sec.content.headline && (
+                    <h3 className="font-serif text-2xl sm:text-3xl font-extrabold text-slate-950">
+                      {sec.content.headline}
+                    </h3>
+                  )}
+                  {sec.content.bodyText && (
+                    <p className="text-xs sm:text-sm text-slate-600">{sec.content.bodyText}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sec.content.cards.map((card) => (
+                  <div key={card.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      {card.badge && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-50 text-teal-800 border border-teal-200">
+                          {card.badge}
+                        </span>
+                      )}
+                      <h4 className="font-serif text-lg font-bold text-slate-900">{card.title}</h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">{card.description}</p>
+                      {card.items && card.items.length > 0 && (
+                        <ul className="pt-2 space-y-1.5 text-xs text-slate-700">
+                          {card.items.map((it, idx) => (
+                            <li key={idx} className="flex items-center space-x-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                              <span>{it}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {card.buttonText && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(card.buttonLink || 'home')}
+                          className="w-full py-2.5 px-4 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs transition-colors cursor-pointer text-center"
+                        >
+                          {card.buttonText}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        }
+
+        // 8. CUSTOM SECTION TYPE: FAQ
+        if (sec.type === 'faq' && sec.content?.cards && sec.content.cards.length > 0) {
+          return (
+            <section key={sec.id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+              <div className="text-center max-w-3xl mx-auto space-y-2">
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                  {sec.content.badgeText || 'Ibibazo Bikunze Kubazwa (FAQ)'}
+                </span>
+                <h3 className="font-serif text-2xl sm:text-3xl font-extrabold text-slate-950">
+                  {sec.content.headline || 'Ibisubizo ku Bibazo by’Abarimu'}
+                </h3>
+              </div>
+
+              <div className="max-w-3xl mx-auto space-y-3">
+                {sec.content.cards.map((faq) => (
+                  <div key={faq.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-2">
+                    <h4 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs flex items-center justify-center font-bold shrink-0">?</span>
+                      <span>{faq.title}</span>
+                    </h4>
+                    <p className="text-xs text-slate-600 pl-7 leading-relaxed">
+                      {faq.description}
+                    </p>
+                  </div>
+                ))}
               </div>
             </section>
           );

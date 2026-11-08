@@ -28,7 +28,13 @@ import {
   EyeOff,
   LayoutGrid,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Plus,
+  Edit2,
+  History,
+  Menu as MenuIcon,
+  ListOrdered,
+  FileCheck
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { 
@@ -36,9 +42,15 @@ import {
   DEFAULT_WEBSITE_TYPOGRAPHY, 
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_HOMEPAGE_SECTIONS,
+  DEFAULT_NAVIGATION_MENUS,
   WebsiteColorSettings,
   WebsiteTypographySettings,
-  WebsiteLogoSettings
+  WebsiteLogoSettings,
+  HomepageSectionConfig,
+  NavigationMenuItem,
+  SectionType,
+  SectionCustomContent,
+  WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
 import { TopAnnouncementStripManager } from './TopAnnouncementStripManager';
@@ -161,10 +173,24 @@ export const WebsiteDesignManager: React.FC = () => {
     updateDraftLogo,
     homepageSections,
     updateDraftHomepageSections,
+    addHomepageSection,
+    updateHomepageSection,
+    deleteHomepageSection,
     reorderHomepageSection,
     toggleHomepageSection,
     updateHomepageSectionOption,
+    updateHomepageSectionContent,
     resetHomepageSectionsToDefault,
+    navigationMenus,
+    addNavigationMenuItem,
+    updateNavigationMenuItem,
+    deleteNavigationMenuItem,
+    reorderNavigationMenuItem,
+    toggleNavigationMenuItem,
+    resetNavigationMenusToDefault,
+    versionHistory,
+    restoreVersion,
+    undoDraftChanges,
     resetSectionToDefault,
     resetSingleField,
     cancelDraft,
@@ -174,9 +200,37 @@ export const WebsiteDesignManager: React.FC = () => {
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'preview'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'menus' | 'preview' | 'history'>('layout');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Section Editing Modal State
+  const [editingSection, setEditingSection] = useState<HomepageSectionConfig | null>(null);
+  const [isAddingSection, setIsAddingSection] = useState<boolean>(false);
+  const [newSectionType, setNewSectionType] = useState<SectionType>('callout');
+  const [newSectionLabel, setNewSectionLabel] = useState<string>('');
+  const [newSectionHeadline, setNewSectionHeadline] = useState<string>('');
+  const [newSectionBody, setNewSectionBody] = useState<string>('');
+  const [newSectionBadge, setNewSectionBadge] = useState<string>('');
+  const [newSectionBg, setNewSectionBg] = useState<'default' | 'white' | 'slate_dark' | 'teal_gradient' | 'amber_soft' | 'blue_soft'>('teal_gradient');
+  const [newSectionBtnText, setNewSectionBtnText] = useState<string>('');
+  const [newSectionBtnLink, setNewSectionBtnLink] = useState<string>('dashboard');
+
+  // Navigation Menu Item Editing State
+  const [isAddingNavMenu, setIsAddingNavMenu] = useState<boolean>(false);
+  const [editingNavMenu, setEditingNavMenu] = useState<NavigationMenuItem | null>(null);
+  const [newNavLabel, setNewNavLabel] = useState<string>('');
+  const [newNavPath, setNewNavPath] = useState<string>('home');
+  const [newNavIcon, setNewNavIcon] = useState<string>('BookOpen');
+  const [newNavBadge, setNewNavBadge] = useState<string>('');
+  const [newNavBadgeColor, setNewNavBadgeColor] = useState<'teal' | 'amber' | 'blue' | 'rose'>('teal');
+  const [newNavLocation, setNewNavLocation] = useState<'header' | 'footer' | 'both'>('both');
+  const [newNavExternal, setNewNavExternal] = useState<boolean>(false);
+
+  // Version Restore State
+  const [selectedVersionToRestore, setSelectedVersionToRestore] = useState<WebsiteDesignVersion | null>(null);
+  const [publishSummaryInput, setPublishSummaryInput] = useState<string>('');
+  const [showPublishModal, setShowPublishModal] = useState<boolean>(false);
 
   // Logo upload state
   const [isUploading, setIsUploading] = useState(false);
@@ -499,7 +553,20 @@ export const WebsiteDesignManager: React.FC = () => {
             }`}
           >
             <Layers className="w-4 h-4 text-indigo-600" />
-            <span>6. Website Sections & Layout</span>
+            <span>6. Sections & Content</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('menus')}
+            className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'menus'
+                ? 'border-teal-600 text-teal-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <MenuIcon className="w-4 h-4 text-teal-600" />
+            <span>7. Navigation Menus</span>
           </button>
 
           <button
@@ -511,8 +578,26 @@ export const WebsiteDesignManager: React.FC = () => {
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Eye className="w-4 h-4" />
-            <span>7. Live Preview</span>
+            <Eye className="w-4 h-4 text-emerald-600" />
+            <span>8. Live Preview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'history'
+                ? 'border-teal-600 text-teal-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <History className="w-4 h-4 text-amber-600" />
+            <span>9. Version History</span>
+            {(versionHistory?.length || 0) > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-900 font-extrabold">
+                {versionHistory.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -1704,27 +1789,344 @@ export const WebsiteDesignManager: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
                 <span className="text-xs font-bold text-indigo-750 uppercase tracking-wider">
-                  Admin Layout Manager • Imiterere y'Urubuga
+                  No-Code Section Management • Imiterere y'Ibice by'Urubuga
                 </span>
               </div>
               <h3 className="text-lg font-bold text-slate-900 mt-1">
-                Guhindura Ibibanza n'Ibyiciro by'Urubuga (Website Sections & Options)
+                Guhindura, Kwimura, no Kongera Ibice by'Urubuga (Website Sections & Content)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-                Hano umuyobozi w'urubuga ashobora guhindura urutonde rw'ibice bigaragara kuri website, kwimurira hejuru cyangwa hasi (reorder), guhisha (hide) cyangwa kugaragaza (show) igice icyo ari cyo cyose. Ibihinduwe bihita bibikwa muri Firebase bikagaragara kuri buri muntu wese ukoresha urubuga.
+                Ongeramo ibice bishya (Announcements, Callout Cards, Rich Text, FAQs), hindura imitwe y'amagambo n'ibisobanuro, hindura urutonde rw'uko bikurikirana, cyangwa uhishe igice udashaka ko kigaragara.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={resetHomepageSectionsToDefault}
-              className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shrink-0"
-              title="Subiza ibice byose ku myanya yabyo y'umwimerere"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Subiza Ku Myanya Isanzwe</span>
-            </button>
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewSectionLabel('');
+                  setNewSectionHeadline('');
+                  setNewSectionBody('');
+                  setNewSectionBadge('');
+                  setNewSectionBtnText('');
+                  setNewSectionBtnLink('dashboard');
+                  setIsAddingSection(true);
+                }}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Ongeramo Igice Gishya (Add Section)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={resetHomepageSectionsToDefault}
+                className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
+                title="Subiza ibice byose ku myanya yabyo y'umwimerere"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Subiza Ku Bisanzwe</span>
+              </button>
+            </div>
           </div>
+
+          {/* Modal / Panel: Add New Custom Section */}
+          {isAddingSection && (
+            <div className="p-5 sm:p-6 rounded-2xl bg-indigo-50/60 border-2 border-indigo-200 space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Plus className="w-4 h-4 text-indigo-700" />
+                  <h4 className="text-sm font-bold text-indigo-950">Ongeramo Igice Gishya kuri Website (Add New Section)</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSection(false)}
+                  className="p-1 rounded-lg hover:bg-indigo-100 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ubwoko bw'Igice (Section Type)</label>
+                  <select
+                    value={newSectionType}
+                    onChange={(e) => setNewSectionType(e.target.value as SectionType)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium cursor-pointer"
+                  >
+                    <option value="callout">Callout Banner (Ubutumwa buhebuje bufite buto)</option>
+                    <option value="announcement_banner">Announcement Strip (Itegeko cyangwa itangazo)</option>
+                    <option value="rich_text">Rich Text / Itangazo rirerire (Editorial / Text)</option>
+                    <option value="custom_cards">Custom Cards Grid (Amakarita 3 y'amasomo/amakuru)</option>
+                    <option value="faq">FAQ (Ibibazo Bikunze Kubazwa)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Izina ry'Igice (Admin Label)</label>
+                  <input
+                    type="text"
+                    value={newSectionLabel}
+                    onChange={(e) => setNewSectionLabel(e.target.value)}
+                    placeholder="urugero: Itangazo rya Guhembwa cyangwa CBC Tips"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ikimenyetso / Badge Text (Optional)</label>
+                  <input
+                    type="text"
+                    value={newSectionBadge}
+                    onChange={(e) => setNewSectionBadge(e.target.value)}
+                    placeholder="urugero: AMAKURU MASHYA cyangwa CBC 2026"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-800 mb-1">Umutwe w'Amagambo (Headline / Title)</label>
+                  <input
+                    type="text"
+                    value={newSectionHeadline}
+                    onChange={(e) => setNewSectionHeadline(e.target.value)}
+                    placeholder="urugero: Ikaze ku Masomo y'Igihembwe cya Kabiri muri GS GITUMBA"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ibara ry'Inyuma (Background Style)</label>
+                  <select
+                    value={newSectionBg}
+                    onChange={(e) => setNewSectionBg(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+                  >
+                    <option value="teal_gradient">Teal Gradient (Official)</option>
+                    <option value="slate_dark">Slate Dark (Modern)</option>
+                    <option value="white">White Minimal</option>
+                    <option value="amber_soft">Soft Amber</option>
+                    <option value="blue_soft">Soft Sky Blue</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label className="block font-bold text-slate-800 mb-1">Ubusobanuro cyangwa Inyandiko (Body Text)</label>
+                  <textarea
+                    rows={3}
+                    value={newSectionBody}
+                    onChange={(e) => setNewSectionBody(e.target.value)}
+                    placeholder="Andika amagambo yose ushaka ko agaragara muri iki gice..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Inyandiko kuri Buto (Button Label)</label>
+                  <input
+                    type="text"
+                    value={newSectionBtnText}
+                    onChange={(e) => setNewSectionBtnText(e.target.value)}
+                    placeholder="urugero: Kanda Hano / Tangira"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Aho Buto Ijyana Umusomyi (Button Link / Page)</label>
+                  <select
+                    value={newSectionBtnLink}
+                    onChange={(e) => setNewSectionBtnLink(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+                  >
+                    <option value="dashboard">Teacher Dashboard</option>
+                    <option value="create">Lesson Preparation (Create Plan)</option>
+                    <option value="saved">Saved Schemes / Amasomo Yabitswe</option>
+                    <option value="nursery">Nursery Report Cards</option>
+                    <option value="about">About GS GITUMBA</option>
+                    <option value="contact">Contact Us</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSection(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Reka (Cancel)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newSectionLabel.trim()) {
+                      showStatus('error', "Shyiramo izina ry'igice (Admin Label) mbere yo kubika.");
+                      return;
+                    }
+                    const newId = `sec-custom-${Date.now()}`;
+                    const currentMaxOrder = (draftSettings.homepageSections || []).reduce((max, s) => Math.max(max, s.order), 0);
+
+                    const newSec: HomepageSectionConfig = {
+                      id: newId,
+                      type: newSectionType,
+                      label: newSectionLabel.trim(),
+                      description: `Custom ${newSectionType} section created by admin`,
+                      enabled: true,
+                      order: currentMaxOrder + 1,
+                      content: {
+                        headline: newSectionHeadline.trim(),
+                        bodyText: newSectionBody.trim(),
+                        badgeText: newSectionBadge.trim(),
+                        bgStyle: newSectionBg,
+                        primaryButtonText: newSectionBtnText.trim() || undefined,
+                        primaryButtonLink: newSectionBtnLink,
+                        cards: newSectionType === 'custom_cards' ? [
+                          { id: 'c1', title: 'Icyiciro cya 1', description: 'Amakuru n\'imfashanyigisho z\'amasomo', badge: 'REB' },
+                          { id: 'c2', title: 'Icyiciro cya 2', description: 'Integanyanyigisho za CBC 2026', badge: 'CBC' },
+                          { id: 'c3', title: 'Icyiciro cya 3', description: 'Gusuzuma no gutanga amanota', badge: 'EVAL' }
+                        ] : newSectionType === 'faq' ? [
+                          { id: 'f1', title: 'Uburyo bwo gutegura isomo rya CBC?', description: 'Kanda kuri Lesson Preparation uhitemo ibipimo bya REB.' },
+                          { id: 'f2', title: 'Ese raporo z\'inshuke zirasaba amafaranga?', description: 'Oya, byose bikoreshwa ku buntu 100% nta kiguzi.' }
+                        ] : undefined
+                      }
+                    };
+
+                    addHomepageSection(newSec);
+                    setIsAddingSection(false);
+                    showStatus('success', `Igice "${newSec.label}" cyongerewe neza! Kanda "Publish Draft Changes" ngo kigaragare ku rubuga.`);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  Ongeramo Igice
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Modal / Editor: Edit Section Content */}
+          {editingSection && (
+            <div className="p-5 sm:p-6 rounded-2xl bg-amber-50/60 border-2 border-amber-300 space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between border-b border-amber-200 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Edit2 className="w-4 h-4 text-amber-800" />
+                  <h4 className="text-sm font-bold text-amber-950">
+                    Guhindura Inyandiko n'Imiterere: {editingSection.label}
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="p-1 rounded-lg hover:bg-amber-100 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Izina ry'Igice (Section Label)</label>
+                  <input
+                    type="text"
+                    value={editingSection.label}
+                    onChange={(e) => setEditingSection({ ...editingSection, label: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ikimenyetso cyo Hejuru (Badge Text)</label>
+                  <input
+                    type="text"
+                    value={editingSection.content?.badgeText || ''}
+                    onChange={(e) => setEditingSection({
+                      ...editingSection,
+                      content: { ...editingSection.content, badgeText: e.target.value }
+                    })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-800 mb-1">Umutwe w'Amagambo (Headline)</label>
+                  <input
+                    type="text"
+                    value={editingSection.content?.headline || ''}
+                    onChange={(e) => setEditingSection({
+                      ...editingSection,
+                      content: { ...editingSection.content, headline: e.target.value }
+                    })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-800 mb-1">Ubusobanuro burambuye (Body Text / Narrative)</label>
+                  <textarea
+                    rows={4}
+                    value={editingSection.content?.bodyText || ''}
+                    onChange={(e) => setEditingSection({
+                      ...editingSection,
+                      content: { ...editingSection.content, bodyText: e.target.value }
+                    })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Inyandiko kuri Buto ya 1 (Button 1 Text)</label>
+                  <input
+                    type="text"
+                    value={editingSection.content?.primaryButtonText || ''}
+                    onChange={(e) => setEditingSection({
+                      ...editingSection,
+                      content: { ...editingSection.content, primaryButtonText: e.target.value }
+                    })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Aho Buto ya 1 Igana (Button 1 Target)</label>
+                  <input
+                    type="text"
+                    value={editingSection.content?.primaryButtonLink || ''}
+                    onChange={(e) => setEditingSection({
+                      ...editingSection,
+                      content: { ...editingSection.content, primaryButtonLink: e.target.value }
+                    })}
+                    placeholder="dashboard, create, nursery, about, contact..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-amber-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Reka (Cancel)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateHomepageSection(editingSection.id, {
+                      label: editingSection.label,
+                      content: editingSection.content
+                    });
+                    setEditingSection(null);
+                    showStatus('success', `Inyandiko z'igice "${editingSection.label}" zahinduwe neza muri Draft.`);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  Bika Impinduka z'Iki Gice
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Sections List */}
           <div className="space-y-4">
@@ -1735,6 +2137,7 @@ export const WebsiteDesignManager: React.FC = () => {
               return currentSections.map((sec, idx) => {
                 const isFirst = idx === 0;
                 const isLast = idx === currentSections.length - 1;
+                const isCustom = sec.id.startsWith('sec-custom-');
 
                 return (
                   <div
@@ -1759,6 +2162,11 @@ export const WebsiteDesignManager: React.FC = () => {
                             <h4 className="text-sm font-bold text-slate-900">
                               {sec.label}
                             </h4>
+                            {isCustom && (
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-extrabold border border-indigo-200">
+                                Custom
+                              </span>
+                            )}
                             {sec.enabled ? (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
                                 Visible / Biragaragara
@@ -1770,13 +2178,23 @@ export const WebsiteDesignManager: React.FC = () => {
                             )}
                           </div>
                           <p className="text-xs text-slate-500">
-                            {sec.description}
+                            {sec.content?.headline || sec.description}
                           </p>
                         </div>
                       </div>
 
-                      {/* Right: Actions (Move Up, Move Down, Toggle Show/Hide) */}
+                      {/* Right: Actions (Edit Content, Move Up, Move Down, Toggle Show/Hide, Delete) */}
                       <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+                        {/* Edit Content */}
+                        <button
+                          type="button"
+                          onClick={() => setEditingSection(sec)}
+                          className="p-2 rounded-xl text-xs font-bold border border-slate-300 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 transition-colors cursor-pointer text-slate-700"
+                          title="Hindura inyandiko n'amagambo by'iki gice (Edit Text/Content)"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+
                         {/* Move Up */}
                         <button
                           type="button"
@@ -1821,15 +2239,32 @@ export const WebsiteDesignManager: React.FC = () => {
                           {sec.enabled ? (
                             <>
                               <EyeOff className="w-3.5 h-3.5" />
-                              <span>Hisha (Hide)</span>
+                              <span>Hisha</span>
                             </>
                           ) : (
                             <>
                               <Eye className="w-3.5 h-3.5" />
-                              <span>Garagaza (Show)</span>
+                              <span>Garagaza</span>
                             </>
                           )}
                         </button>
+
+                        {/* Delete Custom Section */}
+                        {isCustom && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Urashaka gusiba igice "${sec.label}" burundu muri draft?`)) {
+                                deleteHomepageSection(sec.id);
+                                showStatus('success', `Igice "${sec.label}" cyasibwe muri draft.`);
+                              }
+                            }}
+                            className="p-2 rounded-xl text-xs font-bold border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer"
+                            title="Siba iki gice (Delete Section)"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1876,16 +2311,393 @@ export const WebsiteDesignManager: React.FC = () => {
               });
             })()}
           </div>
+        </div>
+      )}
 
-          {/* Quick Notice */}
-          <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs text-indigo-900 flex items-start space-x-2.5">
-            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+      {/* TAB 7: NAVIGATION MENUS MANAGER */}
+      {activeTab === 'menus' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div>
-              <p className="font-bold">Uburyo bwo kubika impinduka (Saving your layout):</p>
-              <p className="text-[11px] text-indigo-800 mt-0.5">
-                Iyo urangije guhindura imyanya n'ibyiciro, kanda buto y'umuhondo iri hejuru yitwa <strong>"Publish Draft Changes"</strong>. Impinduka zihita zibitswe muri Cloud Firestore kandi zihita zigaragara ku rubuga rwa buri mwarimu n'umusomyi wese.
+              <div className="flex items-center space-x-2">
+                <MenuIcon className="w-4 h-4 text-teal-700" />
+                <span className="text-xs font-bold text-teal-800 uppercase tracking-wider">
+                  Navigation Menu Builder • Ibikubiye muri Menu
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mt-1">
+                Guhindura no Kongeramo Imiyoboro ya Menu (Header & Footer Links)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
+                Cunga imiyoboro yose igaragara hejuru muri Header no hasi muri Footer. Ushobora kongeraho amashami mashya, guhindura amazina, kwimura ibice hejuru cyangwa hasi, no guhisha amashami udashaka.
               </p>
             </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewNavLabel('');
+                  setNewNavPath('home');
+                  setNewNavIcon('BookOpen');
+                  setNewNavBadge('');
+                  setNewNavBadgeColor('teal');
+                  setNewNavLocation('both');
+                  setNewNavExternal(false);
+                  setIsAddingNavMenu(true);
+                }}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-600 text-white transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Ongeramo Umuyoboro Mushya (Add Menu Item)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={resetNavigationMenusToDefault}
+                className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Subiza Ku Bisanzwe</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Modal / Panel: Add Navigation Menu Item */}
+          {isAddingNavMenu && (
+            <div className="p-5 sm:p-6 rounded-2xl bg-teal-50/70 border-2 border-teal-300 space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between border-b border-teal-200 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Plus className="w-4 h-4 text-teal-800" />
+                  <h4 className="text-sm font-bold text-teal-950">Ongeramo Umuyoboro Mushya muri Menu</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNavMenu(false)}
+                  className="p-1 rounded-lg hover:bg-teal-100 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Izina ry'Umuyoboro (Menu Label)</label>
+                  <input
+                    type="text"
+                    value={newNavLabel}
+                    onChange={(e) => setNewNavLabel(e.target.value)}
+                    placeholder="urugero: Gahunda y'Amasomo cyangwa Blog"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ipaji cyangwa URL (Target Link)</label>
+                  <input
+                    type="text"
+                    value={newNavPath}
+                    onChange={(e) => setNewNavPath(e.target.value)}
+                    placeholder="home, dashboard, create, nursery, about, contact..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Aho Bizagaragara (Location)</label>
+                  <select
+                    value={newNavLocation}
+                    onChange={(e) => setNewNavLocation(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+                  >
+                    <option value="both">Header na Footer (Both)</option>
+                    <option value="header">Hejuru muri Header gusa</option>
+                    <option value="footer">Hasi muri Footer gusa</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ikimenyetso cy'Inyuma (Icon)</label>
+                  <select
+                    value={newNavIcon}
+                    onChange={(e) => setNewNavIcon(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+                  >
+                    <option value="BookOpen">BookOpen (Igitabo)</option>
+                    <option value="Award">Award (Igihembo / Nursery)</option>
+                    <option value="ShieldCheck">ShieldCheck (Umutekano / Admin)</option>
+                    <option value="FileText">FileText (Inyandiko)</option>
+                    <option value="GraduationCap">GraduationCap (Uburezi)</option>
+                    <option value="User">User (Umwirondoro)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Akarango k'Ibara (Badge / Tag)</label>
+                  <input
+                    type="text"
+                    value={newNavBadge}
+                    onChange={(e) => setNewNavBadge(e.target.value)}
+                    placeholder="urugero: GISHYA, N1-N3, CBC..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Ibara ry'Akarango (Badge Color)</label>
+                  <select
+                    value={newNavBadgeColor}
+                    onChange={(e) => setNewNavBadgeColor(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+                  >
+                    <option value="teal">Teal (Icyatsi kibisi)</option>
+                    <option value="amber">Amber (Icyatsi cy'umuhondo)</option>
+                    <option value="blue">Sky Blue (Ubururu)</option>
+                    <option value="rose">Rose (Umutuku w'iroza)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNavMenu(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Reka (Cancel)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newNavLabel.trim() || !newNavPath.trim()) {
+                      showStatus('error', "Shyiramo izina n'ipaji by'umuyoboro.");
+                      return;
+                    }
+                    addNavigationMenuItem({
+                      label: newNavLabel.trim(),
+                      path: newNavPath.trim(),
+                      location: newNavLocation,
+                      icon: newNavIcon,
+                      badge: newNavBadge.trim() || undefined,
+                      badgeColor: newNavBadgeColor,
+                      enabled: true,
+                      isExternal: newNavPath.startsWith('http://') || newNavPath.startsWith('https://')
+                    });
+                    setIsAddingNavMenu(false);
+                    showStatus('success', `Umuyoboro "${newNavLabel}" wongerewe muri menu.`);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  Ongeramo Umuyoboro
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Items List */}
+          <div className="space-y-3">
+            {(() => {
+              const currentMenus = [...(draftSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS)];
+              currentMenus.sort((a, b) => a.order - b.order);
+
+              return currentMenus.map((item, idx) => {
+                const isFirst = idx === 0;
+                const isLast = idx === currentMenus.length - 1;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-2xl border p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      item.enabled
+                        ? 'border-slate-200 bg-white shadow-2xs'
+                        : 'border-slate-200 bg-slate-50 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-xl font-mono text-xs font-black flex items-center justify-center bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
+                        #{idx + 1}
+                      </div>
+
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-sm text-slate-900">{item.label}</span>
+                          {item.badge && (
+                            <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-teal-50 text-teal-800 border border-teal-200">
+                              {item.badge}
+                            </span>
+                          )}
+                          <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                            {item.location}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono">
+                          Target: {item.path}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => reorderNavigationMenuItem(item.id, 'up')}
+                        disabled={isFirst}
+                        className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          isFirst ? 'text-slate-300 border-slate-200 bg-slate-50' : 'text-slate-700 border-slate-300 hover:bg-teal-50'
+                        }`}
+                        title="Move Up"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => reorderNavigationMenuItem(item.id, 'down')}
+                        disabled={isLast}
+                        className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          isLast ? 'text-slate-300 border-slate-200 bg-slate-50' : 'text-slate-700 border-slate-300 hover:bg-teal-50'
+                        }`}
+                        title="Move Down"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleNavigationMenuItem(item.id)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          item.enabled
+                            ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                            : 'bg-teal-700 text-white hover:bg-teal-600'
+                        }`}
+                      >
+                        {item.enabled ? 'Hisha' : 'Garagaza'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Urashaka gusiba umuyoboro "${item.label}"?`)) {
+                            deleteNavigationMenuItem(item.id);
+                            showStatus('success', `Umuyoboro "${item.label}" wasibwe.`);
+                          }
+                        }}
+                        className="p-2 rounded-xl text-xs font-bold border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        title="Delete Menu Link"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 9: VERSION HISTORY & RESTORE (1-CLICK UNDO & ROLLBACK) */}
+      {activeTab === 'history' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center space-x-2">
+                <History className="w-4 h-4 text-amber-600" />
+                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                  Version Control &amp; Restore Manager
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mt-1">
+                Amateka y'Ibyahinduwe no Gusubiza Inyuma (Undo &amp; Restore)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
+                Buri gihe utangaje impinduka (Publish), ikoranabuhanga rya Firebase ribika ifoto y'amabara, inyuguti, ibice by'urubuga, na menu byariho. Ushobora gusubiza inyuma (Restore) igihe icyo ari cyo cyose ku kanda rimwe gusa.
+              </p>
+            </div>
+
+            {isDraftDirty && (
+              <button
+                type="button"
+                onClick={() => {
+                  undoDraftChanges();
+                  showStatus('success', 'Impinduka zose zo muri Draft zahanaguwe! Yasubiye ku byari bisanzwe.');
+                }}
+                className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shadow-xs cursor-pointer shrink-0"
+              >
+                <Undo2 className="w-4 h-4" />
+                <span>Undo Unsaved Draft Changes</span>
+              </button>
+            )}
+          </div>
+
+          {/* Versions List */}
+          <div className="space-y-3">
+            {(!versionHistory || versionHistory.length === 0) ? (
+              <div className="p-8 text-center rounded-2xl border border-dashed border-slate-300 space-y-2">
+                <History className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">Nta mateka y'impinduka arashyirwamo (No versions recorded yet)</p>
+                <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                  Iyo uhinduye ikintu ukanda "Publish Draft Changes", version ya mbere ihita ibikwa hano ku buryo bworoshye.
+                </p>
+              </div>
+            ) : (
+              versionHistory.map((ver, idx) => {
+                const dateObj = new Date(ver.timestamp);
+                const formattedDate = dateObj.toLocaleString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+
+                return (
+                  <div
+                    key={ver.id}
+                    className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
+                          Snapshot #{versionHistory.length - idx}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900">{formattedDate}</span>
+                        <span className="text-[11px] text-slate-500 font-mono">by {ver.publishedBy}</span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-medium">
+                        {ver.note || 'Impinduka zemejwe n\'umuyobozi w\'urubuga (twizerefelix90@gmail.com)'}
+                      </p>
+                      <div className="flex items-center space-x-4 pt-1 text-[11px] text-slate-500">
+                        <span>Palette: <span className="font-semibold text-slate-700">{ver.snapshot.colors.primaryButtonBg}</span></span>
+                        <span>•</span>
+                        <span>Title: <span className="font-semibold text-slate-700">{ver.snapshot.branding.platformTitle}</span></span>
+                        <span>•</span>
+                        <span>Sections: <span className="font-semibold text-slate-700">{ver.snapshot.homepageSections?.length || 4}</span></span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (confirm(`Urashaka koko gusubiza inyuma website ku ifoto yo ku ya ${formattedDate}?`)) {
+                            const res = await restoreVersion(ver);
+                            if (res.success) {
+                              showStatus('success', `🎉 Website yasubijwe ku buryo bwo ku ya ${formattedDate}!`);
+                            } else {
+                              showStatus('error', res.error || 'Failed to restore version.');
+                            }
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-xs transition-all cursor-pointer inline-flex items-center space-x-1.5"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Subiza Iyi Version (Restore)</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}

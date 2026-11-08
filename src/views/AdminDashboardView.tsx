@@ -55,6 +55,7 @@ import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
+import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAndColorsManager';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -68,7 +69,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -483,6 +484,21 @@ promoteToAdmin('admin@example.com');`;
         >
           <BookOpen className="w-4 h-4" />
           <span>Curriculum & Classes</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('nursery-subjects')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'nursery-subjects'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Palette className="w-4 h-4 text-amber-300" />
+          <span>Nursery: Subjects & Colors</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'nursery-subjects' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            Report Cards
+          </span>
         </button>
 
         <button
@@ -1048,6 +1064,11 @@ promoteToAdmin('admin@example.com');`;
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= TAB: NURSERY REPORT CARDS SUBJECTS & COLORS ================= */}
+      {activeTab === 'nursery-subjects' && (
+        <NurserySubjectsAndColorsManager />
       )}
 
       {/* ================= TAB 3: TEACHER ACCOUNTS ================= */}

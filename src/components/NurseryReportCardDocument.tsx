@@ -5,7 +5,12 @@ import {
   NurserySchoolInfo, 
   NURSERY_ASSESSMENT_CRITERIA, 
   PERFORMANCE_LEGEND,
-  PerformanceLevel
+  PerformanceLevel,
+  NurserySubjectItem,
+  ReportCardColorSettings,
+  DEFAULT_REPORT_CARD_COLORS,
+  ConfigurablePerformanceLevel,
+  DEFAULT_PERFORMANCE_LEVELS
 } from '../types/nurseryReport';
 
 interface NurseryReportCardDocumentProps {
@@ -14,6 +19,9 @@ interface NurseryReportCardDocumentProps {
   assessment?: StudentTermAssessment | null;
   downloadTimestamp?: string;
   isPrintMode?: boolean;
+  subjects?: NurserySubjectItem[];
+  colorSettings?: ReportCardColorSettings;
+  performanceLevels?: ConfigurablePerformanceLevel[];
 }
 
 /**
@@ -69,7 +77,10 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
   schoolInfo,
   assessment,
   downloadTimestamp,
-  isPrintMode = false
+  isPrintMode = false,
+  subjects,
+  colorSettings,
+  performanceLevels
 }) => {
   // Format current timestamp if not supplied
   const now = new Date();
@@ -79,17 +90,35 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
   const schoolDisplayName = schoolInfo.schoolName?.trim() || 'School';
   const effectiveAcademicYear = schoolInfo.academicYear?.trim() || student.academicYear?.trim() || '2026';
 
-  // Helper to render performance capsule in table cell
+  const effectiveColors = colorSettings || DEFAULT_REPORT_CARD_COLORS;
+  const effectiveSubjects = (subjects && subjects.length > 0)
+    ? [...subjects].sort((a, b) => a.number - b.number)
+    : NURSERY_ASSESSMENT_CRITERIA;
+
+  const effectiveLevels: ConfigurablePerformanceLevel[] = (performanceLevels && performanceLevels.length > 0)
+    ? [...performanceLevels].sort((a, b) => a.order - b.order)
+    : DEFAULT_PERFORMANCE_LEVELS;
+
+  // Helper to render performance capsule in table cell with dynamic colors
   const renderScoreCapsule = (level: PerformanceLevel | undefined) => {
     if (!level) {
       return <span className="text-slate-400 font-mono text-xs">-</span>;
     }
 
-    let colorHex = '#cbd5e1';
-    if (level === 'EXCELLENT') colorHex = '#48bb78'; // Vibrant green matching PDF
-    if (level === 'VERY_GOOD') colorHex = '#3182ce'; // Clear blue matching PDF
-    if (level === 'DEVELOPING') colorHex = '#ecc94b'; // Yellow matching PDF
-    if (level === 'NEEDS_IMPROVEMENT') colorHex = '#e53e3e'; // Red matching PDF
+    const matchedLevel = effectiveLevels.find(
+      l => l.id.toUpperCase() === String(level).toUpperCase()
+    );
+
+    let colorHex = matchedLevel?.colorHex;
+    let label = matchedLevel?.label || String(level);
+
+    if (!colorHex) {
+      if (level === 'EXCELLENT') colorHex = effectiveColors.excellentColor || '#48bb78';
+      else if (level === 'VERY_GOOD') colorHex = effectiveColors.veryGoodColor || '#3182ce';
+      else if (level === 'DEVELOPING') colorHex = effectiveColors.developingColor || '#ecc94b';
+      else if (level === 'NEEDS_IMPROVEMENT') colorHex = effectiveColors.needsImprovementColor || '#e53e3e';
+      else colorHex = '#cbd5e1';
+    }
 
     return (
       <div 
@@ -105,7 +134,7 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
           printColorAdjust: 'exact',
           display: 'block'
         }}
-        title={PERFORMANCE_LEGEND[level]?.label || ''}
+        title={label}
       />
     );
   };
@@ -353,41 +382,37 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
           className="flex flex-wrap items-center gap-3 text-[9.5px] font-medium text-slate-800"
           style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: '9.5px', color: '#1e293b' }}
         >
-          <div className="flex items-center space-x-1.5" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span 
-              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
-              style={{ width: '18px', height: '9px', display: 'inline-block', borderRadius: '2px', backgroundColor: '#48bb78', border: '1px solid rgba(0,0,0,0.2)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
-            />
-            <span>Excellent</span>
-          </div>
-          <div className="flex items-center space-x-1.5" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span 
-              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
-              style={{ width: '18px', height: '9px', display: 'inline-block', borderRadius: '2px', backgroundColor: '#3182ce', border: '1px solid rgba(0,0,0,0.2)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
-            />
-            <span>Very Good</span>
-          </div>
-          <div className="flex items-center space-x-1.5" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span 
-              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
-              style={{ width: '18px', height: '9px', display: 'inline-block', borderRadius: '2px', backgroundColor: '#ecc94b', border: '1px solid rgba(0,0,0,0.2)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
-            />
-            <span>Developing</span>
-          </div>
-          <div className="flex items-center space-x-1.5" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span 
-              className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
-              style={{ width: '18px', height: '9px', display: 'inline-block', borderRadius: '2px', backgroundColor: '#e53e3e', border: '1px solid rgba(0,0,0,0.2)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }} 
-            />
-            <span>Needs Improvement</span>
-          </div>
+          {effectiveLevels.map((lvl) => (
+            <div key={lvl.id} className="flex items-center space-x-1.5" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span 
+                className="w-5 h-2.5 inline-block rounded-2xs border border-black/20" 
+                style={{ 
+                  width: '18px', 
+                  height: '9px', 
+                  display: 'inline-block', 
+                  borderRadius: '2px', 
+                  backgroundColor: lvl.colorHex, 
+                  border: '1px solid rgba(0,0,0,0.2)', 
+                  WebkitPrintColorAdjust: 'exact', 
+                  printColorAdjust: 'exact' 
+                }} 
+              />
+              <span>{lvl.label}</span>
+              {lvl.kinyarwandaLabel && (
+                <span style={{ color: '#64748b', fontSize: '8.5px' }}>({lvl.kinyarwandaLabel})</span>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
       {/* 4. MAIN ASSESSMENT TABLE (IBYIGWA N'IMYITWARIRE) */}
       <div 
-        className="border-t border-l border-slate-900"
-        style={{ borderTop: '1px solid #0f172a', borderLeft: '1px solid #0f172a' }}
+        className="border-t border-l"
+        style={{ 
+          borderTop: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+          borderLeft: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}` 
+        }}
       >
         <table 
           className="w-full border-collapse text-[9.5px]"
@@ -395,37 +420,70 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
         >
           <thead>
             <tr 
-              className="bg-slate-100 font-bold text-slate-900" 
-              style={{ backgroundColor: '#f1f5f9', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+              className="font-bold" 
+              style={{ 
+                backgroundColor: effectiveColors.tableHeaderBg || '#f1f5f9', 
+                color: effectiveColors.tableHeaderTextColor || '#0f172a',
+                WebkitPrintColorAdjust: 'exact', 
+                printColorAdjust: 'exact' 
+              }}
             >
               <th 
-                className="border-r border-b border-slate-900 py-0.5 px-2 text-left uppercase w-[58%]"
-                style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 6px', textAlign: 'left', textTransform: 'uppercase', width: '58%' }}
+                className="py-0.5 px-2 text-left uppercase w-[58%]"
+                style={{ 
+                  borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  padding: '2px 6px', 
+                  textAlign: 'left', 
+                  textTransform: 'uppercase', 
+                  width: '58%' 
+                }}
               >
                 IBYIGWA N'IMYITWARIRE
               </th>
               <th 
-                className="border-r border-b border-slate-900 py-0.5 px-1 text-center uppercase w-[14%]"
-                style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', textTransform: 'uppercase', width: '14%' }}
+                className="py-0.5 px-1 text-center uppercase w-[14%]"
+                style={{ 
+                  borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  padding: '2px 4px', 
+                  textAlign: 'center', 
+                  textTransform: 'uppercase', 
+                  width: '14%' 
+                }}
               >
                 TERM 1
               </th>
               <th 
-                className="border-r border-b border-slate-900 py-0.5 px-1 text-center uppercase w-[14%]"
-                style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', textTransform: 'uppercase', width: '14%' }}
+                className="py-0.5 px-1 text-center uppercase w-[14%]"
+                style={{ 
+                  borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  padding: '2px 4px', 
+                  textAlign: 'center', 
+                  textTransform: 'uppercase', 
+                  width: '14%' 
+                }}
               >
                 TERM 2
               </th>
               <th 
-                className="border-r border-b border-slate-900 py-0.5 px-1 text-center uppercase w-[14%]"
-                style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', textTransform: 'uppercase', width: '14%' }}
+                className="py-0.5 px-1 text-center uppercase w-[14%]"
+                style={{ 
+                  borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                  padding: '2px 4px', 
+                  textAlign: 'center', 
+                  textTransform: 'uppercase', 
+                  width: '14%' 
+                }}
               >
                 TERM 3
               </th>
             </tr>
           </thead>
           <tbody>
-            {NURSERY_ASSESSMENT_CRITERIA.map((criterion, idx) => {
+            {effectiveSubjects.map((criterion, idx) => {
               // Check if we need to render a section header row before this criterion
               const showSectionHeader = criterion.sectionTitle !== undefined;
               
@@ -439,30 +497,65 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
                 <React.Fragment key={criterion.id}>
                   {showSectionHeader && (
                     <tr 
-                      className="bg-slate-50 font-bold text-slate-900 uppercase" 
-                      style={{ backgroundColor: '#f8fafc', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                      className="font-bold uppercase" 
+                      style={{ 
+                        backgroundColor: effectiveColors.sectionHeaderBg || '#f8fafc', 
+                        color: effectiveColors.sectionHeaderTextColor || '#0f172a',
+                        WebkitPrintColorAdjust: 'exact', 
+                        printColorAdjust: 'exact' 
+                      }}
                     >
                       <td 
-                        className="border-r border-b border-slate-900 py-0.5 px-2 font-bold text-[9.5px]"
-                        style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 6px', fontWeight: 700, fontSize: '9.5px' }}
+                        className="py-0.5 px-2 font-bold text-[9.5px]"
+                        style={{ 
+                          borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          padding: '2px 6px', 
+                          fontWeight: 700, 
+                          fontSize: '9.5px' 
+                        }}
                       >
                         {criterion.sectionTitle}
                       </td>
                       <td 
-                        className="border-r border-b border-slate-900 py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
-                        style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', color: '#94a3b8' }}
+                        className="py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
+                        style={{ 
+                          borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          padding: '2px 4px', 
+                          textAlign: 'center', 
+                          fontFamily: 'monospace', 
+                          fontSize: '9px', 
+                          color: '#94a3b8' 
+                        }}
                       >
                         -
                       </td>
                       <td 
-                        className="border-r border-b border-slate-900 py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
-                        style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', color: '#94a3b8' }}
+                        className="py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
+                        style={{ 
+                          borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          padding: '2px 4px', 
+                          textAlign: 'center', 
+                          fontFamily: 'monospace', 
+                          fontSize: '9px', 
+                          color: '#94a3b8' 
+                        }}
                       >
                         -
                       </td>
                       <td 
-                        className="border-r border-b border-slate-900 py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
-                        style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '2px 4px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9px', color: '#94a3b8' }}
+                        className="py-0.5 px-1 text-center font-mono text-[9px] text-slate-400"
+                        style={{ 
+                          borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                          padding: '2px 4px', 
+                          textAlign: 'center', 
+                          fontFamily: 'monospace', 
+                          fontSize: '9px', 
+                          color: '#94a3b8' 
+                        }}
                       >
                         -
                       </td>
@@ -471,35 +564,53 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
 
                   <tr className="hover:bg-slate-50/60" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                     <td 
-                      className={`border-r border-b border-slate-900 py-0.5 px-2 ${
-                        isCoreBold ? 'font-bold uppercase text-slate-950' : 'text-slate-800'
+                      className={`py-0.5 px-2 ${
+                        isCoreBold ? 'font-bold uppercase' : ''
                       }`}
                       style={{ 
-                        borderRight: '1px solid #0f172a', 
-                        borderBottom: '1px solid #0f172a', 
+                        borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
                         padding: '1.5px 6px',
                         fontWeight: isCoreBold ? 700 : 400,
                         textTransform: isCoreBold ? 'uppercase' : 'none',
-                        color: isCoreBold ? '#020617' : '#1e293b'
+                        color: criterion.colorHex || (isCoreBold ? '#020617' : '#1e293b')
                       }}
                     >
                       {criterion.number}. {criterion.label}
                     </td>
                     <td 
-                      className="border-r border-b border-slate-900 py-0.5 px-1 text-center align-middle"
-                      style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '1.5px 4px', textAlign: 'center', verticalAlign: 'middle' }}
+                      className="py-0.5 px-1 text-center align-middle"
+                      style={{ 
+                        borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        padding: '1.5px 4px', 
+                        textAlign: 'center', 
+                        verticalAlign: 'middle' 
+                      }}
                     >
                       {renderScoreCapsule(t1Val)}
                     </td>
                     <td 
-                      className="border-r border-b border-slate-900 py-0.5 px-1 text-center align-middle"
-                      style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '1.5px 4px', textAlign: 'center', verticalAlign: 'middle' }}
+                      className="py-0.5 px-1 text-center align-middle"
+                      style={{ 
+                        borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        padding: '1.5px 4px', 
+                        textAlign: 'center', 
+                        verticalAlign: 'middle' 
+                      }}
                     >
                       {renderScoreCapsule(t2Val)}
                     </td>
                     <td 
-                      className="border-r border-b border-slate-900 py-0.5 px-1 text-center align-middle"
-                      style={{ borderRight: '1px solid #0f172a', borderBottom: '1px solid #0f172a', padding: '1.5px 4px', textAlign: 'center', verticalAlign: 'middle' }}
+                      className="py-0.5 px-1 text-center align-middle"
+                      style={{ 
+                        borderRight: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        borderBottom: `1px solid ${effectiveColors.tableBorderColor || '#0f172a'}`, 
+                        padding: '1.5px 4px', 
+                        textAlign: 'center', 
+                        verticalAlign: 'middle' 
+                      }}
                     >
                       {renderScoreCapsule(t3Val)}
                     </td>

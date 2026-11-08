@@ -3,7 +3,7 @@
  * Replicating exactly the structure, headings, and criteria of Class_Reports_N1_Term_1.pdf
  */
 
-export type PerformanceLevel = 'EXCELLENT' | 'VERY_GOOD' | 'DEVELOPING' | 'NEEDS_IMPROVEMENT' | null;
+export type PerformanceLevel = 'EXCELLENT' | 'VERY_GOOD' | 'DEVELOPING' | 'NEEDS_IMPROVEMENT' | string | null;
 
 export interface PerformanceLegendItem {
   key: PerformanceLevel;
@@ -14,12 +14,61 @@ export interface PerformanceLegendItem {
   badgeText: string;
 }
 
+export interface ConfigurablePerformanceLevel {
+  id: string;
+  label: string;
+  kinyarwandaLabel?: string;
+  colorHex: string;
+  textColor?: string;
+  order: number;
+  isDefault?: boolean;
+}
+
+export const DEFAULT_PERFORMANCE_LEVELS: ConfigurablePerformanceLevel[] = [
+  {
+    id: 'EXCELLENT',
+    label: 'Excellent',
+    kinyarwandaLabel: 'Ikirenga',
+    colorHex: '#48bb78',
+    textColor: '#ffffff',
+    order: 1,
+    isDefault: true
+  },
+  {
+    id: 'VERY_GOOD',
+    label: 'Very Good',
+    kinyarwandaLabel: 'Byiza cyane',
+    colorHex: '#3182ce',
+    textColor: '#ffffff',
+    order: 2,
+    isDefault: true
+  },
+  {
+    id: 'DEVELOPING',
+    label: 'Developing',
+    kinyarwandaLabel: 'Biri mu nzira',
+    colorHex: '#ecc94b',
+    textColor: '#0f172a',
+    order: 3,
+    isDefault: true
+  },
+  {
+    id: 'NEEDS_IMPROVEMENT',
+    label: 'Need to Improve',
+    kinyarwandaLabel: 'Bikeneye gukosorwa',
+    colorHex: '#e53e3e',
+    textColor: '#ffffff',
+    order: 4,
+    isDefault: true
+  }
+];
+
 export const PERFORMANCE_LEGEND: Record<'EXCELLENT' | 'VERY_GOOD' | 'DEVELOPING' | 'NEEDS_IMPROVEMENT', PerformanceLegendItem> = {
   EXCELLENT: {
     key: 'EXCELLENT',
     label: 'Excellent',
     kinyarwandaLabel: 'Ikirenga',
-    colorHex: '#16a34a',
+    colorHex: '#48bb78',
     badgeBg: 'bg-emerald-600',
     badgeText: 'text-white'
   },
@@ -27,7 +76,7 @@ export const PERFORMANCE_LEGEND: Record<'EXCELLENT' | 'VERY_GOOD' | 'DEVELOPING'
     key: 'VERY_GOOD',
     label: 'Very Good',
     kinyarwandaLabel: 'Byiza cyane',
-    colorHex: '#2563eb',
+    colorHex: '#3182ce',
     badgeBg: 'bg-blue-600',
     badgeText: 'text-white'
   },
@@ -35,18 +84,60 @@ export const PERFORMANCE_LEGEND: Record<'EXCELLENT' | 'VERY_GOOD' | 'DEVELOPING'
     key: 'DEVELOPING',
     label: 'Developing',
     kinyarwandaLabel: 'Biri mu nzira',
-    colorHex: '#eab308',
+    colorHex: '#ecc94b',
     badgeBg: 'bg-amber-400',
     badgeText: 'text-slate-900'
   },
   NEEDS_IMPROVEMENT: {
     key: 'NEEDS_IMPROVEMENT',
-    label: 'Needs Improvement',
+    label: 'Need to Improve',
     kinyarwandaLabel: 'Bikeneye gukosorwa',
-    colorHex: '#dc2626',
+    colorHex: '#e53e3e',
     badgeBg: 'bg-red-600',
     badgeText: 'text-white'
   }
+};
+
+export interface NurserySubjectItem {
+  id: string;
+  number: number;
+  label: string;
+  section: 'CORE' | 'UBUGENI' | 'IBONEZABUZIMA' | 'IMYITWARIRE' | string;
+  sectionTitle?: string;
+  colorHex?: string; // Optional custom color assigned to this subject/criterion
+  isCustom?: boolean;
+}
+
+export interface ReportCardColorSettings {
+  excellentColor: string;
+  veryGoodColor: string;
+  developingColor: string;
+  needsImprovementColor: string;
+  tableHeaderBg: string;
+  tableHeaderTextColor: string;
+  tableBorderColor: string;
+  sectionHeaderBg: string;
+  sectionHeaderTextColor: string;
+}
+
+export interface NurserySubjectsAndColorsSettings {
+  subjects: NurserySubjectItem[];
+  colors: ReportCardColorSettings;
+  performanceLevels?: ConfigurablePerformanceLevel[];
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export const DEFAULT_REPORT_CARD_COLORS: ReportCardColorSettings = {
+  excellentColor: '#48bb78',          // Vibrant green matching PDF
+  veryGoodColor: '#3182ce',           // Clear blue matching PDF
+  developingColor: '#ecc94b',         // Yellow matching PDF
+  needsImprovementColor: '#e53e3e',   // Red matching PDF
+  tableHeaderBg: '#f1f5f9',
+  tableHeaderTextColor: '#0f172a',
+  tableBorderColor: '#0f172a',
+  sectionHeaderBg: '#f8fafc',
+  sectionHeaderTextColor: '#0f172a'
 };
 
 export interface AssessmentCriterion {
@@ -55,6 +146,8 @@ export interface AssessmentCriterion {
   label: string;
   section: 'CORE' | 'UBUGENI' | 'IBONEZABUZIMA' | 'IMYITWARIRE';
   sectionTitle?: string;
+  colorHex?: string;
+  isCustom?: boolean;
 }
 
 /**

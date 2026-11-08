@@ -21,14 +21,21 @@ import {
   NurseryStudent, 
   StudentTermAssessment, 
   NurserySchoolInfo, 
-  EMPTY_NURSERY_SCHOOL_INFO 
+  EMPTY_NURSERY_SCHOOL_INFO,
+  NURSERY_ASSESSMENT_CRITERIA,
+  NurserySubjectsAndColorsSettings,
+  DEFAULT_REPORT_CARD_COLORS,
+  NurserySubjectItem,
+  ConfigurablePerformanceLevel,
+  DEFAULT_PERFORMANCE_LEVELS
 } from '../types/nurseryReport';
 import { initFirestoreIfConfigured, getFirebaseAuth } from './storageService';
 
 const FIRESTORE_COLLECTIONS = {
   STUDENTS: 'nursery_students',
   SCHOOL_INFO: 'nursery_school_settings',
-  ASSESSMENTS: 'nursery_assessments'
+  ASSESSMENTS: 'nursery_assessments',
+  APP_SETTINGS: 'appSettings'
 };
 
 const getLocalKey = (prefix: string, uid?: string | null): string => {
@@ -447,3 +454,136 @@ export const subscribeToNurseryAssessments = (
     return () => {};
   }
 };
+
+/* =========================================================================
+   4. GLOBAL NURSERY SUBJECTS & COLORS SETTINGS (CENTRALIZED IN FIRESTORE)
+   Saved in `appSettings/nursery_subjects_and_colors`
+   Managed ONLY by twizerefelix90@gmail.com; read by all teachers & reports
+   ========================================================================= */
+
+const NURSERY_SUBJECTS_AND_COLORS_DOC = 'nursery_subjects_and_colors';
+const LOCAL_STORAGE_NURSERY_SUBJECTS_KEY = 'isezerano_nursery_subjects_and_colors';
+
+export const getDefaultNurserySubjectsAndColors = (): NurserySubjectsAndColorsSettings => {
+  return {
+    subjects: NURSERY_ASSESSMENT_CRITERIA.map(c => ({
+      id: c.id,
+      number: c.number,
+      label: c.label,
+      section: c.section,
+      sectionTitle: c.sectionTitle,
+      colorHex: c.section === 'CORE' ? '#0f766e' : undefined,
+      isCustom: false
+    })),
+    colors: { ...DEFAULT_REPORT_CARD_COLORS },
+    performanceLevels: [...DEFAULT_PERFORMANCE_LEVELS],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'system'
+  };
+};
+
+export const getLocalNurserySubjectsAndColors = (): NurserySubjectsAndColorsSettings => {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_NURSERY_SUBJECTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.subjects) && parsed.subjects.length > 0) {
+        return {
+          ...getDefaultNurserySubjectsAndColors(),
+          ...parsed,
+          colors: { ...DEFAULT_REPORT_CARD_COLORS, ...(parsed.colors || {}) },
+          performanceLevels: Array.isArray(parsed?.performanceLevels) && parsed.performanceLevels.length > 0
+            ? parsed.performanceLevels
+            : [...DEFAULT_PERFORMANCE_LEVELS]
+        };
+      }
+    }
+  } catch (err) {
+    console.error('Failed reading local nursery subjects & colors:', err);
+  }
+  return getDefaultNurserySubjectsAndColors();
+};
+
+export const saveNurserySubjectsAndColorsSettings = async (
+  settings: NurserySubjectsAndColorsSettings,
+  userUid?: string | null,
+  userEmail?: string | null
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const auth = getFirebaseAuth();
+    const effectiveEmail = userEmail || auth?.currentUser?.email || '';
+    const effectiveUid = userUid || auth?.currentUser?.uid || 'admin';
+
+    // Strict validation: Only designated Admin twizerefelix90@gmail.com
+    const isAdminEmail = effectiveEmail.toLowerCase() === 'twizerefelix90@gmail.com';
+    if (!isAdminEmail) {
+      return {
+        success: false,
+        error: 'Uburenganzira bwihariye: Umuyobozi w\'urubuga gusa (twizerefelix90@gmail.com) ni we wemerewe guhindura amabara n\'amasomo y\'indangamanota.'
+      };
+    }
+
+    const payload: NurserySubjectsAndColorsSettings = {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+      updatedBy: effectiveEmail || effectiveUid
+    };
+
+    // 1. Save locally for instant offline availability
+    localStorage.setItem(LOCAL_STORAGE_NURSERY_SUBJECTS_KEY, JSON.stringify(payload));
+
+    // 2. Save centrally to Firestore `appSettings/nursery_subjects_and_colors`
+    const db = initFirestoreIfConfigured();
+    if (db) {
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.APP_SETTINGS, NURSERY_SUBJECTS_AND_COLORS_DOC);
+      await setDoc(docRef, payload, { merge: true });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving nursery subjects & colors settings:', err);
+    return {
+      success: false,
+      error: err?.message || 'Failed to save subjects & colors in Firestore'
+    };
+  }
+};
+
+export const subscribeToNurserySubjectsAndColors = (
+  callback: (settings: NurserySubjectsAndColorsSettings) => void
+): (() => void) => {
+  // 1. Immediately emit local cached data
+  callback(getLocalNurserySubjectsAndColors());
+
+  const db = initFirestoreIfConfigured();
+  if (!db) return () => {};
+
+  try {
+    const docRef = doc(db, FIRESTORE_COLLECTIONS.APP_SETTINGS, NURSERY_SUBJECTS_AND_COLORS_DOC);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const remoteData = docSnap.data() as NurserySubjectsAndColorsSettings;
+        const merged: NurserySubjectsAndColorsSettings = {
+          ...getDefaultNurserySubjectsAndColors(),
+          ...remoteData,
+          colors: { ...DEFAULT_REPORT_CARD_COLORS, ...(remoteData.colors || {}) },
+          performanceLevels: Array.isArray(remoteData?.performanceLevels) && remoteData.performanceLevels.length > 0
+            ? remoteData.performanceLevels
+            : [...DEFAULT_PERFORMANCE_LEVELS]
+        };
+        try {
+          localStorage.setItem(LOCAL_STORAGE_NURSERY_SUBJECTS_KEY, JSON.stringify(merged));
+        } catch {}
+        callback(merged);
+      }
+    }, (err) => {
+      console.warn('Real-time nursery subjects subscription note:', err);
+    });
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Could not setup nursery subjects & colors listener:', err);
+    return () => {};
+  }
+};
+

@@ -28,7 +28,8 @@ import {
   Upload,
   Image as ImageIcon,
   RefreshCw,
-  FileDown
+  FileDown,
+  Palette
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -42,7 +43,12 @@ import {
   PERFORMANCE_LEGEND, 
   PerformanceLevel, 
   AssessmentTerm,
-  CriterionScores
+  CriterionScores,
+  NurserySubjectsAndColorsSettings,
+  NurserySubjectItem,
+  ReportCardColorSettings,
+  ConfigurablePerformanceLevel,
+  DEFAULT_PERFORMANCE_LEVELS
 } from '../types/nurseryReport';
 import { 
   getLocalNurserySchoolInfo, 
@@ -54,7 +60,9 @@ import {
   subscribeToNurseryStudents, 
   getLocalNurseryAssessments, 
   saveStudentAssessment, 
-  subscribeToNurseryAssessments 
+  subscribeToNurseryAssessments,
+  getLocalNurserySubjectsAndColors,
+  subscribeToNurserySubjectsAndColors
 } from '../services/nurseryStorageService';
 import { compressLogoFile } from '../services/websiteDesignService';
 import { NurseryReportCardDocument } from '../components/NurseryReportCardDocument';
@@ -89,6 +97,9 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
 
   // Assessment Records State
   const [assessments, setAssessments] = useState<StudentTermAssessment[]>(() => getLocalNurseryAssessments(user?.uid));
+
+  // Global Subjects & Colors Settings State (Synchronized across all teachers & devices)
+  const [subjectsAndColors, setSubjectsAndColors] = useState<NurserySubjectsAndColorsSettings>(() => getLocalNurserySubjectsAndColors());
   
   // Marks Entry States
   const [selectedStudentForMarks, setSelectedStudentForMarks] = useState<NurseryStudent | null>(null);
@@ -128,13 +139,43 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   // Ref for printable area
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
+  // Effective subjects list sorted by number
+  const activeSubjects: NurserySubjectItem[] = useMemo(() => {
+    if (subjectsAndColors?.subjects && subjectsAndColors.subjects.length > 0) {
+      return [...subjectsAndColors.subjects].sort((a, b) => a.number - b.number);
+    }
+    return NURSERY_ASSESSMENT_CRITERIA.map(c => ({
+      id: c.id,
+      number: c.number,
+      label: c.label,
+      section: c.section,
+      sectionTitle: c.sectionTitle,
+      isCustom: false
+    }));
+  }, [subjectsAndColors]);
+
+  // Effective performance levels list sorted by order
+  const activePerformanceLevels: ConfigurablePerformanceLevel[] = useMemo(() => {
+    if (subjectsAndColors?.performanceLevels && subjectsAndColors.performanceLevels.length > 0) {
+      return [...subjectsAndColors.performanceLevels].sort((a, b) => a.order - b.order);
+    }
+    return DEFAULT_PERFORMANCE_LEVELS;
+  }, [subjectsAndColors]);
+
   // Subscribe to real-time updates from Firestore (Scoped per authenticated teacher or full for admin)
   useEffect(() => {
+    // Subjects & colors are global: available to all teachers and devices
+    const unsubSubjects = subscribeToNurserySubjectsAndColors((fresh) => {
+      setSubjectsAndColors(fresh);
+    });
+
     if (!user && !isAdmin) {
       setSchoolInfo(EMPTY_NURSERY_SCHOOL_INFO);
       setStudents([]);
       setAssessments([]);
-      return;
+      return () => {
+        unsubSubjects();
+      };
     }
 
     const unsubSchool = subscribeToNurserySchoolInfo((fresh) => {
@@ -150,6 +191,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
     }, user?.uid, isAdmin);
 
     return () => {
+      unsubSubjects();
       unsubSchool();
       unsubStudents();
       unsubAssessments();
@@ -358,7 +400,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   // Batch fill current term
   const handleBulkSetScores = (level: PerformanceLevel) => {
     const updated: CriterionScores = {};
-    NURSERY_ASSESSMENT_CRITERIA.forEach(c => {
+    activeSubjects.forEach(c => {
       updated[c.id] = level;
     });
     setCurrentScores(updated);
@@ -819,6 +861,16 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
               <span className="text-xs font-semibold text-slate-500">
                 Abanyeshuri bose: <strong className="text-slate-900 font-mono">{students.length}</strong>
               </span>
+              {isAdmin && (
+                <button
+                  onClick={onNavigateDashboard}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-600 text-white transition-all shadow-2xs cursor-pointer active:scale-95"
+                  title="Admin: Hindura amasomo n'amabara y'ikarita y'inshuke (Subjects & Colors Management)"
+                >
+                  <Palette className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Amasomo n'Amabara (Admin)</span>
+                </button>
+              )}
               <button
                 onClick={handleOpenAddStudent}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-2xs cursor-pointer active:scale-95"
@@ -1379,7 +1431,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                 </div>
 
                 <div className="divide-y divide-slate-200 text-xs">
-                  {NURSERY_ASSESSMENT_CRITERIA.map(criterion => {
+                  {activeSubjects.map(criterion => {
                     const currentVal = currentScores[criterion.id];
                     const showHeader = criterion.sectionTitle !== undefined;
 
@@ -1398,55 +1450,39 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                             <span>{criterion.label}</span>
                           </div>
 
-                          {/* 4 Interactive Level Buttons */}
-                          <div className="flex items-center space-x-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectScore(criterion.id, 'EXCELLENT')}
-                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                                currentVal === 'EXCELLENT'
-                                  ? 'bg-[#48bb78] text-white border-[#38a169] shadow-xs ring-2 ring-emerald-400/40'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
-                              }`}
-                            >
-                              Excellent
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleSelectScore(criterion.id, 'VERY_GOOD')}
-                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                                currentVal === 'VERY_GOOD'
-                                  ? 'bg-[#3182ce] text-white border-[#2b6cb0] shadow-xs ring-2 ring-blue-400/40'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50'
-                              }`}
-                            >
-                              Very Good
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleSelectScore(criterion.id, 'DEVELOPING')}
-                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                                currentVal === 'DEVELOPING'
-                                  ? 'bg-[#ecc94b] text-slate-950 border-[#d69e2e] shadow-xs ring-2 ring-amber-400/40'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
-                              }`}
-                            >
-                              Developing
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleSelectScore(criterion.id, 'NEEDS_IMPROVEMENT')}
-                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                                currentVal === 'NEEDS_IMPROVEMENT'
-                                  ? 'bg-[#e53e3e] text-white border-[#c53030] shadow-xs ring-2 ring-red-400/40'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-red-50'
-                              }`}
-                            >
-                              Needs Impr.
-                            </button>
+                          {/* Dynamic Interactive Level Buttons */}
+                          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                            {activePerformanceLevels.map((lvl) => {
+                              const isSelected = currentVal === lvl.id;
+                              return (
+                                <button
+                                  key={lvl.id}
+                                  type="button"
+                                  onClick={() => handleSelectScore(criterion.id, lvl.id)}
+                                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center space-x-1.5"
+                                  style={
+                                    isSelected
+                                      ? {
+                                          backgroundColor: lvl.colorHex,
+                                          color: lvl.textColor || '#ffffff',
+                                          borderColor: lvl.colorHex,
+                                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                        }
+                                      : {
+                                          backgroundColor: '#ffffff',
+                                          color: '#334155',
+                                          borderColor: '#e2e8f0'
+                                        }
+                                  }
+                                >
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full inline-block shrink-0 border border-black/10"
+                                    style={{ backgroundColor: lvl.colorHex }}
+                                  />
+                                  <span>{lvl.label}</span>
+                                </button>
+                              );
+                            })}
 
                             {currentVal && (
                               <button
@@ -1621,6 +1657,9 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                         student={student}
                         schoolInfo={schoolInfo}
                         assessment={assessment}
+                        subjects={activeSubjects}
+                        colorSettings={subjectsAndColors?.colors}
+                        performanceLevels={activePerformanceLevels}
                       />
                     );
                   })()
@@ -1633,6 +1672,9 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                         student={student}
                         schoolInfo={schoolInfo}
                         assessment={assessment}
+                        subjects={activeSubjects}
+                        colorSettings={subjectsAndColors?.colors}
+                        performanceLevels={activePerformanceLevels}
                       />
                     );
                   })

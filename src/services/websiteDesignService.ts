@@ -10,7 +10,9 @@ import {
   WebsiteDesignSettings, 
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_ANNOUNCEMENT_STRIP,
-  DEFAULT_HOMEPAGE_SECTIONS
+  DEFAULT_HOMEPAGE_SECTIONS,
+  DEFAULT_NAVIGATION_MENUS,
+  WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 
@@ -66,7 +68,7 @@ export const validateLogoFile = (file: File): { valid: boolean; error?: string }
 };
 
 /**
- * Fetch published website appearance, typography & logo settings.
+ * Fetch published website appearance, typography, menus & layout settings.
  * Checks local cache and Cloud Firestore, keeping whichever revision is newer.
  */
 export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
@@ -82,6 +84,8 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
+        navigationMenus: parsed.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+        versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
       };
@@ -104,6 +108,8 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
+          navigationMenus: data.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+          versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
@@ -155,6 +161,8 @@ export const subscribeToWebsiteDesign = (
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
+          navigationMenus: data.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+          versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
         };
@@ -196,14 +204,42 @@ export const subscribeToWebsiteDesign = (
 
 /**
  * Save published website design settings to Firestore as the shared source of truth.
+ * Creates an immutable version history snapshot for 1-click restore/undo.
  * Restricted to verified administrator in Firestore Security Rules.
  */
 export const saveWebsiteDesignSettings = async (
   settings: WebsiteDesignSettings,
-  adminUid: string
-): Promise<{ success: boolean; error?: string; code?: string }> => {
+  adminUid: string,
+  changeSummary?: string
+): Promise<{ success: boolean; error?: string; code?: string; versionId?: string }> => {
+  const versionId = `v_${Date.now()}`;
+  const newSnapshot: WebsiteDesignSettings = {
+    branding: { ...settings.branding },
+    colors: { ...settings.colors },
+    typography: { ...settings.typography },
+    logo: { ...settings.logo },
+    announcements: settings.announcements ? { ...settings.announcements } : undefined,
+    homepageSections: settings.homepageSections ? JSON.parse(JSON.stringify(settings.homepageSections)) : [],
+    navigationMenus: settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : [],
+    updatedAt: new Date().toISOString(),
+    updatedBy: adminUid
+  };
+
+  const newVersion: WebsiteDesignVersion = {
+    id: versionId,
+    timestamp: new Date().toISOString(),
+    publishedBy: adminUid,
+    note: changeSummary || 'Website configuration updated',
+    snapshot: newSnapshot
+  };
+
+  // Keep last 15 versions to stay well within Firestore's 1MB document limit
+  const existingHistory = Array.isArray(settings.versionHistory) ? settings.versionHistory : [];
+  const updatedHistory = [newVersion, ...existingHistory].slice(0, 15);
+
   const payload: WebsiteDesignSettings = {
     ...settings,
+    versionHistory: updatedHistory,
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
   };
@@ -223,7 +259,7 @@ export const saveWebsiteDesignSettings = async (
     try {
       const docRef = doc(db, 'appSettings', 'website_design');
       await setDoc(docRef, payload, { merge: true });
-      return { success: true };
+      return { success: true, versionId };
     } catch (err: any) {
       console.error('Failed to save website_design to Firestore:', err);
       const code = err?.code || 'unknown';
@@ -242,7 +278,38 @@ export const saveWebsiteDesignSettings = async (
     }
   }
 
-  return { success: true };
+  return { success: true, versionId };
+};
+
+/**
+ * Restores a previously saved version snapshot as the active published website configuration.
+ */
+export const restoreWebsiteDesignVersion = async (
+  version: WebsiteDesignVersion,
+  adminUid: string
+): Promise<{ success: boolean; restoredSettings?: WebsiteDesignSettings; error?: string }> => {
+  try {
+    const currentSettings = await getWebsiteDesignSettings();
+    const restored: WebsiteDesignSettings = {
+      ...version.snapshot,
+      versionHistory: currentSettings.versionHistory || [],
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid
+    };
+
+    const result = await saveWebsiteDesignSettings(
+      restored,
+      adminUid,
+      `Restored previous version from ${new Date(version.timestamp).toLocaleString('en-GB')}`
+    );
+
+    if (result.success) {
+      return { success: true, restoredSettings: restored };
+    }
+    return { success: false, error: result.error };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to restore previous version' };
+  }
 };
 
 /**
