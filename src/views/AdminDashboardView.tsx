@@ -42,7 +42,8 @@ import {
   School,
   MapPin,
   Calendar,
-  X
+  X,
+  Bell
 } from 'lucide-react';
 import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
 import { TeacherProfile } from '../types/teacherProfile';
@@ -56,6 +57,7 @@ import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
 import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAndColorsManager';
+import { AdminNotificationManager } from '../components/AdminNotificationManager';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -69,7 +71,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -463,6 +465,21 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
+          onClick={() => setActiveTab('notifications')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'notifications'
+              ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Bell className="w-4 h-4 text-emerald-400 animate-pulse" />
+          <span>Push Notifications</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'notifications' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+            Real Push (FCM)
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('modules')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'modules'
@@ -840,6 +857,11 @@ promoteToAdmin('admin@example.com');`;
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= TAB: PUSH NOTIFICATIONS (FCM) ================= */}
+      {activeTab === 'notifications' && (
+        <AdminNotificationManager />
       )}
 
       {/* ================= TAB 1: MODULES & PLATFORM ================= */}

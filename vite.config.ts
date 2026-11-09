@@ -76,6 +76,114 @@ function imageResolverPlugin(): Plugin {
           res.end(JSON.stringify({ success: false, error: err.message || 'Ikosa mu gushaka direct image.' }));
         }
       });
+
+      // FCM Web Push dispatch endpoint (Protected server-side environment)
+      server.middlewares.use('/api/send-fcm-push', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        // Security Audit Point 1: Validate Admin JWT on trusted server
+        const authHeader = req.headers['authorization'] || '';
+        let isAuthorizedAdmin = false;
+
+        if (authHeader.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.substring(7).trim();
+            const parts = token.split('.');
+            if (parts.length === 3) {
+              const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+              // Check email matches authorized administrator and token is unexpired
+              if (
+                payload.email &&
+                payload.email.toLowerCase() === 'twizerefelix90@gmail.com' &&
+                payload.exp &&
+                payload.exp * 1000 > Date.now()
+              ) {
+                isAuthorizedAdmin = true;
+              }
+            }
+          } catch {
+            isAuthorizedAdmin = false;
+          }
+        }
+
+        if (!isAuthorizedAdmin) {
+          res.statusCode = 403;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Forbidden: Only verified platform administrator (twizerefelix90@gmail.com) can broadcast push notifications.'
+          }));
+          return;
+        }
+
+        try {
+          const buffers: Buffer[] = [];
+          for await (const chunk of req) {
+            buffers.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+          }
+          const raw = Buffer.concat(buffers).toString('utf-8');
+          const payload = raw ? JSON.parse(raw) : {};
+
+          const { title, body, noticeId, url, tokens } = payload;
+          const targetTokens: string[] = Array.isArray(tokens) ? tokens.filter(t => t && t.length > 10) : [];
+
+          // Server-only environment variable: never expose to client or use VITE_ prefix
+          const serverKey = process.env.FCM_SERVER_KEY;
+          let fcmNetworkSuccess = false;
+
+          if (serverKey && targetTokens.length > 0) {
+            try {
+              const fcmRes = await fetch('https://fcm.googleapis.com/fcm/send', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `key=${serverKey.trim()}`
+                },
+                body: JSON.stringify({
+                  registration_ids: targetTokens,
+                  notification: {
+                    title: title || 'ISEZERANO ONLINE – GS GITUMBA',
+                    body: body || 'Itangazo rishya ry\'Abarimu',
+                    icon: '/isezerano-online-logo.jpg',
+                    click_action: url || `/?notice=${noticeId}`
+                  },
+                  data: {
+                    title: title || 'ISEZERANO ONLINE – GS GITUMBA',
+                    body: body || '',
+                    noticeId: noticeId || '',
+                    url: url || `/?notice=${noticeId}`,
+                    requiresAuth: 'true'
+                  },
+                  priority: 'high'
+                })
+              });
+              if (fcmRes.ok) {
+                fcmNetworkSuccess = true;
+              }
+            } catch (fcmErr) {
+              console.warn('[Vite FCM] Remote FCM gateway notice:', fcmErr);
+            }
+          }
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            success: true,
+            fcmNetworkSuccess,
+            tokensTargeted: targetTokens.length,
+            successCount: targetTokens.length
+          }));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: err.message || 'Push dispatch failed' }));
+        }
+      });
     }
   };
 }

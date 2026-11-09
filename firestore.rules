@@ -17,10 +17,10 @@ service cloud.firestore {
              request.auth.token.email_verified == true;
     }
 
-    // Strict single administrator: ONLY twizerefelix90@gmail.com with verified Google auth.
+    // Strict single administrator: ONLY twizerefelix90@gmail.com with verified auth session.
     // Custom claims (e.g. token.admin == true) are deliberately NOT accepted without the exact email.
     function isAdmin() {
-      return isGoogleAuth() &&
+      return isAuthenticated() &&
              request.auth.token.email != null &&
              (
                request.auth.token.email == 'twizerefelix90@gmail.com' ||
@@ -419,7 +419,36 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 12. Default deny for all other documents
+    // 12. Announcements & Notification History (FCM Push)
+    // ==============================================================
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ==============================================================
+    // 13. FCM Push Notification Device Tokens
+    // ==============================================================
+    match /fcm_tokens/{tokenId} {
+      // Users can read their own token; Admin can read all tokens for push dispatch
+      allow get: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid) || isAdmin();
+
+      // Admin can list all tokens to broadcast announcements;
+      // Teachers can list only their own tokens
+      allow list: if isAdmin() || (isAuthenticated() && resource.data.ownerUid == request.auth.uid);
+      
+      // Teachers can register their own device tokens; Admin can manage all tokens
+      allow create: if (isAuthenticated() && request.resource.data.ownerUid == request.auth.uid) || isAdmin();
+
+      // Teachers can update only their own existing device tokens without transferring ownership
+      allow update: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid && request.resource.data.ownerUid == request.auth.uid) || isAdmin();
+
+      // Teachers can delete only their own device tokens; Admin can remove stale tokens
+      allow delete: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid) || isAdmin();
+    }
+
+    // ==============================================================
+    // 14. Default deny for all other documents
     // ==============================================================
     match /{document=**} {
       allow read, write: if false;

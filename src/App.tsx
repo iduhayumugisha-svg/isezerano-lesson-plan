@@ -42,6 +42,9 @@ import { AdminPortalGateway } from './views/AdminPortalGateway';
 // Admin Portal & Modals
 import { AdminDashboardView } from './views/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
+import { AnnouncementDetailModal } from './components/AnnouncementDetailModal';
+import { PushAnnouncement } from './types/announcement';
+import { getAnnouncementById } from './services/fcmService';
 
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -106,6 +109,7 @@ function AppContent() {
   const [editingPlan, setEditingPlan] = useState<LessonPlan | null>(null);
   const [printingPlan, setPrintingPlan] = useState<LessonPlan | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [selectedNotice, setSelectedNotice] = useState<PushAnnouncement | null>(null);
 
   // Load saved lesson plans on mount
   const refreshData = () => {
@@ -114,6 +118,24 @@ function AppContent() {
 
   useEffect(() => {
     refreshData();
+
+    // Check if user arrived via FCM notification click (?notice=<id>)
+    if (typeof window !== 'undefined' && window.location.search) {
+      try {
+        const noticeId = new URLSearchParams(window.location.search).get('notice');
+        if (noticeId) {
+          getAnnouncementById(noticeId).then((notice) => {
+            if (notice) {
+              setSelectedNotice(notice);
+            }
+          }).catch((err) => {
+            console.warn('[FCM] Error loading notice deep-link:', err);
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     // Listen to browser navigation (back/forward button and hash changes)
     const handleUrlChange = () => {
@@ -260,6 +282,7 @@ function AppContent() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
+        onSelectAnnouncement={(notice) => setSelectedNotice(notice)}
       />
 
       {/* Ad Placement: Below Header */}
@@ -543,6 +566,13 @@ function AppContent() {
 
       {/* 6. Persistent WhatsApp Floating Action Button (Rwanda: 0782971258 / https://wa.me/250782971258) */}
       <WhatsAppFloatingButton currentPage={currentPage} />
+
+      {/* 7. Push Announcement Detail & Auth Gate Modal (FCM) */}
+      <AnnouncementDetailModal
+        announcement={selectedNotice}
+        isOpen={!!selectedNotice}
+        onClose={() => setSelectedNotice(null)}
+      />
 
     </div>
   );

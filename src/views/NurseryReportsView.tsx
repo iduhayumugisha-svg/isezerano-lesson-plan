@@ -65,6 +65,7 @@ import {
   subscribeToNurserySubjectsAndColors
 } from '../services/nurseryStorageService';
 import { compressLogoFile } from '../services/websiteDesignService';
+import { getFirebaseAuth } from '../services/storageService';
 import { NurseryReportCardDocument } from '../components/NurseryReportCardDocument';
 
 interface NurseryReportsViewProps {
@@ -81,6 +82,36 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
   const { user, isAdmin, signInWithGoogle, isLoading } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+
+  // Authenticated user's actual profile name for the report card download attribution
+  const authenticatedUserName = useMemo(() => {
+    if (!user) return '';
+    // 1. Check local teacher profile
+    try {
+      const raw = localStorage.getItem(`isezerano_teacher_profile_${user.uid}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.fullName && typeof parsed.fullName === 'string' && parsed.fullName.trim()) {
+          return parsed.fullName.trim();
+        }
+      }
+    } catch {}
+
+    // 2. Check user.displayName from AuthContext
+    if (user.displayName && user.displayName.trim()) {
+      return user.displayName.trim();
+    }
+
+    // 3. Check Firebase Auth currentUser displayName
+    try {
+      const auth = getFirebaseAuth();
+      if (auth?.currentUser?.displayName && auth.currentUser.displayName.trim()) {
+        return auth.currentUser.displayName.trim();
+      }
+    } catch {}
+
+    return '';
+  }, [user]);
 
   // Main Navigation Tab
   const [activeTab, setActiveTab] = useState<NurseryTab>('students');
@@ -1660,6 +1691,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                         subjects={activeSubjects}
                         colorSettings={subjectsAndColors?.colors}
                         performanceLevels={activePerformanceLevels}
+                        downloadedByName={authenticatedUserName}
                       />
                     );
                   })()
@@ -1675,6 +1707,7 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                         subjects={activeSubjects}
                         colorSettings={subjectsAndColors?.colors}
                         performanceLevels={activePerformanceLevels}
+                        downloadedByName={authenticatedUserName}
                       />
                     );
                   })

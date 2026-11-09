@@ -15,7 +15,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
-import { TopAnnouncementTicker } from './TopAnnouncementTicker';
+import { NotificationBell } from './NotificationBell';
+import { PushAnnouncement } from '../types/announcement';
 
 export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
 
@@ -23,12 +24,14 @@ interface WebsiteHeaderProps {
   currentPage: string;
   onNavigate: (page: WebsitePage) => void;
   savedCount?: number;
+  onSelectAnnouncement?: (announcement: PushAnnouncement) => void;
 }
 
 export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   currentPage,
   onNavigate,
-  savedCount = 0
+  savedCount = 0,
+  onSelectAnnouncement
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
@@ -89,8 +92,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
   return (
     <>
-      <TopAnnouncementTicker onNavigate={handleNavClick} />
-
       <header 
         className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
         style={{
@@ -218,9 +219,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               })}
             </nav>
 
-            {/* 3. Right Section: Language Switcher & Three-Dot Menu (⋮) */}
+            {/* 3. Right Section: Notification Bell, Language Switcher & Three-Dot Menu (⋮) */}
             <div className="flex items-center space-x-2 sm:space-x-3">
               
+              {/* Notification Bell (FCM Push Announcements) */}
+              <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
+
               {/* Language Selector */}
               <div className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/80 p-1 rounded-lg border border-slate-200 transition-colors">
                 <Globe className="w-3.5 h-3.5 text-slate-500 ml-1.5" />

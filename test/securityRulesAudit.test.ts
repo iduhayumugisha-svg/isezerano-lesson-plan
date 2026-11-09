@@ -87,7 +87,7 @@ class FirestoreRulesEngine {
   }
 
   private isAdmin(auth: AuthContext | null): boolean {
-    if (!this.isGoogleAuth(auth)) return false;
+    if (!this.isAuthenticated(auth)) return false;
     const email = auth?.token?.email;
     if (!email) return false;
     return /^twizerefelix90@gmail\.com$/i.test(email);
@@ -445,6 +445,40 @@ class FirestoreRulesEngine {
 
   public canDeleteTeacherProfile(auth: AuthContext | null, profileId: string): boolean {
     return this.isAdmin(auth);
+  }
+
+  // 9. Announcements (FCM)
+  public canReadAnnouncement(auth: AuthContext | null, announcementId: string): boolean {
+    return true;
+  }
+
+  public canWriteAnnouncement(auth: AuthContext | null, announcementId: string): boolean {
+    return this.isAdmin(auth);
+  }
+
+  // 10. FCM Device Tokens
+  public canReadFcmToken(auth: AuthContext | null, tokenId: string): boolean {
+    const existing = this.getDoc(`fcm_tokens/${tokenId}`);
+    if (!existing) return false;
+    if (this.isAdmin(auth)) return true;
+    return !!(auth && auth.uid && existing.ownerUid === auth.uid);
+  }
+
+  public canCreateFcmToken(auth: AuthContext | null, tokenId: string, data: any): boolean {
+    if (this.isAdmin(auth)) return true;
+    return !!(auth && auth.uid && data && data.ownerUid === auth.uid);
+  }
+
+  public canUpdateFcmToken(auth: AuthContext | null, tokenId: string, existing: any, updated: any): boolean {
+    if (this.isAdmin(auth)) return true;
+    return !!(auth && auth.uid && existing.ownerUid === auth.uid && updated.ownerUid === auth.uid);
+  }
+
+  public canDeleteFcmToken(auth: AuthContext | null, tokenId: string): boolean {
+    const existing = this.getDoc(`fcm_tokens/${tokenId}`);
+    if (!existing) return false;
+    if (this.isAdmin(auth)) return true;
+    return !!(auth && auth.uid && existing.ownerUid === auth.uid);
   }
 }
 
@@ -1184,6 +1218,151 @@ export function runSecurityAuditTests() {
   assert(
     'Admin CAN delete teacher profile',
     engine.canDeleteTeacherProfile(admin, 'teacher-b-uid')
+  );
+
+  // --- 12. FCM PUSH NOTIFICATIONS & DEVICE TOKENS AUDIT ---
+  console.log('--- 12. FCM PUSH NOTIFICATIONS & DEVICE TOKENS AUDIT ---');
+
+  const teacherATokenPhone = {
+    id: 'tok_teacher_a_phone',
+    token: 'fcm_token_teacher_a_phone_string_12345',
+    ownerUid: 'teacher-a-uid',
+    ownerEmail: 'teacher-a@example.com',
+    ownerName: 'Teacher A',
+    deviceType: 'mobile',
+    browser: 'Chrome Mobile',
+    os: 'Android'
+  };
+
+  const teacherATokenLaptop = {
+    id: 'tok_teacher_a_laptop',
+    token: 'fcm_token_teacher_a_laptop_string_67890',
+    ownerUid: 'teacher-a-uid',
+    ownerEmail: 'teacher-a@example.com',
+    ownerName: 'Teacher A',
+    deviceType: 'desktop',
+    browser: 'Chrome',
+    os: 'Windows'
+  };
+
+  const teacherBToken = {
+    id: 'tok_teacher_b_phone',
+    token: 'fcm_token_teacher_b_phone_string_99999',
+    ownerUid: 'teacher-b-uid',
+    ownerEmail: 'teacher-b@example.com',
+    ownerName: 'Teacher B',
+    deviceType: 'mobile',
+    browser: 'Safari Mobile',
+    os: 'iOS'
+  };
+
+  engine.setDoc('fcm_tokens/tok_teacher_a_phone', teacherATokenPhone);
+  engine.setDoc('fcm_tokens/tok_teacher_a_laptop', teacherATokenLaptop);
+  engine.setDoc('fcm_tokens/tok_teacher_b_phone', teacherBToken);
+
+  const announcementDoc = {
+    id: 'notice_101',
+    title: 'Urgent Staff Meeting',
+    body: 'All staff meeting tomorrow at 8:00 AM in the main hall.',
+    sender: 'twizerefelix90@gmail.com',
+    senderName: 'Administrator',
+    priority: 'high',
+    createdAt: new Date().toISOString()
+  };
+  engine.setDoc('announcements/notice_101', announcementDoc);
+
+  assert(
+    'Teacher A CAN register their own device token (phone)',
+    engine.canCreateFcmToken(teacherA, 'tok_teacher_a_phone', teacherATokenPhone)
+  );
+
+  assert(
+    'Teacher A CAN register a second device token (laptop) without conflict',
+    engine.canCreateFcmToken(teacherA, 'tok_teacher_a_laptop', teacherATokenLaptop)
+  );
+
+  assert(
+    'Teacher A CANNOT register token with Teacher B ownerUid (spoofing)',
+    !engine.canCreateFcmToken(teacherA, 'tok_spoofed', {
+      ...teacherATokenPhone,
+      ownerUid: 'teacher-b-uid'
+    })
+  );
+
+  assert(
+    'Teacher A CAN read own phone device token',
+    engine.canReadFcmToken(teacherA, 'tok_teacher_a_phone')
+  );
+
+  assert(
+    'Teacher A CAN read own laptop device token',
+    engine.canReadFcmToken(teacherA, 'tok_teacher_a_laptop')
+  );
+
+  assert(
+    'Teacher A CANNOT read Teacher B device token',
+    !engine.canReadFcmToken(teacherA, 'tok_teacher_b_phone')
+  );
+
+  assert(
+    'Teacher A CANNOT update Teacher B device token',
+    !engine.canUpdateFcmToken(teacherA, 'tok_teacher_b_phone', teacherBToken, {
+      ...teacherBToken,
+      ownerName: 'Hijacked'
+    })
+  );
+
+  assert(
+    'Teacher A CANNOT delete Teacher B device token',
+    !engine.canDeleteFcmToken(teacherA, 'tok_teacher_b_phone')
+  );
+
+  assert(
+    'Teacher A CAN delete own phone device token',
+    engine.canDeleteFcmToken(teacherA, 'tok_teacher_a_phone')
+  );
+
+  assert(
+    'Admin twizerefelix90@gmail.com CAN read all teacher device tokens for broadcast',
+    engine.canReadFcmToken(admin, 'tok_teacher_a_phone') &&
+    engine.canReadFcmToken(admin, 'tok_teacher_a_laptop') &&
+    engine.canReadFcmToken(admin, 'tok_teacher_b_phone')
+  );
+
+  assert(
+    'Admin CAN delete any invalid device token',
+    engine.canDeleteFcmToken(admin, 'tok_teacher_b_phone')
+  );
+
+  assert(
+    'Unauthenticated visitor CANNOT read any device token',
+    !engine.canReadFcmToken(null, 'tok_teacher_a_phone')
+  );
+
+  assert(
+    'Unauthenticated visitor CANNOT register any device token',
+    !engine.canCreateFcmToken(null, 'tok_anon', teacherATokenPhone)
+  );
+
+  assert(
+    'Unauthenticated visitor CANNOT delete any device token',
+    !engine.canDeleteFcmToken(null, 'tok_teacher_a_phone')
+  );
+
+  assert(
+    'Public visitor / Teacher CAN read announcements',
+    engine.canReadAnnouncement(null, 'notice_101') &&
+    engine.canReadAnnouncement(teacherA, 'notice_101')
+  );
+
+  assert(
+    'Teacher A CANNOT create announcements (Admin-only)',
+    !engine.canWriteAnnouncement(teacherA, 'notice_fake')
+  );
+
+  assert(
+    'Admin twizerefelix90@gmail.com CAN create announcements',
+    engine.canWriteAnnouncement(admin, 'notice_101')
   );
 
   // Summary

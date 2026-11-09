@@ -22,6 +22,7 @@ interface NurseryReportCardDocumentProps {
   subjects?: NurserySubjectItem[];
   colorSettings?: ReportCardColorSettings;
   performanceLevels?: ConfigurablePerformanceLevel[];
+  downloadedByName?: string | null;
 }
 
 /**
@@ -80,12 +81,14 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
   isPrintMode = false,
   subjects,
   colorSettings,
-  performanceLevels
+  performanceLevels,
+  downloadedByName
 }) => {
   // Format current timestamp if not supplied
   const now = new Date();
   const defaultTimestamp = `${now.toLocaleDateString('en-GB')} at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
   const displayTimestamp = downloadTimestamp || defaultTimestamp;
+  const effectiveDownloadedBy = downloadedByName?.trim() || '';
 
   const schoolDisplayName = schoolInfo.schoolName?.trim() || 'School';
   const effectiveAcademicYear = schoolInfo.academicYear?.trim() || student.academicYear?.trim() || '2026';
@@ -242,26 +245,43 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
           className="flex-1 min-w-0 px-2 space-y-0.5" 
           style={{ flex: '1 1 0%', minWidth: 0, padding: '0 8px' }}
         >
+          <div 
+            className="text-[11px] font-black uppercase tracking-wider text-slate-900"
+            style={{ 
+              fontSize: '11px', 
+              fontWeight: 900, 
+              letterSpacing: '0.06em', 
+              color: '#0f172a', 
+              textTransform: 'uppercase',
+              margin: '0 0 1px 0',
+              lineHeight: 1.2
+            }}
+          >
+            REPUBLIC OF RWANDA
+          </div>
+
           <h1 
             className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 leading-none"
-            style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0', lineHeight: 1.15 }}
+            style={{ fontSize: '16.5px', fontWeight: 800, color: '#0f172a', margin: '1px 0 2px 0', lineHeight: 1.15 }}
           >
             {schoolDisplayName}
           </h1>
 
-          <p className="text-[10px] text-slate-800" style={{ fontSize: '9.5px', color: '#1e293b', margin: 0, lineHeight: 1.2 }}>
-            District: <span className="font-semibold">{schoolInfo.district || '______'}</span> | Sector: <span className="font-semibold">{schoolInfo.sector || '______'}</span> | Cell: <span className="font-semibold">{schoolInfo.cell || '______'}</span> | Village: <span className="font-semibold">{schoolInfo.village || '______'}</span>
+          <p className="text-[10px] text-slate-800" style={{ fontSize: '9.5px', color: '#1e293b', margin: 0, lineHeight: 1.25 }}>
+            District: <span className="font-semibold">{schoolInfo.district || '______'}</span> | Sector: <span className="font-semibold">{schoolInfo.sector || '______'}</span>
+            {schoolInfo.cell ? <> | Cell: <span className="font-semibold">{schoolInfo.cell}</span></> : null}
+            {schoolInfo.village ? <> | Village: <span className="font-semibold">{schoolInfo.village}</span></> : null}
+          </p>
+
+          <p className="text-[10px] text-slate-800" style={{ fontSize: '9.5px', color: '#1e293b', margin: '1px 0 0 0', lineHeight: 1.25 }}>
+            School Phone: <span className="font-semibold">{schoolInfo.headTeacherPhone || '______'}</span>
           </p>
 
           <p 
             className="text-[10px] text-slate-800 font-bold uppercase tracking-wide"
-            style={{ fontSize: '9.5px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', margin: '2px 0', lineHeight: 1.2 }}
+            style={{ fontSize: '9.5px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', margin: '2px 0 0 0', lineHeight: 1.2 }}
           >
             Academic Year: {effectiveAcademicYear} | ANNUAL PROGRESS REPORT
-          </p>
-
-          <p className="text-[10px] text-slate-800" style={{ fontSize: '9.5px', color: '#1e293b', margin: 0, lineHeight: 1.2 }}>
-            Head Teacher: <span className="font-semibold">{schoolInfo.headTeacherName || '______'}</span> | Tel: <span className="font-semibold">{schoolInfo.headTeacherPhone || '______'}</span>
           </p>
         </div>
 
@@ -622,49 +642,85 @@ export const NurseryReportCardDocument: React.FC<NurseryReportCardDocumentProps>
         </table>
       </div>
 
-      {/* 5. FOOTER SIGNATURES */}
+      {/* 5. DOWNLOAD ATTRIBUTION (Directly BELOW the report card marks/table) */}
       <div 
-        className="mt-3 flex items-end justify-end"
-        style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', marginTop: '8px' }}
-      >
-        <div 
-          className="text-right space-y-0.5 text-xs text-slate-800 min-w-[200px]"
-          style={{ textAlign: 'right', minWidth: '190px' }}
-        >
-          <p className="font-semibold text-slate-900" style={{ fontSize: '10.5px', fontWeight: 600, color: '#0f172a', margin: '0 0 2px 0' }}>
-            Head Teacher: <span className="font-normal" style={{ fontWeight: 400 }}>{schoolInfo.headTeacherName || '...'}</span>
-          </p>
-          <p className="text-[10px] text-slate-600 italic pt-0.5" style={{ fontSize: '9.5px', color: '#475569', fontStyle: 'italic', margin: 0 }}>
-            Signature and Stamp
-          </p>
-          <div 
-            className="h-8 border-b border-dotted border-slate-400 w-36 ml-auto"
-            style={{ height: '24px', borderBottom: '1px dotted #94a3b8', width: '130px', marginLeft: 'auto' }} 
-          />
-        </div>
-      </div>
-
-      {/* 6. SYSTEM WATERMARK TIMESTAMP */}
-      <div 
-        className="mt-2.5 pt-1.5 border-t border-slate-200 text-[8.5px] text-slate-500 font-mono flex items-center justify-between"
+        className="download-attribution mt-1.5 flex items-center justify-between text-[9px] text-slate-600 font-mono"
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderTop: '1px solid #e2e8f0',
-          marginTop: '8px',
-          paddingTop: '4px',
-          fontSize: '8.5px',
-          color: '#64748b',
+          marginTop: '6px',
+          paddingTop: '2px',
+          fontSize: '9px',
+          color: '#475569',
           fontFamily: 'monospace'
         }}
       >
         <span>
-          Downloaded by {schoolDisplayName} APP on {displayTimestamp}
+          {effectiveDownloadedBy ? (
+            <>
+              Downloaded by: <strong style={{ color: '#0f172a', fontWeight: 700 }}>{effectiveDownloadedBy}</strong> on {displayTimestamp}
+            </>
+          ) : (
+            <>Downloaded on {displayTimestamp}</>
+          )}
         </span>
-        <span className="text-[8px] uppercase tracking-wider text-slate-400" style={{ fontSize: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>
-          Official Early Childhood CBC Evaluation
-        </span>
+      </div>
+
+      {/* 6. FOOTER: SCHOOL STAMP & HEAD TEACHER SIGNATURE AREA */}
+      <div 
+        className="mt-3 flex items-end justify-end"
+        style={{ 
+          display: 'flex', 
+          alignItems: 'flex-end', 
+          justifyContent: 'flex-end', 
+          marginTop: '10px',
+          pageBreakInside: 'avoid',
+          breakInside: 'avoid'
+        }}
+      >
+        <div 
+          className="text-right space-y-1 text-xs text-slate-800 min-w-[210px]"
+          style={{ textAlign: 'right', minWidth: '200px' }}
+        >
+          <p 
+            className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider" 
+            style={{ fontSize: '9.5px', fontWeight: 600, color: '#475569', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+          >
+            School Stamp & Signature
+          </p>
+          {/* Official Stamp Placement Box */}
+          <div 
+            className="stamp-box border border-dashed border-slate-300 rounded bg-slate-50/60 flex items-center justify-center ml-auto"
+            style={{ 
+              height: '52px', 
+              width: '145px', 
+              marginLeft: 'auto', 
+              border: '1px dashed #cbd5e1', 
+              borderRadius: '4px',
+              backgroundColor: 'rgba(248, 250, 252, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <span style={{ fontSize: '8.5px', color: '#94a3b8', fontStyle: 'italic' }}>
+              {schoolInfo.stampText ? schoolInfo.stampText : 'Place School Stamp Here'}
+            </span>
+          </div>
+          {/* Head Teacher's full name displayed ONLY below the stamp area */}
+          <div 
+            className="pt-1 text-slate-900"
+            style={{ paddingTop: '3px' }}
+          >
+            <p style={{ margin: 0, fontSize: '10.5px', color: '#0f172a' }}>
+              <span className="font-bold" style={{ fontWeight: 700 }}>Head Teacher: </span>
+              <span className="font-semibold uppercase" style={{ fontWeight: 600 }}>
+                {schoolInfo.headTeacherName?.trim() || '____________________'}
+              </span>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
