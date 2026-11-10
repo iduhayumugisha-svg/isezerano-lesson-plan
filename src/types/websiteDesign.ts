@@ -361,6 +361,17 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     location: 'both'
   },
   {
+    id: 'nav-ef-audio',
+    label: 'EF Audio Assistant',
+    path: 'ef-audio',
+    icon: 'Headphones',
+    badge: 'AI',
+    badgeColor: 'teal',
+    enabled: true,
+    order: 4,
+    location: 'both'
+  },
+  {
     id: 'nav-about',
     label: 'Ibyerekeye GS GITUMBA',
     path: 'about',

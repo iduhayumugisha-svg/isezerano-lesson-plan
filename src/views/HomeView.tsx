@@ -14,7 +14,8 @@ import {
   Users,
   Printer,
   Compass,
-  Check
+  Check,
+  Headphones
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { DEFAULT_HOMEPAGE_SECTIONS } from '../types/websiteDesign';
@@ -395,6 +396,71 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
                 )}
 
+              </div>
+
+              {/* CARD 3: EF AI AUDIO ASSISTANT SPOTLIGHT */}
+              <div className="mt-8 bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-teal-800/40 shadow-xl relative overflow-hidden">
+                <div className="absolute -right-16 -top-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                  <div className="space-y-3 max-w-3xl">
+                    <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30">
+                      <Headphones className="w-3.5 h-3.5" />
+                      <span>New Feature • EF AI Audio Assistant</span>
+                      <span className="px-1.5 py-0.2 rounded bg-teal-400 text-slate-950 text-[10px] font-extrabold uppercase">100% Free</span>
+                    </div>
+
+                    <h3 className="font-serif text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
+                      EF English Audio Assistant & AI Voice Practice
+                    </h3>
+
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+                      Fata amajwi y'amasomo ya EF (Education First) mu mucukumbuzi (browser tab audio capture), uyahindure mu magambo yanditse (speech-to-text), wumve ijwi ry'icyongereza ry'umwimerere (AI Voice), kandi wimenyereze imivugirwe y'amagambo uzigama ibyo wize byose ku buntu.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 text-teal-300 text-xs font-medium border border-teal-500/20 flex items-center space-x-1.5">
+                        <Check className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Tab Audio Capture</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 text-teal-300 text-xs font-medium border border-teal-500/20 flex items-center space-x-1.5">
+                        <Check className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Real-time Speech Recognition</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 text-teal-300 text-xs font-medium border border-teal-500/20 flex items-center space-x-1.5">
+                        <Check className="w-3.5 h-3.5 text-teal-400" />
+                        <span>AI Pronunciation & Slow Repeat (0.8x)</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 text-teal-300 text-xs font-medium border border-teal-500/20 flex items-center space-x-1.5">
+                        <Check className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Split-Screen & Pop-out Companion</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('ef-audio')}
+                      className="px-6 py-3.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg transition-all transform active:scale-95 inline-flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <Headphones className="w-4 h-4 text-slate-950" />
+                      <span>Fungura EF Audio Assistant</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          window.open('/?page=ef-audio&compact=true', 'EFAudioCompanion', 'width=460,height=720,menubar=no,toolbar=no,location=no,status=no');
+                        }
+                      }}
+                      className="px-4 py-2.5 rounded-xl border border-teal-400/30 hover:border-teal-400 hover:bg-teal-500/10 text-teal-200 text-xs font-semibold transition-all inline-flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <span>Fungura mu idirishya rito (Pop-out Window)</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
             </section>

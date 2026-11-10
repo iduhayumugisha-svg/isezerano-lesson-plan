@@ -38,6 +38,7 @@ import { NurseryReportsView } from './views/NurseryReportsView';
 import { TeacherProfileView } from './views/TeacherProfileView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
+import { EfAudioAssistantView } from './views/EfAudioAssistantView';
 
 // Admin Portal & Modals
 import { AdminDashboardView } from './views/AdminDashboardView';
@@ -92,6 +93,18 @@ const getPageFromUrl = (): AppPage => {
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
   if (pathname === '/terms' || hash === '#terms' || search.get('page') === 'terms') return 'terms';
+  if (
+    pathname === '/ef-audio' || 
+    pathname.startsWith('/ef-audio') || 
+    pathname === '/ef-assistant' || 
+    pathname.startsWith('/ef-assistant') || 
+    hash === '#ef-audio' || 
+    hash === '#ef-assistant' || 
+    search.get('page') === 'ef-audio' || 
+    search.get('page') === 'ef-assistant'
+  ) {
+    return 'ef-audio';
+  }
 
   return 'home';
 };
@@ -268,6 +281,23 @@ function AppContent() {
 
   const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'nursery'].includes(currentPage);
 
+  // If opened in dedicated compact companion window (?compact=true), render minimal view without site header/footer
+  const isCompactMode = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('compact') === 'true' ||
+    new URLSearchParams(window.location.search).get('mode') === 'compact'
+  );
+
+  if (currentPage === 'ef-audio' && isCompactMode) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white font-sans antialiased">
+        <EfAudioAssistantView
+          initialCompact={true}
+          onNavigateHome={() => handleNavigate('home')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div 
       className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors overflow-x-hidden w-full"
@@ -332,6 +362,8 @@ function AppContent() {
                 handleNavigate('admin');
               } else if ((page as string) === 'profile') {
                 handleNavigate('profile');
+              } else if ((page as string) === 'ef-audio') {
+                handleNavigate('ef-audio');
               } else {
                 handleNavigate('dashboard');
               }
@@ -536,6 +568,13 @@ function AppContent() {
           <TeacherProfileView
             onNavigateHome={() => handleNavigate('home')}
             onNavigateDashboard={() => handleNavigate('dashboard')}
+          />
+        )}
+
+        {/* EF AI AUDIO ASSISTANT VIEW: Companion for EF English Lessons */}
+        {currentPage === 'ef-audio' && (
+          <EfAudioAssistantView
+            onNavigateHome={() => handleNavigate('home')}
           />
         )}
 

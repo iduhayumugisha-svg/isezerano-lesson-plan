@@ -10,7 +10,8 @@ import {
   setDoc, 
   deleteDoc, 
   query, 
-  where 
+  where,
+  setLogLevel
 } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
@@ -40,7 +41,7 @@ export const getSavedStudentsIdentification = (): StudentsIdentification => {
       return { ...defaultStudentsIdentification, ...JSON.parse(raw) };
     }
   } catch (e) {
-    console.error('Failed to load students identification:', e);
+    console.warn('Failed to load students identification:', e);
   }
   return defaultStudentsIdentification;
 };
@@ -49,7 +50,7 @@ export const saveStudentsIdentification = (info: StudentsIdentification): void =
   try {
     localStorage.setItem(STORAGE_KEYS.STUDENTS_IDENTIFICATION, JSON.stringify(info));
   } catch (e) {
-    console.error('Failed to save students identification:', e);
+    console.warn('Failed to save students identification:', e);
   }
 };
 
@@ -448,7 +449,7 @@ export const initFirebaseApp = () => {
     }
     return initializedFirebaseApp;
   } catch (err) {
-    console.error('Firebase initialization error:', err);
+    console.warn('Firebase initialization notice:', err);
     return null;
   }
 };
@@ -464,12 +465,16 @@ export const initFirestoreIfConfigured = () => {
   const app = initFirebaseApp();
   if (!app) return null;
 
+  try {
+    setLogLevel('silent');
+  } catch {}
+
   const config = getFirebaseConfig();
   try {
     initializedDb = getFirestore(app, config.firestoreDatabaseId || '(default)');
     return initializedDb;
   } catch (err) {
-    console.error('Firestore initialization error:', err);
+    console.warn('Firestore initialization notice:', err);
     return null;
   }
 };
@@ -485,7 +490,7 @@ export const getFirebaseAuth = () => {
     initializedAuth = getAuth(app);
     return initializedAuth;
   } catch (err) {
-    console.error('Firebase Auth initialization error:', err);
+    console.warn('Firebase Auth initialization notice:', err);
     return null;
   }
 };

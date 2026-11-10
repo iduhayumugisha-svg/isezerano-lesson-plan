@@ -9,7 +9,8 @@ import {
   MoreVertical,
   Award,
   BookOpen,
-  FileText
+  FileText,
+  Headphones
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
@@ -18,7 +19,7 @@ import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { NotificationBell } from './NotificationBell';
 import { PushAnnouncement } from '../types/announcement';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile' | 'ef-audio';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -46,6 +47,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       case 'FileText': return <FileText className="w-4 h-4 text-teal-700" />;
       case 'GraduationCap': return <GraduationCap className="w-4 h-4 text-teal-700" />;
       case 'User': return <User className="w-4 h-4 text-slate-700" />;
+      case 'Headphones': return <Headphones className="w-4 h-4 text-teal-600" />;
       default: return null;
     }
   };

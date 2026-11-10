@@ -54,7 +54,7 @@ export const getLocalNurserySchoolInfo = (userUid?: string | null): NurserySchoo
       return { ...EMPTY_NURSERY_SCHOOL_INFO, ...JSON.parse(raw) };
     }
   } catch (err) {
-    console.error('Failed reading local nursery school info:', err);
+    console.warn('Notice reading local nursery school info:', err);
   }
   return { ...EMPTY_NURSERY_SCHOOL_INFO };
 };
@@ -95,7 +95,7 @@ export const saveNurserySchoolInfo = async (
     }
     return { success: true };
   } catch (err: any) {
-    console.error('Error saving nursery school info:', err);
+    console.warn('Notice saving nursery school info:', err);
     const code = err?.code || '';
     if (code === 'permission-denied') {
       return { 
@@ -157,7 +157,7 @@ export const getLocalNurseryStudents = (userUid?: string | null): NurseryStudent
       if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
-    console.error('Failed reading local nursery students:', err);
+    console.warn('Notice reading local nursery students:', err);
   }
   return [];
 };
@@ -210,7 +210,7 @@ export const saveNurseryStudent = async (
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error saving nursery student to Firestore:', err);
+    console.warn('Notice saving nursery student to Firestore:', err);
     const code = err?.code || '';
     if (code === 'permission-denied') {
       return { 
@@ -258,7 +258,7 @@ export const deleteNurseryStudent = async (
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error deleting nursery student:', err);
+    console.warn('Notice deleting nursery student:', err);
     const code = err?.code || '';
     if (code === 'permission-denied') {
       return { 
@@ -336,7 +336,7 @@ export const getLocalNurseryAssessments = (userUid?: string | null): StudentTerm
       if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
-    console.error('Failed reading local nursery assessments:', err);
+    console.warn('Notice reading local nursery assessments:', err);
   }
   return [];
 };
@@ -393,7 +393,7 @@ export const saveStudentAssessment = async (
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error saving student assessment:', err);
+    console.warn('Notice saving student assessment:', err);
     const code = err?.code || '';
     if (code === 'permission-denied') {
       return { 
@@ -499,7 +499,7 @@ export const getLocalNurserySubjectsAndColors = (): NurserySubjectsAndColorsSett
       }
     }
   } catch (err) {
-    console.error('Failed reading local nursery subjects & colors:', err);
+    console.warn('Notice reading local nursery subjects & colors:', err);
   }
   return getDefaultNurserySubjectsAndColors();
 };
@@ -541,7 +541,7 @@ export const saveNurserySubjectsAndColorsSettings = async (
 
     return { success: true };
   } catch (err: any) {
-    console.error('Error saving nursery subjects & colors settings:', err);
+    console.warn('Notice saving nursery subjects & colors settings:', err);
     return {
       success: false,
       error: err?.message || 'Failed to save subjects & colors in Firestore'
