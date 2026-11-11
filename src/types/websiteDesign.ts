@@ -91,6 +91,12 @@ export interface WebsiteBrandingSettings {
   headerAnnouncementEnabled: boolean; // Whether top announcement is active
   footerTagline: string;          // Footer description/tagline
   footerCopyright: string;        // Copyright statement in footer
+  homepageWelcomeHeadline?: string; // Optional custom administrator headline
+  homepageCustomNote?: string;      // Optional custom administrator note/content
+  lessonPlanCardTitle?: string;    // Custom title for Lesson Plan card
+  lessonPlanCardDescription?: string; // Custom description for Lesson Plan card
+  reportCardTitle?: string;        // Custom title for Report Card card
+  reportCardDescription?: string;  // Custom description for Report Card card
 }
 
 export interface AnnouncementItem {
@@ -216,10 +222,16 @@ export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
   platformSubtitle: 'GS GITUMBA',
   schoolName: 'GS GITUMBA',
   schoolLocation: 'Buyoga Sector, Rulindo District, Northern Province, Rwanda',
-  headerAnnouncement: 'Welcome to Term 2! Prepare official Rwanda CBC Lesson Plans with confidence.',
+  headerAnnouncement: '',
   headerAnnouncementEnabled: false,
-  footerTagline: 'Developed by a Rwandan teacher serving at GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province) to support fellow educators in preparing well-structured CBC lesson plans aligned with REB & MINEDUC standards.',
-  footerCopyright: '© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved.'
+  footerTagline: 'GS GITUMBA, Buyoga Sector, Rulindo District, Northern Province, Rwanda.',
+  footerCopyright: '© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved.',
+  homepageWelcomeHeadline: '',
+  homepageCustomNote: '',
+  lessonPlanCardTitle: 'Lesson Plan',
+  lessonPlanCardDescription: '',
+  reportCardTitle: 'Report Card',
+  reportCardDescription: ''
 };
 
 export const DEFAULT_WEBSITE_COLORS: WebsiteColorSettings = {

@@ -22,6 +22,7 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
+  FileText,
   X,
   ArrowUp,
   ArrowDown,
@@ -133,31 +134,136 @@ const PALETTE_PRESETS: { name: string; description: string; colors: Partial<Webs
   }
 ];
 
-// Curated font families suitable for education and CBC lesson planning
+// Curated professional font families freely available for education, publishing, and CBC lesson planning
 const FONT_PRESETS = [
+  // Serifs
   { 
     id: 'times', 
     label: 'Times New Roman (REB Academic Standard)', 
+    category: 'Serif',
     value: "'Times New Roman', Times, Baskerville, Georgia, serif",
     sample: 'The quick brown fox jumps over the lazy dog'
   },
   { 
     id: 'georgia', 
     label: 'Georgia (Pedagogical Book Serif)', 
+    category: 'Serif',
     value: "Georgia, Cambria, 'Times New Roman', Times, serif",
     sample: 'Amakuru meza ku burezi bwiteganyirijwe mu Rwanda'
   },
   { 
+    id: 'garamond', 
+    label: 'EB Garamond (Classical Literature)', 
+    category: 'Serif',
+    value: "'EB Garamond', Garamond, 'Palatino Linotype', serif",
+    sample: 'Competence-Based Curriculum pedagogical documentation'
+  },
+  { 
+    id: 'merriweather', 
+    label: 'Merriweather (Editorial & Long-form)', 
+    category: 'Serif',
+    value: "'Merriweather', Georgia, 'Times New Roman', serif",
+    sample: 'Integanyanyigisho y’u Rwanda yubakiye ku bushobozi'
+  },
+  { 
+    id: 'playfair', 
+    label: 'Playfair Display (Prestigious Headline)', 
+    category: 'Serif',
+    value: "'Playfair Display', Georgia, 'Times New Roman', serif",
+    sample: 'Groupe Scolaire GITUMBA — Urubuga rw’Uburezi'
+  },
+  { 
+    id: 'lora', 
+    label: 'Lora (Contemporary Book Serif)', 
+    category: 'Serif',
+    value: "'Lora', Georgia, 'Times New Roman', serif",
+    sample: 'Professional educational planning and assessment'
+  },
+  { 
+    id: 'baskerville', 
+    label: 'Baskerville (Refined Classical)', 
+    category: 'Serif',
+    value: "Baskerville, 'Baskerville Old Face', 'Hoefler Text', Garamond, serif",
+    sample: 'Pedagogical clarity and structured lesson preparation'
+  },
+  { 
+    id: 'palatino', 
+    label: 'Palatino Linotype (Book Antiqua)', 
+    category: 'Serif',
+    value: "'Palatino Linotype', Palatino, 'Book Antiqua', serif",
+    sample: 'Inyandiko zizewe z’amasomo n’indangamanota z’abanyeshuri'
+  },
+  // Sans-Serifs
+  { 
     id: 'inter', 
-    label: 'Modern Clean Sans (Inter / System UI)', 
-    value: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    label: 'Inter (Modern Clean Sans)', 
+    category: 'Sans-Serif',
+    value: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     sample: 'Clear digital interfaces for modern classroom teachers'
   },
   { 
-    id: 'garamond', 
-    label: 'EB Garamond / Classical Literature', 
-    value: "'EB Garamond', Garamond, 'Palatino Linotype', serif",
-    sample: 'Competence-Based Curriculum pedagogical documentation'
+    id: 'roboto', 
+    label: 'Roboto (Google Editorial Sans)', 
+    category: 'Sans-Serif',
+    value: "Roboto, system-ui, -apple-system, sans-serif",
+    sample: 'Efficient, readable typography across phone and computer screens'
+  },
+  { 
+    id: 'opensans', 
+    label: 'Open Sans (Friendly & Legible)', 
+    category: 'Sans-Serif',
+    value: "'Open Sans', system-ui, -apple-system, sans-serif",
+    sample: 'Uburezi bufite ireme ku bana b’inshuke n’abanyeshuri bose'
+  },
+  { 
+    id: 'montserrat', 
+    label: 'Montserrat (Geometric Modern)', 
+    category: 'Sans-Serif',
+    value: "Montserrat, system-ui, -apple-system, sans-serif",
+    sample: 'ISEZERANO ONLINE — GS GITUMBA Buyoga Rulindo'
+  },
+  { 
+    id: 'poppins', 
+    label: 'Poppins (Friendly Geometric)', 
+    category: 'Sans-Serif',
+    value: "Poppins, system-ui, -apple-system, sans-serif",
+    sample: 'Modern layout designed for teachers and administrators'
+  },
+  { 
+    id: 'lato', 
+    label: 'Lato (Warm & Balanced)', 
+    category: 'Sans-Serif',
+    value: "Lato, system-ui, -apple-system, sans-serif",
+    sample: 'Balanced proportions with high legibility for reports'
+  },
+  { 
+    id: 'segoe', 
+    label: 'Segoe UI (Microsoft Standard)', 
+    category: 'Sans-Serif',
+    value: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    sample: 'Standard clean interface typography on Windows PCs'
+  },
+  { 
+    id: 'arial', 
+    label: 'Arial / Helvetica (Universal Neutral)', 
+    category: 'Sans-Serif',
+    value: "Arial, Helvetica, sans-serif",
+    sample: 'Universal compatibility across every device and browser'
+  },
+  { 
+    id: 'trebuchet', 
+    label: 'Trebuchet MS (Humanist Sans)', 
+    category: 'Sans-Serif',
+    value: "'Trebuchet MS', 'Lucida Sans Unicode', sans-serif",
+    sample: 'Dynamic humanistic sans-serif for school documents'
+  },
+  // Monospace
+  { 
+    id: 'fira', 
+    label: 'Fira Code (Technical Monospace)', 
+    category: 'Monospace',
+    value: "'Fira Code', Consolas, Monaco, 'Courier New', monospace",
+    sample: 'Structured pedagogical standards: REB CBC 8-Columns'
   }
 ];
 
@@ -805,6 +911,99 @@ export const WebsiteDesignManager: React.FC = () => {
                 <span>Customize Announcement Ticker &amp; Fonts</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+            </div>
+          </div>
+
+          {/* Administrator Homepage Text & Content Controls */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 shadow-2xs">
+            <div className="border-b border-slate-100 pb-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
+                <FileText className="w-4 h-4 text-teal-700" />
+                <span>Homepage Custom Content &amp; Titles (Admin Controlled)</span>
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Manage what visitors see on the public homepage. AI-generated promotional text has been removed. You have full control over any text shown. Leave fields empty if you want visitors to see strictly the clean Lesson Plan and Report Card tools.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Custom Welcome Headline (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.homepageWelcomeHeadline || ''}
+                  onChange={(e) => updateDraftBranding({ homepageWelcomeHeadline: e.target.value })}
+                  placeholder="e.g. Ikaze kuri GS GITUMBA (Leave empty to omit)"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Custom Administrator Note / Message (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.homepageCustomNote || ''}
+                  onChange={(e) => updateDraftBranding({ homepageCustomNote: e.target.value })}
+                  placeholder="e.g. Term 2 CBC preparation is now active"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Lesson Plan Card Title
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.lessonPlanCardTitle || ''}
+                  onChange={(e) => updateDraftBranding({ lessonPlanCardTitle: e.target.value })}
+                  placeholder="Lesson Plan"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Report Card Card Title
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.reportCardTitle || ''}
+                  onChange={(e) => updateDraftBranding({ reportCardTitle: e.target.value })}
+                  placeholder="Report Card"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Lesson Plan Custom Subtext (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.lessonPlanCardDescription || ''}
+                  onChange={(e) => updateDraftBranding({ lessonPlanCardDescription: e.target.value })}
+                  placeholder="Optional custom note written by admin for lesson planning..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Report Card Custom Subtext (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.reportCardDescription || ''}
+                  onChange={(e) => updateDraftBranding({ reportCardDescription: e.target.value })}
+                  placeholder="Optional custom note written by admin for report cards..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -1634,9 +1833,14 @@ export const WebsiteDesignManager: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-slate-900">{f.label}</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs font-bold text-slate-900">{f.label}</span>
+                      {f.category && (
+                        <span className="text-[10px] text-slate-500 font-mono">({f.category})</span>
+                      )}
+                    </div>
                     {draftSettings.typography.fontFamily === f.value && (
-                      <Check className="w-4 h-4 text-teal-600" />
+                      <Check className="w-4 h-4 text-teal-600 shrink-0" />
                     )}
                   </div>
                   <p 

@@ -21,6 +21,7 @@ export interface MicAudioLevelInfo {
   volumeLevel: number; // 0 to 100
   isSoundDetected: boolean;
   peakDb?: number;
+  frequencyData?: number[]; // normalized 8 frequency bands for real-time visualizer
 }
 
 export interface VoiceSettings {
@@ -28,6 +29,13 @@ export interface VoiceSettings {
   rate: number;   // 0.75 to 1.5 (default 1.0, slow 0.75)
   pitch: number;  // 0.8 to 1.2 (default 1.0)
   volume: number; // 0 to 1.0 (default 1.0)
+}
+
+export interface DiscoveredAudioDevice {
+  deviceId: string;
+  label: string;
+  groupId: string;
+  isDefault?: boolean;
 }
 
 export interface MicDiagnosticDetails {
@@ -39,5 +47,22 @@ export interface MicDiagnosticDetails {
   hasMediaDevices: boolean;
   hasGetUserMedia: boolean;
   hasSpeechRecognition: boolean;
+  devices: DiscoveredAudioDevice[];
+  audioInputCount: number;
+  selectedDeviceId?: string;
+  testedMethod?: string;
   technicalDetails?: string;
+}
+
+export interface PipelineDiagnosticStatus {
+  isMicStreamActive: boolean;
+  micTrackLabel: string;
+  isAudioLevelDetected: boolean;
+  currentVolumeLevel: number;
+  currentPeakDb: number;
+  isRecognitionStarted: boolean;
+  isRecognitionReceiving: boolean;
+  recognitionResultCount: number;
+  lastRecognizedAt?: string;
+  lastSpeechEvent?: string;
 }

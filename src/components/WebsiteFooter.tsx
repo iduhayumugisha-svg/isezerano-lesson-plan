@@ -50,24 +50,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
           <div className="md:col-span-2 space-y-4">
             <div 
               onClick={() => handleLink('home')} 
-              className="flex items-center space-x-3 cursor-pointer group"
+              className="cursor-pointer group inline-block"
             >
-              {logoSettings.showInFooter && (
-                <div 
-                  className={`overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md transition-all ${logoSettings.borderRadius}`}
-                  style={{
-                    height: `${Math.min(logoSettings.displayHeight, 44)}px`,
-                    width: `${Math.min(logoSettings.displayHeight, 44)}px`
-                  }}
-                >
-                  <img 
-                    src={logoUrl} 
-                    alt={logoSettings.altText || `${branding?.platformTitle || 'ISEZERANO ONLINE'} Logo`} 
-                    className={`w-full h-full object-${logoSettings.displayFit}`}
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-              )}
               <div className="flex flex-col justify-center">
                 <span 
                   className="font-serif font-extrabold tracking-tight leading-tight"

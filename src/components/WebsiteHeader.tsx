@@ -34,20 +34,20 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   savedCount = 0,
   onSelectAnnouncement
 }) => {
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
+  const { colors, typography, branding, navigationMenus } = useWebsiteDesign();
 
   // Helper for dynamic navigation icons
   const renderNavIcon = (iconName?: string) => {
     switch (iconName) {
-      case 'BookOpen': return <BookOpen className="w-4 h-4 text-teal-700" />;
-      case 'Award': return <Award className="w-4 h-4 text-amber-600" />;
-      case 'ShieldCheck': return <ShieldCheck className="w-4 h-4 text-teal-600" />;
-      case 'FileText': return <FileText className="w-4 h-4 text-teal-700" />;
-      case 'GraduationCap': return <GraduationCap className="w-4 h-4 text-teal-700" />;
-      case 'User': return <User className="w-4 h-4 text-slate-700" />;
-      case 'Headphones': return <Headphones className="w-4 h-4 text-teal-600" />;
+      case 'BookOpen': return <BookOpen className="w-3.5 h-3.5 text-teal-700" />;
+      case 'Award': return <Award className="w-3.5 h-3.5 text-amber-600" />;
+      case 'ShieldCheck': return <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />;
+      case 'FileText': return <FileText className="w-3.5 h-3.5 text-teal-700" />;
+      case 'GraduationCap': return <GraduationCap className="w-3.5 h-3.5 text-teal-700" />;
+      case 'User': return <User className="w-3.5 h-3.5 text-slate-700" />;
+      case 'Headphones': return <Headphones className="w-3.5 h-3.5 text-teal-600" />;
       default: return null;
     }
   };
@@ -93,373 +93,262 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   };
 
   return (
-    <>
-      <header 
-        className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
-        style={{
-          backgroundColor: colors.headerBg,
-          borderColor: colors.headerBorder,
-          color: colors.headerText
-        }}
-      >
-        {/* MAIN ROW: Brand Identity & Direct Fast Navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-20">
-            
-            {/* 1. Brand Identity & Masthead Logo */}
-            <div 
-              onClick={() => handleNavClick('home')}
-              className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group select-none min-w-0 shrink"
-              title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – GS GITUMBA`}
+    <header 
+      className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
+      style={{
+        backgroundColor: colors.headerBg,
+        borderColor: colors.headerBorder,
+        color: colors.headerText
+      }}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* TIER 1: UPPER-LEFT BRANDING AREA (ABOVE NAVIGATION MENU) & UPPER-RIGHT UTILITIES */}
+        <div className="flex items-center justify-between pt-3 sm:pt-4 pb-2 border-b border-slate-100/80">
+          
+          {/* Upper-Left Branding Area (Clean typography, no images/placeholders) */}
+          <div 
+            onClick={() => handleNavClick('home')}
+            className="flex flex-col justify-center cursor-pointer group select-none min-w-0"
+            title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
+          >
+            <span 
+              className="font-serif font-extrabold tracking-tight transition-colors leading-tight text-xl sm:text-2xl md:text-3xl"
+              style={{ color: colors.headerText }}
             >
-              {logoSettings.showInHeader && (
-                <div 
-                  className={`overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 group-hover:scale-102 transition-all ${logoSettings.borderRadius}`}
-                  style={{
-                    height: `clamp(34px, 8vw, ${logoSettings.displayHeight}px)`,
-                    width: `clamp(34px, 8vw, ${logoSettings.displayHeight}px)`
-                  }}
-                >
-                  <img 
-                    src={logoUrl} 
-                    alt={logoSettings.altText || `${branding?.platformTitle || 'ISEZERANO ONLINE'} Logo`} 
-                    className={`w-full h-full object-${logoSettings.displayFit}`}
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-              )}
-              <div className="flex flex-col justify-center min-w-0">
-                <span 
-                  className="font-serif font-extrabold tracking-tight transition-colors leading-tight truncate text-lg sm:text-xl md:text-2xl"
-                  style={{ color: colors.headerText }}
-                >
-                  {branding?.platformTitle || 'ISEZERANO ONLINE'}
-                </span>
-                <span 
-                  className="font-semibold tracking-wider uppercase leading-none mt-0.5 truncate text-[10px] sm:text-xs text-teal-700"
-                  style={{ color: colors.navLinkActive }}
-                >
-                  {branding?.platformSubtitle || 'GS GITUMBA'}
-                </span>
-              </div>
+              {branding?.platformTitle || 'ISEZERANO ONLINE'}
+            </span>
+            <span 
+              className="font-semibold tracking-wider uppercase leading-none mt-1 text-xs sm:text-sm text-teal-700"
+              style={{ color: colors.navLinkActive }}
+            >
+              {branding?.platformSubtitle || 'GS GITUMBA'}
+            </span>
+          </div>
+
+          {/* Upper-Right Utilities: Notification Bell, Language Switcher, User / Menu Button */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+            {/* Notification Bell (FCM Push Announcements) */}
+            <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
+
+            {/* Language Selector */}
+            <div className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/80 p-1 rounded-lg border border-slate-200 transition-colors">
+              <Globe className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+                className="bg-transparent text-xs font-semibold text-slate-800 py-1 pr-2 pl-1 rounded focus:outline-none cursor-pointer"
+                title="Select Language"
+              >
+                <option value="en">EN</option>
+                <option value="rw">RW</option>
+                <option value="fr">FR</option>
+              </select>
             </div>
 
-            {/* 2. Direct Navigation Links (Configurable via No-Code Admin System) */}
-            <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
-              {headerNavItems.map((item) => {
-                const isCurrent = currentPage === item.path || 
-                  (item.path === 'dashboard' && (currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings'));
+            {/* Three-Dot Menu Dropdown (⋮) */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label="Platform navigation menu"
+                aria-expanded={isMenuOpen}
+                title="Platform Navigation Menu"
+                className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                  isMenuOpen
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-teal-500/30'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                }`}
+              >
+                <MoreVertical className="w-5 h-5" />
+                {isAdmin && (
+                  <span 
+                    className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" 
+                    title="Admin signed in"
+                  />
+                )}
+              </button>
 
-                const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
-
-                if (isExternal) {
-                  return (
-                    <a
-                      key={item.id}
-                      href={item.path}
-                      target={item.openInNewTab ? '_blank' : '_self'}
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: `${typography.navMenuSize}px`,
-                        color: colors.headerText
-                      }}
-                      className="px-3 py-2 rounded-lg font-semibold transition-all relative hover:opacity-80 hover:bg-slate-50 inline-flex items-center space-x-1.5"
-                    >
-                      {renderNavIcon(item.icon)}
-                      <span>{item.label}</span>
-                      {item.badge && (
-                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
-                          item.badgeColor === 'amber'
-                            ? 'bg-amber-100 text-amber-900'
-                            : item.badgeColor === 'rose'
-                            ? 'bg-rose-100 text-rose-900'
-                            : 'bg-teal-100 text-teal-900'
+              {/* Dropdown Menu Popup */}
+              {isMenuOpen && (
+                <div 
+                  className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
+                  role="menu"
+                >
+                  {/* User Profile Identity or Sign In Prompt */}
+                  {user ? (
+                    <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 mb-1">
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
+                          isAdmin ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-teal-100 text-teal-800 border-teal-200'
                         }`}>
-                          {item.badge}
-                        </span>
-                      )}
-                    </a>
-                  );
-                }
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleNavClick(item.path as WebsitePage)}
-                    style={{
-                      fontSize: `${typography.navMenuSize}px`,
-                      color: isCurrent ? colors.navLinkActive : colors.headerText
-                    }}
-                    className={`px-3 py-2 rounded-lg font-semibold transition-all relative cursor-pointer inline-flex items-center space-x-1.5 ${
-                      isCurrent
-                        ? 'font-bold bg-slate-100/90 shadow-2xs'
-                        : 'hover:opacity-80 hover:bg-slate-50'
-                    }`}
-                  >
-                    {renderNavIcon(item.icon)}
-                    <span>{item.label}</span>
-                    {item.badge && (
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
-                        item.badgeColor === 'amber'
-                          ? 'bg-amber-100 text-amber-900'
-                          : item.badgeColor === 'rose'
-                          ? 'bg-rose-100 text-rose-900'
-                          : 'bg-teal-100 text-teal-900'
-                      }`}>
-                        {item.badge}
-                      </span>
-                    )}
-                    {isCurrent && (
-                      <span 
-                        className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" 
-                        style={{ backgroundColor: colors.navLinkActive }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-
-            {/* 3. Right Section: Notification Bell, Language Switcher & Three-Dot Menu (⋮) */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              
-              {/* Notification Bell (FCM Push Announcements) */}
-              <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
-
-              {/* Language Selector */}
-              <div className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/80 p-1 rounded-lg border border-slate-200 transition-colors">
-                <Globe className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as Language)}
-                  className="bg-transparent text-xs font-semibold text-slate-800 py-1 pr-2 pl-1 rounded focus:outline-none cursor-pointer"
-                  title="Select Language"
-                >
-                  <option value="en">EN</option>
-                  <option value="rw">RW</option>
-                  <option value="fr">FR</option>
-                </select>
-              </div>
-
-              {/* Three-Dot Menu Dropdown (⋮) */}
-              <div className="relative" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  aria-label="Platform navigation menu"
-                  aria-expanded={isMenuOpen}
-                  title="Platform Navigation Menu"
-                  className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
-                    isMenuOpen
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-teal-500/30'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <MoreVertical className="w-5 h-5" />
-                  {isAdmin && (
-                    <span 
-                      className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" 
-                      title="Admin signed in"
-                    />
-                  )}
-                </button>
-
-                {/* Dropdown Menu Popup */}
-                {isMenuOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
-                    role="menu"
-                  >
-                    {/* User Profile Identity or Sign In Prompt */}
-                    {user ? (
-                      <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 mb-1">
-                        <div className="flex items-center space-x-2.5">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                            isAdmin ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-teal-100 text-teal-800 border-teal-200'
-                          }`}>
-                            {user.displayName ? user.displayName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center space-x-1.5">
-                              <p className="text-xs font-bold text-slate-900 truncate">
-                                {user.displayName || user.email?.split('@')[0] || (isAdmin ? 'Administrator' : 'Teacher')}
-                              </p>
-                              <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                                isAdmin ? 'bg-amber-100 text-amber-900' : 'bg-teal-100 text-teal-900'
-                              }`}>
-                                {isAdmin ? 'Admin' : 'Mwarimu'}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 truncate font-mono">
-                              {user.email}
-                            </p>
-                          </div>
+                          {user.displayName ? user.displayName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                         </div>
-                        {/* Direct link to Teacher Profile */}
-                        <div className="mt-2.5 pt-2 border-t border-slate-200/70">
-                          <button
-                            type="button"
-                            onClick={() => handleNavClick('profile')}
-                            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
-                            title="Fungura umwirondoro wawe (Open Teacher Profile)"
-                          >
-                            <User className="w-3.5 h-3.5 text-teal-700" />
-                            <span>Profil ya Mwarimu (Teacher Profile)</span>
-                          </button>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              {user.displayName || user.email?.split('@')[0] || (isAdmin ? 'Administrator' : 'Teacher')}
+                            </p>
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+                              isAdmin ? 'bg-amber-100 text-amber-900' : 'bg-teal-100 text-teal-900'
+                            }`}>
+                              {isAdmin ? 'Admin' : 'Mwarimu'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate font-mono">
+                            {user.email}
+                          </p>
                         </div>
                       </div>
-                    ) : (
-                      <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                      <div className="mt-2.5 pt-2 border-t border-slate-200/70">
                         <button
                           type="button"
-                          onClick={async () => {
-                            setIsMenuOpen(false);
-                            await signInWithGoogle();
-                          }}
-                          className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                          title="Sign in with your Google account"
+                          onClick={() => handleNavClick('profile')}
+                          className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
                         >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                            <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
-                            <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                            <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.2s.7 5.5 1.9 7.9l3.7-2.9z" />
-                            <path fill="#34A853" d="M12 23.5c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.5C3.7 20.2 7.5 23.5 12 23.5z" />
-                          </svg>
-                          <span>Injira na Google (Sign In)</span>
+                          <User className="w-3.5 h-3.5 text-teal-700" />
+                          <span>Profil ya Mwarimu (Teacher Profile)</span>
                         </button>
                       </div>
-                    )}
-
-                    {/* SECTION 1: FREE OPEN EDUCATION TOOLS - Lesson Preparation */}
-                    <div className="px-1.5 py-0.5">
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2 border-b border-slate-100 mb-1">
                       <button
                         type="button"
-                        onClick={() => handleNavClick('dashboard')}
-                        className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer group"
-                        role="menuitem"
-                        title="Open Rwanda CBC Education Dashboard & Teacher Tools"
+                        onClick={async () => {
+                          setIsMenuOpen(false);
+                          await signInWithGoogle();
+                        }}
+                        className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 group-hover:bg-teal-700 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
-                          <GraduationCap className="w-4 h-4 text-teal-700 group-hover:text-white" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-slate-900 group-hover:text-teal-900">Education Dashboard</span>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-teal-50 text-teal-700 border border-teal-200">
-                              Free CBC
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-normal truncate">
-                            Lesson planner, saved schemes & export
-                          </span>
-                        </div>
-                      </button>
-
-                      {/* Create New Lesson Plan Direct Link */}
-                      <button
-                        type="button"
-                        onClick={() => handleNavClick('create')}
-                        className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer group mt-0.5"
-                        role="menuitem"
-                        title="Create CBC Lesson Plan"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 group-hover:bg-teal-700 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
-                          <FileText className="w-4 h-4 text-teal-700 group-hover:text-white" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-slate-900 group-hover:text-teal-900">Lesson Preparation</span>
-                          <span className="text-[10px] text-slate-500 font-normal truncate">
-                            REB 8-column automated generator
-                          </span>
-                        </div>
-                      </button>
-
-                      {/* Nursery Report Cards Menu Link */}
-                      <button
-                        type="button"
-                        onClick={() => handleNavClick('nursery')}
-                        className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-amber-50 hover:text-amber-900 rounded-xl transition-colors text-left cursor-pointer group mt-0.5"
-                        role="menuitem"
-                        title="Nursery Student Report Card Management System"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 group-hover:bg-amber-700 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
-                          <Award className="w-4 h-4 text-amber-700 group-hover:text-white" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-slate-900 group-hover:text-amber-900">Nursery Report Cards</span>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
-                              N1-N3
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-normal truncate">
-                            Class_Reports_N1_Term_1 CBC template
-                          </span>
-                        </div>
+                        <User className="w-3.5 h-3.5" />
+                        <span>Injira na Google (Sign In)</span>
                       </button>
                     </div>
+                  )}
 
-                    {/* SECTION 2: ADMINISTRATOR PORTAL */}
-                    <div className="my-1 border-t border-slate-100" />
-                    <div className="px-1.5 py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handleNavClick('admin')}
-                        className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors text-left cursor-pointer group"
-                        role="menuitem"
-                        title="Administrator Management Portal"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-900 text-teal-400 group-hover:bg-teal-950 flex items-center justify-center shrink-0 transition-colors">
-                          <ShieldCheck className="w-4 h-4" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-slate-900">Admin Portal</span>
-                            {isAdmin && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-teal-100 text-teal-800">
-                                Verified
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-normal truncate">
-                            Platform settings, announcements & designs
-                          </span>
-                        </div>
-                      </button>
-                    </div>
+                  {/* Section 1: Lesson Plan & Reports */}
+                  <div className="px-1.5 py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('create')}
+                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 text-teal-700" />
+                      <span>Lesson Plan (Gutegura Isomo)</span>
+                    </button>
 
-                    {/* SECTION 3: FOR SIGNED IN USERS - Sign Out */}
-                    {user && (
-                      <>
-                        <div className="my-1 border-t border-slate-100" />
-                        <div className="px-1.5 py-0.5">
-                          <button
-                            type="button"
-                            onClick={handleSignOut}
-                            className="w-full flex items-center space-x-3 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
-                            role="menuitem"
-                            title="Sign out from current session"
-                          >
-                            <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
-                              <LogOut className="w-4 h-4" />
-                            </div>
-                            <span>Sign Out</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('nursery')}
+                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-amber-50 hover:text-amber-900 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
+                    >
+                      <Award className="w-4 h-4 text-amber-700" />
+                      <span>Report Cards (Indangamanota)</span>
+                    </button>
 
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('ef-audio')}
+                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
+                    >
+                      <Headphones className="w-4 h-4 text-teal-600" />
+                      <span>EF AI Audio Assistant</span>
+                    </button>
                   </div>
-                )}
-              </div>
 
+                  {/* Section 2: Administrator Portal */}
+                  <div className="my-1 border-t border-slate-100" />
+                  <div className="px-1.5 py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('admin')}
+                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors text-left cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-slate-700" />
+                      <span>Admin Dashboard</span>
+                    </button>
+                  </div>
+
+                  {/* Section 3: Sign Out */}
+                  {user && (
+                    <>
+                      <div className="my-1 border-t border-slate-100" />
+                      <div className="px-1.5 py-0.5">
+                        <button
+                          type="button"
+                          onClick={handleSignOut}
+                          className="w-full flex items-center space-x-3 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-600" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-
           </div>
         </div>
 
-      </header>
-    </>
+        {/* TIER 2: NAVIGATION MENU BAR (SITTING DIRECTLY BELOW THE BRANDING AREA) */}
+        <div className="flex items-center justify-between py-2 sm:py-2.5 overflow-x-auto no-scrollbar">
+          <nav className="flex items-center space-x-1 sm:space-x-2">
+            {headerNavItems.map((item) => {
+              const isCurrent = currentPage === item.path || 
+                (item.path === 'dashboard' && (currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings'));
+
+              const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
+
+              if (isExternal) {
+                return (
+                  <a
+                    key={item.id}
+                    href={item.path}
+                    target={item.openInNewTab ? '_blank' : '_self'}
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: `${typography.navMenuSize}px`,
+                      color: colors.headerText
+                    }}
+                    className="px-3 py-1.5 rounded-lg font-semibold transition-all hover:bg-slate-100 inline-flex items-center space-x-1.5 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    {renderNavIcon(item.icon)}
+                    <span>{item.label}</span>
+                  </a>
+                );
+              }
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleNavClick(item.path as WebsitePage)}
+                  style={{
+                    fontSize: `${typography.navMenuSize}px`,
+                    color: isCurrent ? colors.navLinkActive : colors.headerText
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer inline-flex items-center space-x-1.5 text-xs sm:text-sm whitespace-nowrap ${
+                    isCurrent
+                      ? 'font-bold bg-slate-100 text-teal-800 shadow-2xs'
+                      : 'hover:bg-slate-50'
+                  }`}
+                >
+                  {renderNavIcon(item.icon)}
+                  <span>{item.label}</span>
+                  {item.badge && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold bg-teal-100 text-teal-800">
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+      </div>
+    </header>
   );
 };

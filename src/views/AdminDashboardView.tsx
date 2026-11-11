@@ -52,7 +52,6 @@ import { listUsers, setUserStatus, setUserRole } from '../services/authService';
 import { getAllTeacherProfiles } from '../services/teacherProfileService';
 import { useAuth } from '../context/AuthContext';
 import { SaasNavPage } from '../components/Sidebar';
-import { SliderManager } from '../components/SliderManager';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
@@ -71,7 +70,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'slider' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -416,20 +415,6 @@ promoteToAdmin('admin@example.com');`;
           </span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('slider')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'slider'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>Homepage Photos</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'slider' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Slides
-          </span>
-        </button>
 
         <button
           onClick={() => setActiveTab('ads')}
@@ -565,10 +550,6 @@ promoteToAdmin('admin@example.com');`;
         <WebsiteDesignManager />
       )}
 
-      {/* ================= TAB 0: HOMEPAGE HERO SLIDER MANAGEMENT ================= */}
-      {activeTab === 'slider' && (
-        <SliderManager />
-      )}
 
       {/* ================= TAB: ADS MANAGEMENT ================= */}
       {activeTab === 'ads' && (

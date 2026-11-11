@@ -1,62 +1,36 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Mic,
-  MicOff,
   Volume2,
-  VolumeX,
   Play,
   Pause,
   Square,
   RotateCcw,
   Sparkles,
-  Info,
-  AlertCircle,
-  CheckCircle2,
   Copy,
   Check,
   Trash2,
   Edit3,
-  Globe,
-  Radio,
-  Sliders,
   Maximize2,
   Minimize2,
   ArrowLeft,
-  Volume1,
   ExternalLink,
   ShieldCheck,
-  RefreshCw,
-  HelpCircle,
-  Laptop
+  Plus,
+  BookOpen,
+  Info
 } from 'lucide-react';
 import {
-  requestMicrophoneStream,
-  startMicrophoneAudioMonitor,
-  startMicrophoneSpeechRecognition,
   speakSentence,
   pauseSpeaking,
   resumeSpeaking,
   stopSpeaking,
-  isSpeaking,
   isSpeechPaused,
   getAvailableVoices,
-  isMicrophoneSupported,
-  isSpeechRecognitionSupported,
-  isSpeechSynthesisSupported,
-  isSecureContextActive,
-  isInIframe,
-  getMicrophonePermissionState,
-  getEnvironmentDiagnostics,
-  MicAudioMonitorSession,
-  SpeechRecognitionSession
+  isSpeechSynthesisSupported
 } from '../services/efAudioService';
 import {
-  ListeningStatus,
   VoicePlaybackState,
-  TranscribedSentence,
-  MicAudioLevelInfo,
-  BrowserPermissionState,
-  MicDiagnosticDetails
+  TranscribedSentence
 } from '../types/efAudio';
 
 interface EfAudioAssistantViewProps {
@@ -64,15 +38,26 @@ interface EfAudioAssistantViewProps {
   onNavigateHome?: () => void;
 }
 
-interface DetailedErrorState {
-  title: string;
-  name: string;
-  message: string;
-  isIframeRestriction: boolean;
-  permissionState?: BrowserPermissionState;
-  isSecureContext: boolean;
-  technicalDetails?: string;
-}
+const INITIAL_EF_SENTENCES: TranscribedSentence[] = [
+  {
+    id: 'ef_sample_1',
+    text: 'Welcome to the EF English pronunciation and listening studio.',
+    timestamp: 'Lesson Intro',
+    isFinal: true
+  },
+  {
+    id: 'ef_sample_2',
+    text: 'Good pronunciation requires regular listening and speaking practice.',
+    timestamp: 'EF Practice',
+    isFinal: true
+  },
+  {
+    id: 'ef_sample_3',
+    text: 'Click any word to hear its pronunciation aloud.',
+    timestamp: 'Interactive Tip',
+    isFinal: true
+  }
+];
 
 export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
   initialCompact = false,
@@ -81,32 +66,9 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
   // Mode: Full view vs Compact split-screen companion
   const [isCompact, setIsCompact] = useState<boolean>(initialCompact);
 
-  // Microphone Audio & Speech Recognition states
-  const [listeningStatus, setListeningStatus] = useState<ListeningStatus>('idle');
-  const [micAudioInfo, setMicAudioInfo] = useState<MicAudioLevelInfo>({
-    volumeLevel: 0,
-    isSoundDetected: false,
-    peakDb: -80
-  });
-  const [detailedError, setDetailedError] = useState<DetailedErrorState | null>(null);
-
-  // Environment Diagnostics
-  const [diagnostics, setDiagnostics] = useState<MicDiagnosticDetails>({
-    isSecureContext: true,
-    isInIframe: false,
-    hasMediaDevices: true,
-    hasGetUserMedia: true,
-    hasSpeechRecognition: true,
-    permissionState: 'prompt'
-  });
-
-  // Active Sessions
-  const audioMonitorRef = useRef<MicAudioMonitorSession | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionSession | null>(null);
-
-  // Live Transcriptions
-  const [interimText, setInterimText] = useState<string>('');
-  const [sentences, setSentences] = useState<TranscribedSentence[]>([]);
+  // Practice Sentences & Transcript
+  const [sentences, setSentences] = useState<TranscribedSentence[]>(INITIAL_EF_SENTENCES);
+  const [newSentenceInput, setNewSentenceInput] = useState<string>('');
   const [isEditingTranscript, setIsEditingTranscript] = useState<boolean>(false);
   const [manualTranscriptInput, setManualTranscriptInput] = useState<string>('');
   const [selectedSentenceId, setSelectedSentenceId] = useState<string | null>(null);
@@ -121,24 +83,28 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
   const [currentlySpeakingWord, setCurrentlySpeakingWord] = useState<string | null>(null);
   const [activeSpeakingSentenceId, setActiveSpeakingSentenceId] = useState<string | null>(null);
 
-  // Capability checks
-  const hasRecognitionSupport = useMemo(() => isSpeechRecognitionSupported(), []);
-  const inIframe = useMemo(() => isInIframe(), []);
-
-  // Filter English voices
+  // Filter and prioritize English voices (highlighting Microsoft David, Mark, Zira)
   const englishVoices = useMemo(() => {
-    return voices.filter((v) => v.lang.startsWith('en'));
+    const en = voices.filter((v) => v.lang.startsWith('en'));
+    return en.sort((a, b) => {
+      const isPriorityA = /David|Mark|Zira/i.test(a.name);
+      const isPriorityB = /David|Mark|Zira/i.test(b.name);
+      if (isPriorityA && !isPriorityB) return -1;
+      if (!isPriorityA && isPriorityB) return 1;
+      return a.name.localeCompare(b.name);
+    });
   }, [voices]);
 
-  // Load diagnostics & available voices on mount
+  // Load available speech synthesis voices on mount
   useEffect(() => {
-    getEnvironmentDiagnostics().then((diag) => {
-      setDiagnostics(diag);
-    });
-
     getAvailableVoices().then((loadedVoices) => {
       setVoices(loadedVoices);
-      const defaultEn =
+
+      // Prefer Microsoft David, Mark, or Zira if available, or standard English voice
+      const preferredVoice =
+        loadedVoices.find((v) => /David/i.test(v.name) && v.lang.startsWith('en')) ||
+        loadedVoices.find((v) => /Mark/i.test(v.name) && v.lang.startsWith('en')) ||
+        loadedVoices.find((v) => /Zira/i.test(v.name) && v.lang.startsWith('en')) ||
         loadedVoices.find(
           (v) =>
             (v.name.includes('Natural') ||
@@ -147,10 +113,11 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
               v.name.includes('Jenny') ||
               v.name.includes('Guy')) &&
             v.lang.startsWith('en')
-        ) || loadedVoices.find((v) => v.lang.startsWith('en'));
+        ) ||
+        loadedVoices.find((v) => v.lang.startsWith('en'));
 
-      if (defaultEn) {
-        setSelectedVoiceURI(defaultEn.voiceURI);
+      if (preferredVoice) {
+        setSelectedVoiceURI(preferredVoice.voiceURI);
       }
     });
   }, []);
@@ -172,231 +139,29 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
     }
   }, []);
 
-  // Cleanup active audio sessions on unmount
+  // Cleanup speech synthesis on unmount
   useEffect(() => {
     return () => {
-      stopAllListening();
       stopSpeaking();
     };
   }, []);
 
   /**
-   * Stop both microphone monitor and speech recognition
+   * Add new sentence from input bar
    */
-  const stopAllListening = () => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      recognitionRef.current = null;
-    }
-    if (audioMonitorRef.current) {
-      try {
-        audioMonitorRef.current.stop();
-      } catch {}
-      audioMonitorRef.current = null;
-    }
-    setListeningStatus('idle');
-    setMicAudioInfo({
-      volumeLevel: 0,
-      isSoundDetected: false,
-      peakDb: -80
-    });
-    setInterimText('');
-  };
+  const handleAddSentence = () => {
+    const trimmed = newSentenceInput.trim();
+    if (!trimmed) return;
 
-  /**
-   * Start listening: requests microphone permission directly from user click
-   */
-  const handleStartListening = async () => {
-    // 1. Immediately reset stale error states
-    setDetailedError(null);
+    const newEntry: TranscribedSentence = {
+      id: `sent_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      text: trimmed,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isFinal: true
+    };
 
-    // 2. Refresh permissions and diagnostics
-    const currentDiag = await getEnvironmentDiagnostics();
-    setDiagnostics(currentDiag);
-
-    // 3. Check browser speech recognition support
-    if (!hasRecognitionSupport) {
-      setDetailedError({
-        title: 'Speech Recognition Not Supported',
-        name: 'BrowserUnsupported',
-        message:
-          'Speech Recognition is not supported by your current browser. Please open this page in Google Chrome or Microsoft Edge.',
-        isIframeRestriction: false,
-        isSecureContext: currentDiag.isSecureContext,
-        permissionState: currentDiag.permissionState
-      });
-      setListeningStatus('error');
-      return;
-    }
-
-    // 4. Check Secure Context
-    if (!currentDiag.isSecureContext) {
-      setDetailedError({
-        title: 'Insecure Context (HTTPS Required)',
-        name: 'SecurityError',
-        message:
-          'Browser microphone access strictly requires a secure context (HTTPS or localhost). Please access this site over HTTPS.',
-        isIframeRestriction: currentDiag.isInIframe,
-        isSecureContext: false,
-        permissionState: currentDiag.permissionState
-      });
-      setListeningStatus('error');
-      return;
-    }
-
-    setListeningStatus('listening');
-
-    // 5. DIRECT MICROPHONE ACCESS (getUserMedia)
-    // Synchronously request stream to ensure user-activation gesture is maintained
-    let micStream: MediaStream | null = null;
-    try {
-      micStream = await requestMicrophoneStream();
-    } catch (err: any) {
-      const errName = err?.name || 'UnknownError';
-      const errMsg = err?.message || String(err);
-      const isIframeBlocked =
-        currentDiag.isInIframe &&
-        (errName === 'NotAllowedError' || errMsg.toLowerCase().includes('permissions policy'));
-
-      console.error('[EF Assistant] Direct microphone access failed:', errName, errMsg);
-
-      let helpfulTitle = 'Microphone Access Failed';
-      let userGuidance = errMsg;
-
-      if (isIframeBlocked) {
-        helpfulTitle = 'Microphone Blocked by Preview Frame';
-        userGuidance =
-          'You are viewing this app inside an embedded preview iframe. Web browsers block microphone access inside iframes by default. Click "Open in Direct Tab / Window" below to run with full microphone permissions.';
-      } else if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-        helpfulTitle = 'Microphone Permission Required';
-        userGuidance =
-          'The browser did not grant microphone permission. If you already set permission to Allow, please check if another tab or site is overriding it, or click Retry below.';
-      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
-        helpfulTitle = 'No Microphone Detected';
-        userGuidance =
-          'The browser could not detect any audio input hardware. Please connect a microphone or headset and click Retry.';
-      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
-        helpfulTitle = 'Microphone Busy';
-        userGuidance =
-          'Your microphone is currently in exclusive use by another application or call (e.g. Zoom, Teams, or another browser tab). Please close other apps and click Retry.';
-      }
-
-      setDetailedError({
-        title: helpfulTitle,
-        name: errName,
-        message: userGuidance,
-        isIframeRestriction: isIframeBlocked,
-        isSecureContext: currentDiag.isSecureContext,
-        permissionState: currentDiag.permissionState,
-        technicalDetails: `Raw Error: ${errName} - ${errMsg} | inIframe: ${currentDiag.isInIframe} | isSecureContext: ${currentDiag.isSecureContext}`
-      });
-
-      setListeningStatus('error');
-      stopAllListening();
-      return;
-    }
-
-    // 6. Connect Audio Level Visualizer (if stream acquired)
-    if (micStream) {
-      try {
-        const monitorSession = startMicrophoneAudioMonitor(micStream, (info) => {
-          setMicAudioInfo(info);
-        });
-        audioMonitorRef.current = monitorSession;
-      } catch (vizErr: any) {
-        console.warn('[EF Assistant] Visualizer AudioContext warning (non-fatal):', vizErr);
-        // Do not abort speech recognition if only the visualizer audio context failed
-      }
-    }
-
-    // 7. Start continuous Speech Recognition
-    try {
-      const recSession = startMicrophoneSpeechRecognition({
-        onInterimText: (partial) => {
-          setInterimText(partial);
-        },
-        onFinalSentence: (sentenceText, confidence) => {
-          const cleaned = sentenceText.trim();
-          if (!cleaned) return;
-
-          // Clear interim words once finalized
-          setInterimText('');
-
-          // Deduplication: prevent duplicate sentence if identical to most recent entry
-          setSentences((prev) => {
-            if (prev.length > 0 && prev[prev.length - 1].text.toLowerCase() === cleaned.toLowerCase()) {
-              return prev;
-            }
-
-            const newSentence: TranscribedSentence = {
-              id: `sent_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-              text: cleaned,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              confidence: confidence,
-              isFinal: true
-            };
-
-            return [...prev, newSentence];
-          });
-        },
-        onError: (details) => {
-          console.warn('[EF Assistant] Speech recognition event:', details);
-
-          if (details.isFatal) {
-            const isIframeBlocked =
-              currentDiag.isInIframe &&
-              (details.name === 'NotAllowedError' || details.rawError === 'not-allowed');
-
-            setDetailedError({
-              title: isIframeBlocked
-                ? 'Speech Recognition Blocked by Preview Frame'
-                : `Speech Recognition Notice (${details.name})`,
-              name: details.name,
-              message: isIframeBlocked
-                ? 'Speech recognition was disallowed inside this preview frame. Please open in a direct browser tab.'
-                : details.message,
-              isIframeRestriction: isIframeBlocked,
-              isSecureContext: currentDiag.isSecureContext,
-              permissionState: currentDiag.permissionState,
-              technicalDetails: `SpeechRecognition error: ${details.rawError} | ${details.message}`
-            });
-
-            setListeningStatus('error');
-            stopAllListening();
-          }
-        },
-        onListeningStateChange: (active) => {
-          if (active) {
-            setListeningStatus('listening');
-          }
-        }
-      });
-
-      recognitionRef.current = recSession;
-    } catch (recErr: any) {
-      console.error('[EF Assistant] Failed to launch speech recognition:', recErr);
-      setDetailedError({
-        title: 'Speech Recognition Launch Error',
-        name: recErr.name || 'SpeechRecognitionError',
-        message: recErr.message || 'Could not initialize browser speech recognition engine.',
-        isIframeRestriction: currentDiag.isInIframe,
-        isSecureContext: currentDiag.isSecureContext,
-        permissionState: currentDiag.permissionState
-      });
-      setListeningStatus('error');
-      stopAllListening();
-    }
-  };
-
-  /**
-   * Stop listening
-   */
-  const handleStopListening = () => {
-    stopAllListening();
-    setListeningStatus('idle');
-    setInterimText('');
+    setSentences((prev) => [...prev, newEntry]);
+    setNewSentenceInput('');
   };
 
   /**
@@ -433,7 +198,7 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
         setActiveSpeakingSentenceId(null);
       },
       onError: (err) => {
-        console.warn('[AI Voice] Speech synthesis error:', err);
+        console.warn('[AI Voice] Speech synthesis notice:', err);
         setPlaybackState('idle');
         setActiveSpeakingSentenceId(null);
       }
@@ -485,7 +250,7 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
 
     setCurrentlySpeakingWord(cleaned);
     speakSentence(cleaned, {
-      rate: Math.min(playbackSpeed, 0.9),
+      rate: Math.min(playbackSpeed, 0.85),
       voiceURI: selectedVoiceURI,
       onEnd: () => setCurrentlySpeakingWord(null),
       onError: () => setCurrentlySpeakingWord(null)
@@ -554,21 +319,11 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
    * Clear all transcript
    */
   const handleClearTranscript = () => {
-    if (sentences.length === 0 && !interimText) return;
-    if (window.confirm('Are you sure you want to clear the entire transcript?')) {
+    if (sentences.length === 0) return;
+    if (window.confirm('Are you sure you want to clear the entire practice transcript?')) {
       setSentences([]);
-      setInterimText('');
       setSelectedSentenceId(null);
       stopSpeaking();
-    }
-  };
-
-  /**
-   * Open app in a new top-level tab / window
-   */
-  const handleOpenInDirectWindow = () => {
-    if (typeof window !== 'undefined') {
-      window.open(window.location.href, '_blank');
     }
   };
 
@@ -583,8 +338,8 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
       {/* 1. Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-            <Mic className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 shrink-0">
+            <Volume2 className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
@@ -594,30 +349,18 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 100% Free
               </span>
-              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                Microphone Mode
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                AI Voice & Pronunciation
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Listens via computer microphone as EF English audio plays through speakers or nearby devices.
+              Personal English listening and pronunciation companion for EF English lessons.
             </p>
           </div>
         </div>
 
-        {/* Top Actions: Split Mode, Pop-out, Home */}
+        {/* Top Actions: Companion Mode, Pop-out Window, Home */}
         <div className="flex items-center space-x-2 shrink-0">
-          {inIframe && (
-            <button
-              type="button"
-              onClick={handleOpenInDirectWindow}
-              className="px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white transition-all text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-sm"
-              title="Open in a direct top-level browser tab"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Open in New Tab</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={() => setIsCompact(!isCompact)}
@@ -629,23 +372,16 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
           </button>
 
           {!isCompact && (
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.open(
-                    '/?page=ef-audio&compact=true',
-                    'EFAudioAssistant',
-                    'width=480,height=740,menubar=no,toolbar=no,location=no,status=no'
-                  );
-                }
-              }}
+            <a
+              href="/?page=ef-audio&compact=true"
+              target="_blank"
+              rel="noopener noreferrer"
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center space-x-1.5 cursor-pointer border border-slate-700"
-              title="Open floating pop-out window to place next to EF English"
+              title="Open floating companion window to place beside EF English"
             >
               <ExternalLink className="w-4 h-4" />
               <span className="hidden md:inline">Pop-out Window</span>
-            </button>
+            </a>
           )}
 
           {onNavigateHome && !isCompact && (
@@ -661,243 +397,27 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Embedded Preview Frame Notice (if in iframe) */}
-      {inIframe && (
-        <div className="mb-6 bg-slate-900 border border-teal-500/30 rounded-2xl p-4 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2.5">
-            <Laptop className="w-5 h-5 text-teal-400 shrink-0" />
-            <div>
-              <span className="font-bold text-white">Browser Environment Notice:</span> You are viewing the app
-              inside an embedded preview frame. If your browser blocks microphone capture inside iframes, click the button
-              to open in a direct tab.
-            </div>
+      {/* 2. Status & Maintenance Notice */}
+      <div className="mb-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400 shrink-0">
+            <Sparkles className="w-4 h-4" />
           </div>
-          <button
-            type="button"
-            onClick={handleOpenInDirectWindow}
-            className="px-3.5 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shrink-0 cursor-pointer shadow-xs inline-flex items-center space-x-1.5"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in Direct Window</span>
-          </button>
-        </div>
-      )}
-
-      {/* 3. Detailed Error Card with Exact Browser Diagnostic Details and Retry Button */}
-      {detailedError && (
-        <div className="mb-6 bg-rose-950/80 border border-rose-500/50 rounded-2xl p-5 text-rose-200 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-start space-x-3.5 flex-1">
-              <AlertCircle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
-              <div className="space-y-2 flex-1">
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-white">{detailedError.title}</h3>
-                  <p className="text-xs text-rose-200 mt-1 leading-relaxed">{detailedError.message}</p>
-                </div>
-
-                {/* Technical Diagnostic Details */}
-                <div className="p-3 bg-slate-950/80 rounded-xl border border-rose-500/20 text-[11px] font-mono space-y-1 text-slate-300">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Error Name:</span>
-                    <span className="font-bold text-rose-300">{detailedError.name}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Browser Permissions API State:</span>
-                    <span className="font-bold text-teal-300 uppercase">
-                      {detailedError.permissionState || diagnostics.permissionState || 'unknown'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Secure Context (HTTPS):</span>
-                    <span className={detailedError.isSecureContext ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                      {detailedError.isSecureContext ? 'Yes (HTTPS)' : 'No (Insecure HTTP)'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Embedded in Preview Frame:</span>
-                    <span className={detailedError.isIframeRestriction ? 'text-amber-400 font-bold' : 'text-slate-300'}>
-                      {detailedError.isIframeRestriction ? 'Yes (iFrame)' : 'No (Direct Window)'}
-                    </span>
-                  </div>
-                  {detailedError.technicalDetails && (
-                    <div className="pt-1 text-[10px] text-slate-400 border-t border-slate-800 break-all">
-                      {detailedError.technicalDetails}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons: Retry and Open in Direct Window */}
-            <div className="flex sm:flex-col items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleStartListening}
-                className="w-full px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center justify-center space-x-1.5 shadow-md cursor-pointer transition-all active:scale-95"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Retry</span>
-              </button>
-
-              {detailedError.isIframeRestriction && (
-                <button
-                  type="button"
-                  onClick={handleOpenInDirectWindow}
-                  className="w-full px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs inline-flex items-center justify-center space-x-1.5 shadow-md cursor-pointer transition-all active:scale-95"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open in Tab</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setDetailedError(null)}
-                className="px-3 py-1.5 text-xs text-rose-300 hover:text-white underline cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. PRIMARY LISTENING CONTROL CARD */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xl mb-6 relative overflow-hidden">
-        {/* Ambient background glow when listening */}
-        {listeningStatus === 'listening' && (
-          <div className="absolute -right-20 -top-20 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
-        )}
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          {/* Status Indicator & Live Volume Meter */}
-          <div className="space-y-3 flex-1">
-            <div className="flex items-center space-x-3">
-              {listeningStatus === 'listening' ? (
-                <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Listening to Microphone...</span>
-                </div>
-              ) : listeningStatus === 'error' ? (
-                <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 text-xs font-bold">
-                  <span className="w-2 h-2 rounded-full bg-rose-400" />
-                  <span>Microphone Issue Detected</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-xs font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  <span>Ready to Listen</span>
-                </div>
-              )}
-
-              {/* Sound detected indicator */}
-              {listeningStatus === 'listening' && micAudioInfo.isSoundDetected && (
-                <span className="text-[11px] font-semibold text-emerald-400 flex items-center space-x-1 animate-pulse">
-                  <Radio className="w-3.5 h-3.5" />
-                  <span>Sound detected</span>
-                </span>
-              )}
-            </div>
-
-            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-              {listeningStatus === 'listening'
-                ? 'Listening to EF English Audio'
-                : 'Simple Microphone Listening'}
-            </h2>
-
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-2xl">
-              {listeningStatus === 'listening'
-                ? 'Speak or play your EF English lesson through nearby speakers. Recognized sentences appear automatically below.'
-                : 'Click the button below to start. Microphone access is requested directly from your click.'}
-            </p>
-
-            {/* Live Audio Visualizer Bar */}
-            {listeningStatus === 'listening' && (
-              <div className="pt-2 space-y-1.5 max-w-md">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center space-x-1">
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Microphone Input Level</span>
-                  </span>
-                  <span className="font-mono text-emerald-400 font-bold">{micAudioInfo.volumeLevel}%</span>
-                </div>
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/60 p-0.5">
-                  <div
-                    className={`h-full rounded-full transition-all duration-75 ${
-                      micAudioInfo.volumeLevel > 70
-                        ? 'bg-amber-400'
-                        : micAudioInfo.volumeLevel > 15
-                        ? 'bg-emerald-400'
-                        : 'bg-emerald-600/50'
-                    }`}
-                    style={{ width: `${Math.max(4, micAudioInfo.volumeLevel)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Primary Action Button (Start / Stop Listening) & Retry Button */}
-          <div className="shrink-0 flex flex-col sm:flex-row items-center gap-3">
-            {listeningStatus !== 'listening' ? (
-              <button
-                type="button"
-                onClick={handleStartListening}
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm sm:text-base shadow-xl shadow-emerald-500/20 transition-all transform active:scale-95 inline-flex items-center justify-center space-x-2.5 cursor-pointer"
-              >
-                <Mic className="w-5 h-5 text-slate-950" />
-                <span>START LISTENING</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStopListening}
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-sm sm:text-base shadow-xl shadow-rose-600/20 transition-all transform active:scale-95 inline-flex items-center justify-center space-x-2.5 cursor-pointer"
-              >
-                <Square className="w-5 h-5 fill-white text-white" />
-                <span>STOP LISTENING</span>
-              </button>
-            )}
-
-            {detailedError && listeningStatus !== 'listening' && (
-              <button
-                type="button"
-                onClick={handleStartListening}
-                className="px-4 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-sm inline-flex items-center space-x-1.5 cursor-pointer"
-                title="Retry microphone initialization"
-              >
-                <RefreshCw className="w-4 h-4 text-teal-400" />
-                <span>Retry</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 5. Ongoing Interim Words Box (Speech in progress) */}
-        {listeningStatus === 'listening' && (
-          <div className="mt-5 pt-5 border-t border-slate-800">
-            <div className="flex items-center space-x-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Live Speech Detection
+          <div>
+            <div className="font-bold text-white flex items-center space-x-2">
+              <span>AI Voice & Speech Synthesis Active</span>
+              <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 font-mono">
+                Microphone listening paused
               </span>
             </div>
-            <div className="bg-slate-950/90 rounded-2xl p-4 border border-emerald-500/30 text-white min-h-[58px] flex items-center">
-              {interimText ? (
-                <p className="text-sm sm:text-base font-serif italic text-emerald-200">
-                  “{interimText}”<span className="inline-block w-1.5 h-4 ml-1 bg-emerald-400 animate-pulse" />
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500 italic">
-                  Waiting for speech... Speak or play English audio into your microphone.
-                </p>
-              )}
-            </div>
+            <p className="text-slate-400 text-[11px] mt-0.5">
+              Live microphone recording is temporarily disabled for maintenance. You can type, paste, and practice pronunciation using Microsoft David, Mark, Zira, and AI voice playback below.
+            </p>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* 6. AI VOICE CONTROLS TOOLBAR */}
+      {/* 3. AI VOICE CONTROLS TOOLBAR */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-md mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Playback action buttons */}
@@ -985,20 +505,24 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
               ))}
             </div>
 
-            {/* Voice Dropdown */}
+            {/* Voice Dropdown (Highlighting Microsoft David, Mark, Zira) */}
             {englishVoices.length > 0 && (
               <div className="flex items-center space-x-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">Voice:</span>
                 <select
                   value={selectedVoiceURI}
                   onChange={(e) => setSelectedVoiceURI(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl px-2.5 py-1.5 focus:outline-hidden focus:border-teal-500 max-w-[200px] truncate"
-                  title="Select voice accent"
+                  className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl px-2.5 py-1.5 focus:outline-hidden focus:border-teal-500 max-w-[240px] truncate"
+                  title="Select AI Voice Accent"
                 >
-                  {englishVoices.map((v) => (
-                    <option key={v.voiceURI} value={v.voiceURI}>
-                      {v.name} ({v.lang})
-                    </option>
-                  ))}
+                  {englishVoices.map((v) => {
+                    const isMicrosoft = /David|Mark|Zira/i.test(v.name);
+                    return (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {isMicrosoft ? '★ ' : ''}{v.name} ({v.lang})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
@@ -1006,21 +530,22 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
         </div>
       </div>
 
-      {/* 7. LIVE TRANSCRIPTION DISPLAY SECTION */}
+      {/* 4. PRACTICE SENTENCE INPUT & TRANSCRIPT SECTION */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xl mb-6">
         {/* Section Header with Tools */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Live Recognized Sentences
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center space-x-2">
+                <BookOpen className="w-5 h-5 text-teal-400" />
+                <span>Practice Sentences & Phrases</span>
               </h3>
               <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-teal-300 border border-slate-700">
                 {sentences.length} {sentences.length === 1 ? 'sentence' : 'sentences'}
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Click individual words to practice pronunciation. Sentences are deduplicated automatically.
+              Type or paste English phrases below. Click any word to hear individual phonetic pronunciation.
             </p>
           </div>
 
@@ -1034,7 +559,7 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
                   ? 'bg-teal-500 text-slate-950 border-teal-400'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
-              title="Edit or paste text directly"
+              title="Edit or paste multi-line text directly"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>{isEditingTranscript ? 'Done Editing' : 'Edit Transcript'}</span>
@@ -1064,11 +589,36 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
           </div>
         </div>
 
+        {/* Quick Add Sentence Input Bar */}
+        {!isEditingTranscript && (
+          <div className="flex flex-col sm:flex-row items-center gap-2 mb-5">
+            <input
+              type="text"
+              value={newSentenceInput}
+              onChange={(e) => setNewSentenceInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddSentence();
+              }}
+              placeholder="Type or paste an EF English sentence here (press Enter to add)..."
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-hidden focus:border-teal-500 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={handleAddSentence}
+              disabled={!newSentenceInput.trim()}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs inline-flex items-center justify-center space-x-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Sentence</span>
+            </button>
+          </div>
+        )}
+
         {/* Edit Mode View */}
         {isEditingTranscript ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>Edit your transcript below (one sentence per line):</span>
+              <span>Edit your practice transcript below (one sentence per line):</span>
               <span>{manualTranscriptInput.split('\n').filter(Boolean).length} lines</span>
             </div>
             <textarea
@@ -1101,12 +651,11 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
             {sentences.length === 0 ? (
               <div className="py-12 px-4 text-center space-y-3 border border-dashed border-slate-800 rounded-2xl">
                 <div className="w-12 h-12 rounded-2xl bg-slate-800/80 text-slate-500 flex items-center justify-center mx-auto">
-                  <Mic className="w-6 h-6" />
+                  <BookOpen className="w-6 h-6" />
                 </div>
-                <h4 className="text-sm font-bold text-slate-300">No sentences recorded yet</h4>
+                <h4 className="text-sm font-bold text-slate-300">No practice sentences yet</h4>
                 <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  Click <strong>START LISTENING</strong> above and play your EF English lesson through your computer
-                  speakers. Detected sentences will appear here immediately with zero fake text.
+                  Type or paste an EF English sentence above, or click <strong>Edit Transcript</strong> to paste whole lessons.
                 </p>
               </div>
             ) : (
@@ -1219,26 +768,24 @@ export const EfAudioAssistantView: React.FC<EfAudioAssistantViewProps> = ({
         )}
       </div>
 
-      {/* 8. TRANSPARENCY, INTERNET NOTICE & PRACTICE PURPOSE GUIDELINES */}
+      {/* 5. TRANSPARENCY, VOICE SPEED & PRACTICE GUIDELINES */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 text-xs text-slate-400 space-y-2.5">
         <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
           <ShieldCheck className="w-4 h-4" />
-          <span>Technical Notice & Free-Tier Practice Purpose</span>
+          <span>Speech Synthesis & Pronunciation Practice</span>
         </div>
         <ul className="space-y-1.5 list-disc list-inside leading-relaxed text-slate-400">
           <li>
-            <strong>100% Free & Built-In</strong>: Uses native browser speech technologies (Web Speech API). No paid
-            APIs, API keys, subscriptions, or credit cards required.
+            <strong>100% Free & Built-In</strong>: Uses native browser speech synthesis. No paid APIs, external subscriptions, or billing required.
           </li>
           <li>
-            <strong>Internet Connectivity Requirement</strong>: Browser speech recognition (in Google Chrome and
-            Microsoft Edge) relies on the browser's built-in cloud speech service to recognize English phonemes in real
-            time; an active internet connection is therefore required. Speech synthesis (AI Voice playback) executes
-            locally inside your browser.
+            <strong>Natural Voice Accents</strong>: Supports Microsoft David, Microsoft Mark, Microsoft Zira, and standard English browser voices.
           </li>
           <li>
-            <strong>Personal Listening Practice</strong>: This assistant is designed to help teachers and students
-            capture dialogue and practice pronunciation. It does not automatically submit answers to EF exams.
+            <strong>Phonetic Word Practice</strong>: Click any individual word to hear it pronounced slowly and clearly.
+          </li>
+          <li>
+            <strong>Microphone Listening</strong>: Temporarily paused for maintenance; speech practice and AI voice playback operate completely independently.
           </li>
         </ul>
       </div>

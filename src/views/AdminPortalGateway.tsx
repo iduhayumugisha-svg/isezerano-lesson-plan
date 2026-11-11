@@ -14,7 +14,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { WebsitePage } from '../components/WebsiteHeader';
 import { 
   getFirebaseConfig, 
@@ -32,7 +31,6 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   onNavigate 
 }) => {
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { logoUrl, logoSettings } = useWebsiteDesign();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -207,16 +205,9 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         {/* Brand Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-teal-950 p-6 sm:p-8 text-white relative">
           <div className="flex items-center space-x-3.5 mb-3">
-            {logoSettings.showInAdminGateway && (
-              <div className={`w-12 h-12 overflow-hidden bg-slate-900 border border-slate-700/80 shadow-md flex items-center justify-center shrink-0 ${logoSettings.borderRadius}`}>
-                <img 
-                  src={logoUrl} 
-                  alt={logoSettings.altText || "ISEZERANO ONLINE Logo"} 
-                  className={`w-full h-full object-${logoSettings.displayFit}`} 
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            )}
+            <div className="w-11 h-11 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0 shadow-inner">
+              <ShieldCheck className="w-6 h-6 text-teal-400" />
+            </div>
             <div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
                 ISEZERANO ONLINE

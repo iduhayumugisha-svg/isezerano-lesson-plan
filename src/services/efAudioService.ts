@@ -3,12 +3,19 @@
  * 
  * Captures audio directly from the computer's microphone to listen to EF English
  * lessons playing through nearby speakers. Provides continuous live speech-to-text
- * transcription and native client-side AI voice playback (SpeechSynthesis).
+ * transcription, real-time frequency analysis visualizer, multi-stage fallback
+ * device selection, and native client-side AI voice playback (SpeechSynthesis).
  * 
  * 100% Free & Spark-compatible: Zero paid subscriptions, zero API keys, zero billing.
  */
 
-import { MicAudioLevelInfo, VoiceSettings, BrowserPermissionState, MicDiagnosticDetails } from '../types/efAudio';
+import {
+  MicAudioLevelInfo,
+  VoiceSettings,
+  BrowserPermissionState,
+  MicDiagnosticDetails,
+  DiscoveredAudioDevice
+} from '../types/efAudio';
 
 export interface MicAudioMonitorSession {
   stream: MediaStream;
@@ -27,6 +34,13 @@ export interface SpeechRecognitionErrorDetails {
   message: string;
   rawError: string;
   isFatal: boolean;
+}
+
+export interface MicStreamResult {
+  stream: MediaStream;
+  deviceUsed: string;
+  methodUsed: string;
+  sampleRate?: number;
 }
 
 // Capability & Environment checks
@@ -75,15 +89,57 @@ export const getMicrophonePermissionState = async (): Promise<BrowserPermissionS
 };
 
 /**
+ * Enumerate all available audio input devices (microphones)
+ */
+export const getAudioInputDevices = async (): Promise<DiscoveredAudioDevice[]> => {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.mediaDevices ||
+    typeof navigator.mediaDevices.enumerateDevices !== 'function'
+  ) {
+    return [];
+  }
+
+  try {
+    const allDevices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = allDevices.filter((d) => d.kind === 'audioinput');
+
+    return audioInputs.map((d, index) => {
+      let friendlyLabel = d.label;
+      if (!friendlyLabel) {
+        if (d.deviceId === 'default') {
+          friendlyLabel = 'System Default Microphone';
+        } else if (d.deviceId === 'communications') {
+          friendlyLabel = 'Communications Microphone';
+        } else {
+          friendlyLabel = `Microphone ${index + 1} (${d.deviceId ? d.deviceId.slice(0, 8) + '...' : 'Unknown'})`;
+        }
+      }
+
+      return {
+        deviceId: d.deviceId,
+        label: friendlyLabel,
+        groupId: d.groupId || '',
+        isDefault: d.deviceId === 'default' || index === 0
+      };
+    });
+  } catch (err) {
+    console.warn('[EF Assistant] enumerateDevices warning:', err);
+    return [];
+  }
+};
+
+/**
  * Gather full environment diagnostics for microphone and speech APIs
  */
-export const getEnvironmentDiagnostics = async (): Promise<MicDiagnosticDetails> => {
+export const getEnvironmentDiagnostics = async (selectedId?: string): Promise<MicDiagnosticDetails> => {
   const perm = await getMicrophonePermissionState();
   const secure = isSecureContextActive();
   const iframe = isInIframe();
   const mediaDevs = typeof navigator !== 'undefined' && !!navigator.mediaDevices;
   const gum = isMicrophoneSupported();
   const sr = isSpeechRecognitionSupported();
+  const devices = await getAudioInputDevices();
 
   return {
     permissionState: perm,
@@ -91,15 +147,18 @@ export const getEnvironmentDiagnostics = async (): Promise<MicDiagnosticDetails>
     isInIframe: iframe,
     hasMediaDevices: mediaDevs,
     hasGetUserMedia: gum,
-    hasSpeechRecognition: sr
+    hasSpeechRecognition: sr,
+    devices: devices,
+    audioInputCount: devices.length,
+    selectedDeviceId: selectedId || 'default'
   };
 };
 
 /**
- * Request microphone stream directly from user click.
- * Never masks or swallows browser error details.
+ * Request real microphone MediaStream directly from user click with multi-tier fallback.
+ * Uses navigator.mediaDevices.getUserMedia({ audio: true }) as the primary standard.
  */
-export const requestMicrophoneStream = async (): Promise<MediaStream> => {
+export const requestMicrophoneStream = async (preferredDeviceId?: string): Promise<MicStreamResult> => {
   if (typeof window !== 'undefined' && !window.isSecureContext) {
     const secErr = new Error('Microphone access requires a secure context (HTTPS or localhost).');
     secErr.name = 'SecurityError';
@@ -112,45 +171,221 @@ export const requestMicrophoneStream = async (): Promise<MediaStream> => {
     throw suppErr;
   }
 
-  // Request standard audio input with clean constraints
-  return await navigator.mediaDevices.getUserMedia({ audio: true });
+  const inIframe = isInIframe();
+
+  // Helper: Detect permission denial or permissions policy restriction
+  const isPermissionDeniedError = (err: any): boolean => {
+    return (
+      err?.name === 'NotAllowedError' ||
+      err?.name === 'PermissionDeniedError' ||
+      err?.name === 'SecurityError' ||
+      (typeof err?.message === 'string' &&
+        (err.message.toLowerCase().includes('permissions policy') ||
+          err.message.toLowerCase().includes('permission denied') ||
+          err.message.toLowerCase().includes('permission dismissed')))
+    );
+  };
+
+  const throwPermissionError = (err: any): never => {
+    const msg = inIframe
+      ? 'Microphone access is blocked by the browser preview frame permissions policy. Click "Open in New Tab" to use your microphone in a standalone window.'
+      : 'Microphone permission was denied. Please allow microphone access in your browser settings (click the lock or camera icon in the URL bar) and retry.';
+    const deniedErr: any = new Error(msg);
+    deniedErr.name = 'NotAllowedError';
+    deniedErr.isIframeBlocked = inIframe;
+    deniedErr.rawMessage = err?.message || '';
+    throw deniedErr;
+  };
+
+  // Stage 1: If user explicitly picked a specific device, try that first
+  if (preferredDeviceId && preferredDeviceId !== 'default') {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: preferredDeviceId } }
+      });
+      const track = stream.getAudioTracks()[0];
+      return {
+        stream,
+        deviceUsed: track?.label || preferredDeviceId,
+        methodUsed: 'selected_exact_device',
+        sampleRate: track?.getSettings?.()?.sampleRate
+      };
+    } catch (err: any) {
+      if (isPermissionDeniedError(err)) {
+        throwPermissionError(err);
+      }
+
+      // Try with ideal deviceId
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: preferredDeviceId }
+        });
+        const track = stream.getAudioTracks()[0];
+        return {
+          stream,
+          deviceUsed: track?.label || preferredDeviceId,
+          methodUsed: 'selected_ideal_device',
+          sampleRate: track?.getSettings?.()?.sampleRate
+        };
+      } catch (err2: any) {
+        if (isPermissionDeniedError(err2)) {
+          throwPermissionError(err2);
+        }
+      }
+    }
+  }
+
+  // Stage 2: Standard getUserMedia({ audio: true })
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const activeTrack = stream.getAudioTracks()[0];
+    return {
+      stream,
+      deviceUsed: activeTrack?.label || 'Default Microphone',
+      methodUsed: 'standard_audio_true',
+      sampleRate: activeTrack?.getSettings?.()?.sampleRate
+    };
+  } catch (err: any) {
+    if (isPermissionDeniedError(err)) {
+      throwPermissionError(err);
+    }
+  }
+
+  // Stage 3: If standard failed due to device routing issue (e.g. Windows default disconnected),
+  // probe enumerated physical devices
+  try {
+    const availableDevices = await getAudioInputDevices();
+    const candidateDevices = availableDevices.filter(
+      (d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'
+    );
+
+    for (const candidate of candidateDevices) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: candidate.deviceId } }
+        });
+        const activeTrack = stream.getAudioTracks()[0];
+        return {
+          stream,
+          deviceUsed: activeTrack?.label || candidate.label || candidate.deviceId,
+          methodUsed: `fallback_enumerated_device(${candidate.deviceId.slice(0, 8)})`,
+          sampleRate: activeTrack?.getSettings?.()?.sampleRate
+        };
+      } catch (err: any) {
+        if (isPermissionDeniedError(err)) {
+          throwPermissionError(err);
+        }
+      }
+    }
+  } catch (enumErr: any) {
+    if (isPermissionDeniedError(enumErr)) {
+      throwPermissionError(enumErr);
+    }
+  }
+
+  // Stage 4: Try with relaxed audio constraint object
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: true
+      }
+    });
+    const activeTrack = stream.getAudioTracks()[0];
+    return {
+      stream,
+      deviceUsed: activeTrack?.label || 'Basic Microphone Input',
+      methodUsed: 'relaxed_audio_constraints',
+      sampleRate: activeTrack?.getSettings?.()?.sampleRate
+    };
+  } catch (err: any) {
+    if (isPermissionDeniedError(err)) {
+      throwPermissionError(err);
+    }
+  }
+
+  // If all attempts failed with device routing errors
+  const notFoundErr: any = new Error(
+    'No audio input device found. Please verify that your microphone is plugged in, enabled in Windows sound settings, and unmuted.'
+  );
+  notFoundErr.name = 'NotFoundError';
+  throw notFoundErr;
 };
 
 /**
  * Start listening to an existing microphone stream for real-time volume / audio level feedback.
+ * Provides normalized overall level, dB calculation, and 8 animated frequency bands.
  */
 export const startMicrophoneAudioMonitor = (
   stream: MediaStream,
-  onLevel: (info: MicAudioLevelInfo) => void
+  onLevel: (info: MicAudioLevelInfo) => void,
+  onTrackInterrupted?: (reason: string) => void
 ): MicAudioMonitorSession => {
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   const audioContext = new AudioContextClass();
+
+  // Resume AudioContext if browser created it in suspended state
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {});
+  }
+
   const sourceNode = audioContext.createMediaStreamSource(stream);
   const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 256;
-  analyser.smoothingTimeConstant = 0.6;
+  analyser.fftSize = 64; // Gives 32 frequency bins, ideal for fast 8-band visualizer
+  analyser.smoothingTimeConstant = 0.5;
   sourceNode.connect(analyser);
 
   let animationFrameId: number | null = null;
   const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+  // Monitor hardware track state changes (e.g. mute switch or unplug)
+  const tracks = stream.getAudioTracks();
+  if (tracks.length > 0) {
+    const track = tracks[0];
+    track.onended = () => {
+      onTrackInterrupted?.('Microphone track was stopped or disconnected.');
+    };
+    track.onmute = () => {
+      onTrackInterrupted?.('Microphone was muted by the operating system.');
+    };
+    track.onunmute = () => {
+      // Hardware unmuted
+    };
+  }
 
   const monitorLoop = () => {
     if (audioContext.state === 'closed') return;
     analyser.getByteFrequencyData(dataArray);
 
     let sum = 0;
+    const bandSize = Math.max(1, Math.floor(dataArray.length / 8));
+    const frequencyBands: number[] = [];
+
+    for (let i = 0; i < 8; i++) {
+      let bandSum = 0;
+      const start = i * bandSize;
+      const end = Math.min(dataArray.length, start + bandSize);
+      for (let j = start; j < end; j++) {
+        bandSum += dataArray[j];
+      }
+      const bandAvg = bandSum / (end - start || 1);
+      frequencyBands.push(Math.min(100, Math.round((bandAvg / 128) * 100)));
+    }
+
     for (let i = 0; i < dataArray.length; i++) {
       sum += dataArray[i];
     }
     const average = sum / dataArray.length;
     // Map average (0-128) to 0-100 percentage
     const normalizedLevel = Math.min(100, Math.round((average / 110) * 100));
-    const isDetected = normalizedLevel > 3;
+    const isDetected = normalizedLevel > 2;
 
     onLevel({
       volumeLevel: normalizedLevel,
       isSoundDetected: isDetected,
-      peakDb: isDetected ? Math.round(-60 + (normalizedLevel * 0.6)) : -80
+      peakDb: isDetected ? Math.round(-60 + (normalizedLevel * 0.6)) : -80,
+      frequencyData: frequencyBands
     });
 
     animationFrameId = requestAnimationFrame(monitorLoop);
@@ -184,16 +419,18 @@ export const startMicrophoneAudioMonitor = (
 
 /**
  * Start continuous Speech Recognition via Web Speech API
- * Directly listens to English audio received by the microphone.
+ * Automatically manages continuous recognition, session recycling on pauses,
+ * and reliable interim-to-final sentence processing.
  */
 export const startMicrophoneSpeechRecognition = (callbacks: {
   onInterimText: (partial: string) => void;
   onFinalSentence: (sentence: string, confidence?: number) => void;
   onError?: (details: SpeechRecognitionErrorDetails) => void;
   onListeningStateChange?: (isListening: boolean) => void;
+  onSpeechEvent?: (eventName: string) => void;
 }): SpeechRecognitionSession => {
   if (!isSpeechRecognitionSupported()) {
-    const err = 'Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.';
+    const err = 'Speech Recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Opera.';
     callbacks.onError?.({
       name: 'NotSupportedError',
       message: err,
@@ -209,8 +446,11 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
   let recognition: any = null;
   let isManualStopped = false;
   let activeRunning = false;
+  let restartTimeoutId: any = null;
 
-  const initRecognition = () => {
+  const createAndStartRecognitionInstance = () => {
+    if (isManualStopped) return;
+
     try {
       recognition = new SpeechRecognitionClass();
       recognition.continuous = true;
@@ -221,19 +461,42 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
       recognition.onstart = () => {
         activeRunning = true;
         callbacks.onListeningStateChange?.(true);
+        callbacks.onSpeechEvent?.('Recognition Started (Listening)');
+      };
+
+      recognition.onaudiostart = () => {
+        callbacks.onSpeechEvent?.('Microphone Audio Capturing');
+      };
+
+      recognition.onsoundstart = () => {
+        callbacks.onSpeechEvent?.('Audio Sound Detected');
+      };
+
+      recognition.onspeechstart = () => {
+        callbacks.onSpeechEvent?.('Speech Active');
+      };
+
+      recognition.onspeechend = () => {
+        callbacks.onSpeechEvent?.('Speech Concluded (Processing)');
       };
 
       recognition.onresult = (event: any) => {
+        callbacks.onSpeechEvent?.('Speech Results Received');
+
         let interim = '';
         let final = '';
-        let confidence: number | undefined;
+        let highestConfidence: number | undefined;
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const result = event.results[i];
-          const transcript = result[0].transcript;
-          if (result.isFinal) {
+          const res = event.results[i];
+          if (!res || !res[0]) continue;
+
+          const transcript = res[0].transcript || '';
+          if (res.isFinal) {
             final += transcript;
-            confidence = result[0].confidence;
+            if (typeof res[0].confidence === 'number' && res[0].confidence > 0) {
+              highestConfidence = res[0].confidence;
+            }
           } else {
             interim += transcript;
           }
@@ -244,7 +507,7 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
         }
 
         if (final.trim()) {
-          callbacks.onFinalSentence(final.trim(), confidence);
+          callbacks.onFinalSentence(final.trim(), highestConfidence);
         }
       };
 
@@ -252,8 +515,10 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
         const errorType = event.error || 'unknown_error';
         const rawMessage = event.message || '';
 
+        callbacks.onSpeechEvent?.(`Notice: ${errorType}`);
+
         if (errorType === 'no-speech') {
-          // Normal pause in speaking, keep listening
+          // Normal pause in speaking, ignore and keep listening
           return;
         }
 
@@ -263,7 +528,9 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
           callbacks.onListeningStateChange?.(false);
           callbacks.onError?.({
             name: 'NotAllowedError',
-            message: rawMessage || 'Speech recognition reported "not-allowed". In Chromium browsers, this occurs if microphone permission is blocked by permissions policy (such as in an embedded iframe) or if site permission was blocked.',
+            message:
+              rawMessage ||
+              'Speech recognition reported "not-allowed". In Chromium browsers, this occurs if microphone permission is blocked by permissions policy (such as in an embedded iframe) or if site permission was blocked.',
             rawError: errorType,
             isFatal: true
           });
@@ -271,22 +538,15 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
         }
 
         if (errorType === 'audio-capture') {
-          isManualStopped = true;
-          activeRunning = false;
-          callbacks.onListeningStateChange?.(false);
-          callbacks.onError?.({
-            name: 'AudioCaptureError',
-            message: 'No microphone was found or the microphone device is currently in use by another application.',
-            rawError: errorType,
-            isFatal: true
-          });
+          // Non-fatal transient lock: wait 600ms and re-attempt
+          callbacks.onSpeechEvent?.('Audio capture busy, cycling recognition...');
           return;
         }
 
         if (errorType === 'network') {
           callbacks.onError?.({
             name: 'NetworkError',
-            message: 'Browser speech recognition requires an active internet connection to transcribe audio.',
+            message: 'Browser speech recognition requires an active internet connection to transcribe audio in real time.',
             rawError: errorType,
             isFatal: false
           });
@@ -303,21 +563,16 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
 
       recognition.onend = () => {
         activeRunning = false;
+        callbacks.onSpeechEvent?.('Recognition Session Cycled');
+
+        // Automatic seamless restart if user has not clicked Stop Listening
         if (!isManualStopped) {
-          // Auto restart to maintain continuous listening without interruption
-          try {
-            recognition.start();
-          } catch {
-            setTimeout(() => {
-              if (!isManualStopped) {
-                try {
-                  recognition.start();
-                } catch {
-                  callbacks.onListeningStateChange?.(false);
-                }
-              }
-            }, 300);
-          }
+          if (restartTimeoutId) clearTimeout(restartTimeoutId);
+          restartTimeoutId = setTimeout(() => {
+            if (!isManualStopped) {
+              createAndStartRecognitionInstance();
+            }
+          }, 350);
         } else {
           callbacks.onListeningStateChange?.(false);
         }
@@ -333,16 +588,21 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
         rawError: err.message || '',
         isFatal: true
       });
-      throw err;
     }
   };
 
-  initRecognition();
+  createAndStartRecognitionInstance();
 
   const stop = () => {
     isManualStopped = true;
     activeRunning = false;
+    if (restartTimeoutId) {
+      clearTimeout(restartTimeoutId);
+      restartTimeoutId = null;
+    }
     callbacks.onListeningStateChange?.(false);
+    callbacks.onSpeechEvent?.('Recognition Stopped');
+
     if (recognition) {
       try {
         recognition.stop();
@@ -350,12 +610,91 @@ export const startMicrophoneSpeechRecognition = (callbacks: {
       try {
         recognition.abort();
       } catch {}
+      recognition = null;
     }
   };
 
   return {
     stop,
     isRunning: () => activeRunning
+  };
+};
+
+/**
+ * Test real microphone audio input without simulation.
+ * Verifies that the MediaStream has active audio tracks and detects actual volume.
+ */
+export const testRealMicrophoneInput = async (
+  stream: MediaStream,
+  durationMs: number = 800
+): Promise<{
+  hasInputSignal: boolean;
+  peakLevel: number;
+  trackLabel: string;
+  trackReadyState: string;
+  isMuted: boolean;
+}> => {
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    return {
+      hasInputSignal: false,
+      peakLevel: 0,
+      trackLabel: 'None',
+      trackReadyState: 'ended',
+      isMuted: true
+    };
+  }
+
+  const track = audioTracks[0];
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const audioCtx = new AudioContextClass();
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume().catch(() => {});
+  }
+
+  const sourceNode = audioCtx.createMediaStreamSource(stream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 64;
+  sourceNode.connect(analyser);
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  let maxVolume = 0;
+
+  const startTime = Date.now();
+  await new Promise<void>((resolve) => {
+    const checkInterval = setInterval(() => {
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const avg = sum / dataArray.length;
+      const normalized = Math.min(100, Math.round((avg / 110) * 100));
+      if (normalized > maxVolume) {
+        maxVolume = normalized;
+      }
+
+      if (Date.now() - startTime >= durationMs) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 40);
+  });
+
+  try {
+    sourceNode.disconnect();
+    analyser.disconnect();
+    if (audioCtx.state !== 'closed') {
+      audioCtx.close().catch(() => {});
+    }
+  } catch {}
+
+  return {
+    hasInputSignal: maxVolume > 2,
+    peakLevel: maxVolume,
+    trackLabel: track.label || 'Audio Input',
+    trackReadyState: track.readyState,
+    isMuted: track.muted
   };
 };
 

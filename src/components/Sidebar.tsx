@@ -48,7 +48,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
-  const { logoUrl, logoSettings } = useWebsiteDesign();
 
   const handleItemClick = (page: SaasNavPage) => {
     onNavigate(page);
@@ -103,18 +102,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center space-x-3 cursor-pointer group min-w-0"
           title="ISEZERANO ONLINE – GS GITUMBA"
         >
-          {logoSettings.showInSidebar && (
-            <div className={`w-10 h-10 overflow-hidden bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 shadow-md group-hover:border-teal-400 transition-all ${logoSettings.borderRadius}`}>
-              <img 
-                src={logoUrl} 
-                alt={logoSettings.altText || "ISEZERANO ONLINE – GS GITUMBA Logo"} 
-                className={`w-full h-full object-${logoSettings.displayFit}`} 
-                referrerPolicy="no-referrer"
-              />
+          {isCollapsed ? (
+            <div className="w-8 h-8 rounded-lg bg-teal-600/20 border border-teal-500/30 flex items-center justify-center shrink-0 text-teal-300 font-bold text-xs">
+              IO
             </div>
-          )}
-
-          {!isCollapsed && (
+          ) : (
             <div className="min-w-0 flex flex-col justify-center">
               <span className="font-extrabold text-sm tracking-tight text-white group-hover:text-teal-300 transition-colors truncate leading-tight">
                 ISEZERANO ONLINE

@@ -15,7 +15,6 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,7 +28,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   defaultMode = 'signin' 
 }) => {
   const { signIn, signInWithGoogle, signUp, sendResetEmail } = useAuth();
-  const { logoUrl, logoSettings } = useWebsiteDesign();
   const [view, setView] = useState<'signin' | 'signup' | 'reset'>(
     defaultMode === 'signup' ? 'signup' : defaultMode === 'reset' ? 'reset' : 'signin'
   );
@@ -157,17 +155,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
 
           <div className="flex items-center space-x-3 mb-2">
-            <div 
-              className="w-10 h-10 overflow-hidden bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 shadow-md"
-              style={{ borderRadius: `${logoSettings.borderRadius}px` }}
-            >
-              <img 
-                src={logoUrl || '/isezerano-online-logo.jpg'} 
-                alt={logoSettings.altText || 'ISEZERANO ONLINE Logo'} 
-                className="w-full h-full"
-                style={{ objectFit: logoSettings.displayFit }}
-                referrerPolicy="no-referrer"
-              />
+            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0 shadow-inner">
+              <ShieldCheck className="w-5 h-5 text-teal-400" />
             </div>
             <div>
               <h2 className="text-lg font-bold tracking-tight text-white flex items-center space-x-2">
