@@ -7,7 +7,6 @@ import {
   GraduationCap, 
   Users, 
   Printer, 
-  Headphones,
   School,
   Sparkles
 } from 'lucide-react';
@@ -165,32 +164,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
         </div>
-      </section>
-
-      {/* Secondary Companion Card: EF AI Audio Assistant */}
-      <section className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
-            <Headphones className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="text-sm sm:text-base font-bold text-white">
-              EF AI Audio Assistant
-            </h4>
-            <p className="text-xs text-slate-400">
-              Practice English listening and pronunciation with AI Voice.
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onNavigate('ef-audio')}
-          className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all inline-flex items-center space-x-1.5 cursor-pointer shrink-0"
-        >
-          <span>Open Audio Assistant</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
       </section>
 
       {/* Clean Institutional Footnote */}

@@ -16,7 +16,8 @@ import {
   saveLessonPlanToFirestore, 
   deleteLessonPlanFromFirestore, 
   duplicateLessonPlanLocal,
-  createEmptyLessonPlan
+  createEmptyLessonPlan,
+  syncCloudLessonPlans
 } from './services/storageService';
 
 // Public Website Components & Views
@@ -38,7 +39,7 @@ import { NurseryReportsView } from './views/NurseryReportsView';
 import { TeacherProfileView } from './views/TeacherProfileView';
 import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
 import { AdminPortalGateway } from './views/AdminPortalGateway';
-import { EfAudioAssistantView } from './views/EfAudioAssistantView';
+import { LessonPlanAuthGate } from './components/LessonPlanAuthGate';
 
 // Admin Portal & Modals
 import { AdminDashboardView } from './views/AdminDashboardView';
@@ -93,18 +94,6 @@ const getPageFromUrl = (): AppPage => {
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
   if (pathname === '/terms' || hash === '#terms' || search.get('page') === 'terms') return 'terms';
-  if (
-    pathname === '/ef-audio' || 
-    pathname.startsWith('/ef-audio') || 
-    pathname === '/ef-assistant' || 
-    pathname.startsWith('/ef-assistant') || 
-    hash === '#ef-audio' || 
-    hash === '#ef-assistant' || 
-    search.get('page') === 'ef-audio' || 
-    search.get('page') === 'ef-assistant'
-  ) {
-    return 'ef-audio';
-  }
 
   return 'home';
 };
@@ -124,13 +113,21 @@ function AppContent() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [selectedNotice, setSelectedNotice] = useState<PushAnnouncement | null>(null);
 
-  // Load saved lesson plans on mount
+  // Load saved lesson plans for authenticated user
   const refreshData = () => {
-    setLessonPlans(getSavedLessonPlans());
+    setLessonPlans(getSavedLessonPlans(user?.uid));
   };
 
   useEffect(() => {
     refreshData();
+    if (user?.uid) {
+      syncCloudLessonPlans(user.uid, isAdmin).then((synced: LessonPlan[]) => {
+        setLessonPlans(synced);
+      });
+    }
+  }, [user?.uid, isAdmin]);
+
+  useEffect(() => {
 
     // Check if user arrived via FCM notification click (?notice=<id>)
     if (typeof window !== 'undefined' && window.location.search) {
@@ -281,22 +278,7 @@ function AppContent() {
 
   const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'nursery'].includes(currentPage);
 
-  // If opened in dedicated compact companion window (?compact=true), render minimal view without site header/footer
-  const isCompactMode = typeof window !== 'undefined' && (
-    new URLSearchParams(window.location.search).get('compact') === 'true' ||
-    new URLSearchParams(window.location.search).get('mode') === 'compact'
-  );
 
-  if (currentPage === 'ef-audio' && isCompactMode) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white font-sans antialiased">
-        <EfAudioAssistantView
-          initialCompact={true}
-          onNavigateHome={() => handleNavigate('home')}
-        />
-      </div>
-    );
-  }
 
   return (
     <div 
@@ -362,8 +344,6 @@ function AppContent() {
                 handleNavigate('admin');
               } else if ((page as string) === 'profile') {
                 handleNavigate('profile');
-              } else if ((page as string) === 'ef-audio') {
-                handleNavigate('ef-audio');
               } else {
                 handleNavigate('dashboard');
               }
@@ -488,26 +468,40 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Sub-View 1: Main Create Lesson Plan View (Primary) */}
+            {/* Sub-View 1: Main Create Lesson Plan View (Requires Google Sign-In) */}
             {currentPage === 'create' && (
-              <CreateLessonPlanView
-                initialPlan={editingPlan}
-                onSavePlan={handleSaveLessonPlan}
-                onPrintPreview={handlePrintPlan}
-                onCancelOrNew={handleCreateNew}
-              />
+              !user ? (
+                <LessonPlanAuthGate
+                  onSuccess={() => refreshData()}
+                  onNavigateHome={() => handleNavigate('home')}
+                />
+              ) : (
+                <CreateLessonPlanView
+                  initialPlan={editingPlan}
+                  onSavePlan={handleSaveLessonPlan}
+                  onPrintPreview={handlePrintPlan}
+                  onCancelOrNew={handleCreateNew}
+                />
+              )
             )}
 
-            {/* Sub-View 2: Saved Lesson Plans */}
+            {/* Sub-View 2: Saved Lesson Plans (Requires Google Sign-In) */}
             {currentPage === 'saved' && (
-              <SavedLessonPlansView
-                lessonPlans={lessonPlans}
-                onEditPlan={handleEditPlan}
-                onDeletePlan={handleDeleteLessonPlan}
-                onDuplicatePlan={handleDuplicateLessonPlan}
-                onPrintPlan={handlePrintPlan}
-                onCreateNew={handleCreateNew}
-              />
+              !user ? (
+                <LessonPlanAuthGate
+                  onSuccess={() => refreshData()}
+                  onNavigateHome={() => handleNavigate('home')}
+                />
+              ) : (
+                <SavedLessonPlansView
+                  lessonPlans={lessonPlans}
+                  onEditPlan={handleEditPlan}
+                  onDeletePlan={handleDeleteLessonPlan}
+                  onDuplicatePlan={handleDuplicateLessonPlan}
+                  onPrintPlan={handlePrintPlan}
+                  onCreateNew={handleCreateNew}
+                />
+              )
             )}
 
             {/* Sub-View 3: Preferences / Settings */}
@@ -571,12 +565,7 @@ function AppContent() {
           />
         )}
 
-        {/* EF AI AUDIO ASSISTANT VIEW: Companion for EF English Lessons */}
-        {currentPage === 'ef-audio' && (
-          <EfAudioAssistantView
-            onNavigateHome={() => handleNavigate('home')}
-          />
-        )}
+
 
       </main>
 

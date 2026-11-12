@@ -328,7 +328,7 @@ export const DEFAULT_ANNOUNCEMENT_STRIP: AnnouncementStripSettings = {
 };
 
 export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
-  logoUrl: '/isezerano-online-logo.jpg',
+  logoUrl: '',
   isCustomLogo: false,
   displayHeight: 48,
   displayFit: 'cover',
@@ -370,17 +370,6 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     badgeColor: 'amber',
     enabled: true,
     order: 3,
-    location: 'both'
-  },
-  {
-    id: 'nav-ef-audio',
-    label: 'EF Audio Assistant',
-    path: 'ef-audio',
-    icon: 'Headphones',
-    badge: 'AI',
-    badgeColor: 'teal',
-    enabled: true,
-    order: 4,
     location: 'both'
   },
   {

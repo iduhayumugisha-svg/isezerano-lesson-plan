@@ -69,14 +69,9 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
 
         {/* HEADER */}
         <div className="flex items-center space-x-3 border-b border-slate-100 pb-4 pr-10">
-          <img
-            src="/isezerano-online-logo.jpg"
-            alt="ISEZERANO ONLINE"
-            className="w-12 h-12 rounded-2xl object-contain border border-slate-200 shadow-2xs p-1 bg-white shrink-0"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-teal-50 border border-teal-200 shadow-2xs shrink-0">
+            <Bell className="w-6 h-6 text-teal-700" />
+          </div>
           <div className="min-w-0">
             <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 block">
               ISEZERANO ONLINE – GS GITUMBA

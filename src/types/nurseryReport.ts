@@ -342,6 +342,7 @@ export interface StudentTermAssessment {
 
 export interface NurserySchoolInfo {
   schoolName: string;
+  province?: string;
   district: string;
   sector: string;
   cell: string;
@@ -358,6 +359,7 @@ export interface NurserySchoolInfo {
 
 export const EMPTY_NURSERY_SCHOOL_INFO: NurserySchoolInfo = {
   schoolName: '',
+  province: '',
   district: '',
   sector: '',
   cell: '',

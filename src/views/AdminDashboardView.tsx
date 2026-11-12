@@ -57,6 +57,7 @@ import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
 import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAndColorsManager';
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
+import { AdminSchoolDirectoryPanel } from '../components/AdminSchoolDirectoryPanel';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -70,7 +71,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'design' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -415,6 +416,20 @@ promoteToAdmin('admin@example.com');`;
           </span>
         </button>
 
+        <button
+          onClick={() => setActiveTab('schools')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'schools'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <School className="w-4 h-4 text-teal-400" />
+          <span>School Directory</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'schools' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            Auto-Fill
+          </span>
+        </button>
 
         <button
           onClick={() => setActiveTab('ads')}
@@ -548,6 +563,11 @@ promoteToAdmin('admin@example.com');`;
       {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}
       {activeTab === 'design' && (
         <WebsiteDesignManager />
+      )}
+
+      {/* ================= TAB: RWANDA SCHOOL DIRECTORY MANAGEMENT ================= */}
+      {activeTab === 'schools' && (
+        <AdminSchoolDirectoryPanel adminUid={user?.uid} />
       )}
 
 

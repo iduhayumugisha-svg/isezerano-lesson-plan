@@ -277,14 +277,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                     }`}
                   >
                     <div className="shrink-0 mt-0.5">
-                      <img
-                        src="/isezerano-online-logo.jpg"
-                        alt="Logo"
-                        className="w-7 h-7 rounded-lg object-contain border border-slate-200 bg-white p-0.5"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-teal-50 border border-teal-200">
+                        <Bell className="w-3.5 h-3.5 text-teal-600" />
+                      </div>
                     </div>
 
                     <div className="flex-1 min-w-0">

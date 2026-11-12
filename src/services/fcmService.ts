@@ -365,8 +365,6 @@ export const showLocalTestNotification = async (title: string, body: string, not
     if (sw) {
       await (sw as any).showNotification(title || 'ISEZERANO ONLINE – GS GITUMBA', {
         body,
-        icon: '/isezerano-online-logo.jpg',
-        badge: '/favicon.png',
         data: {
           url: '/?notice=' + (noticeId || 'test'),
           noticeId: noticeId || 'test',
@@ -377,9 +375,7 @@ export const showLocalTestNotification = async (title: string, body: string, not
       });
     } else {
       new Notification(title, {
-        body,
-        icon: '/isezerano-online-logo.jpg',
-        badge: '/favicon.png'
+        body
       });
     }
   } catch (err) {
@@ -495,8 +491,7 @@ export const sendPushAnnouncement = async (
       priority: (data.priority === 'urgent' ? 'high' : data.priority) || 'normal',
       requiresAuth: true,
       actionUrl: data.actionUrl || `/?notice=${noticeId}`,
-      status: 'sent',
-      icon: '/isezerano-online-logo.jpg'
+      status: 'sent'
     };
 
     // 2. Fetch all registered devices from local cache + Firestore

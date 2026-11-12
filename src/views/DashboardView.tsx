@@ -15,8 +15,7 @@ import {
   ShieldCheck, 
   Home,
   Award,
-  User,
-  Headphones
+  User
 } from 'lucide-react';
 import { LessonPlan } from '../types/lessonPlan';
 import { SaasNavPage } from '../components/Sidebar';
@@ -85,16 +84,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       icon: User,
       iconColor: 'bg-teal-50 text-teal-700 group-hover:bg-teal-700 group-hover:text-white',
       buttonText: 'Fungura Umwirondoro'
-    },
-    {
-      id: 'ef-audio' as any,
-      title: 'EF AI Audio Assistant',
-      badge: '100% Free • AI Voice',
-      badgeColor: 'bg-emerald-50 text-emerald-900 border-emerald-200',
-      description: 'Companion tool for EF English lessons: capture tab audio, speech-to-text transcription, listen to AI voice pronunciation, and practice side-by-side.',
-      icon: Headphones,
-      iconColor: 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-700 group-hover:text-white',
-      buttonText: 'Launch EF Assistant'
     },
     {
       id: 'settings' as SaasNavPage,

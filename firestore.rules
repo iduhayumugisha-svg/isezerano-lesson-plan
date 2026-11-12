@@ -89,6 +89,14 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // 2b. Official School Directory Records (Public Read, Admin Write)
+    // ==============================================================
+    match /school_directory/{schoolId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ==============================================================
     // 3. Lesson Plans Collection (Authoritative ownerUid, No Conflicting IDs)
     // ==============================================================
     // Authoritative check: ownerUid must be present, match caller UID, and cannot conflict with userId

@@ -67,6 +67,8 @@ import {
 import { compressLogoFile } from '../services/websiteDesignService';
 import { getFirebaseAuth } from '../services/storageService';
 import { NurseryReportCardDocument } from '../components/NurseryReportCardDocument';
+import { SchoolLocationSelector } from '../components/SchoolLocationSelector';
+import { SchoolDirectoryAutoFill } from '../components/SchoolDirectoryAutoFill';
 
 interface NurseryReportsViewProps {
   onNavigateHome: () => void;
@@ -1734,7 +1736,27 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
           </div>
 
           <form onSubmit={handleSaveSchoolInfo} className="space-y-4 text-xs">
-            {/* School Name */}
+            
+            {/* 1. School Directory Auto-Fill Selector */}
+            <SchoolDirectoryAutoFill
+              isAdmin={isAdmin}
+              adminUid={user?.uid}
+              onSelectSchool={(school) => {
+                setSchoolInfo({
+                  ...schoolInfo,
+                  schoolName: school.name,
+                  province: school.province,
+                  district: school.district,
+                  sector: school.sector,
+                  cell: school.cell,
+                  village: school.village,
+                  headTeacherPhone: school.phone || schoolInfo.headTeacherPhone,
+                  headTeacherName: school.headTeacherName || schoolInfo.headTeacherName
+                });
+              }}
+            />
+
+            {/* 2. School Name */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">
                 Izina ry'Ikigo (School Name):
@@ -1744,56 +1766,28 @@ export const NurseryReportsView: React.FC<NurseryReportsViewProps> = ({
                 value={schoolInfo.schoolName}
                 onChange={(e) => setSchoolInfo({ ...schoolInfo, schoolName: e.target.value })}
                 placeholder="Urugero: GS GITUMBA"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs font-medium"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs font-semibold"
               />
             </div>
 
-            {/* Location row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Akarere (District):</label>
-                <input
-                  type="text"
-                  value={schoolInfo.district}
-                  onChange={(e) => setSchoolInfo({ ...schoolInfo, district: e.target.value })}
-                  placeholder="Urugero: Rulindo"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Umurenge (Sector):</label>
-                <input
-                  type="text"
-                  value={schoolInfo.sector}
-                  onChange={(e) => setSchoolInfo({ ...schoolInfo, sector: e.target.value })}
-                  placeholder="Urugero: Buyoga"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Akagari (Cell):</label>
-                <input
-                  type="text"
-                  value={schoolInfo.cell}
-                  onChange={(e) => setSchoolInfo({ ...schoolInfo, cell: e.target.value })}
-                  placeholder="Urugero: Gitumba"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Umudugudu (Village):</label>
-                <input
-                  type="text"
-                  value={schoolInfo.village}
-                  onChange={(e) => setSchoolInfo({ ...schoolInfo, village: e.target.value })}
-                  placeholder="Urugero: Nyarubande"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs"
-                />
-              </div>
-            </div>
+            {/* 3. Dependent Rwanda Location Selector (Province -> District -> Sector -> Cell -> Village) */}
+            <SchoolLocationSelector
+              province={schoolInfo.province || ''}
+              district={schoolInfo.district || ''}
+              sector={schoolInfo.sector || ''}
+              cell={schoolInfo.cell || ''}
+              village={schoolInfo.village || ''}
+              onChange={(loc) => {
+                setSchoolInfo({
+                  ...schoolInfo,
+                  province: loc.province,
+                  district: loc.district,
+                  sector: loc.sector,
+                  cell: loc.cell,
+                  village: loc.village
+                });
+              }}
+            />
 
             {/* Academic Year & Head Teacher */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

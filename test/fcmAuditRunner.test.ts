@@ -144,8 +144,6 @@ async function startSuite() {
     const sampleNotification = {
       title: 'ISEZERANO ONLINE – GS GITUMBA',
       body: 'Itangazo rishya ryatanzwe n\'umuyobozi.',
-      icon: '/isezerano-online-logo.jpg',
-      badge: '/favicon.png',
       requireInteraction: true,
       data: {
         url: '/?notice=notice_test_1',
@@ -155,7 +153,6 @@ async function startSuite() {
     };
     assert.strictEqual(sampleNotification.requireInteraction, true);
     assert.strictEqual(sampleNotification.data.requiresAuth, true);
-    assert.strictEqual(sampleNotification.icon, '/isezerano-online-logo.jpg');
   });
 
   // Test 5: Authentication Gating on Notification Tap

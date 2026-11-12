@@ -30,8 +30,6 @@ messaging.onBackgroundMessage((payload) => {
 
   const options = {
     body: body,
-    icon: '/isezerano-online-logo.jpg',
-    badge: '/favicon.png',
     image: payload.notification?.image || payload.data?.image || undefined,
     data: {
       url: targetUrl,
@@ -65,8 +63,6 @@ self.addEventListener('push', (event) => {
 
     const options = {
       body: body,
-      icon: '/isezerano-online-logo.jpg',
-      badge: '/favicon.png',
       data: {
         url: targetUrl,
         noticeId: noticeId,
@@ -85,8 +81,6 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
       self.registration.showNotification('ISEZERANO ONLINE – GS GITUMBA', {
         body: text,
-        icon: '/isezerano-online-logo.jpg',
-        badge: '/favicon.png',
         data: { url: '/', requiresAuth: true },
         requireInteraction: true
       })
@@ -126,8 +120,6 @@ self.addEventListener('message', (event) => {
     const { title, body, noticeId } = event.data;
     self.registration.showNotification(title || 'ISEZERANO ONLINE – GS GITUMBA', {
       body: body || 'Igerageza ry\'itangazo ryoherejwe neza kuri iyi mudasobwa cyangwa terefone.',
-      icon: '/isezerano-online-logo.jpg',
-      badge: '/favicon.png',
       data: {
         url: '/?notice=' + (noticeId || 'test'),
         noticeId: noticeId || 'test',

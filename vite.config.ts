@@ -149,7 +149,6 @@ function imageResolverPlugin(): Plugin {
                   notification: {
                     title: title || 'ISEZERANO ONLINE – GS GITUMBA',
                     body: body || 'Itangazo rishya ry\'Abarimu',
-                    icon: '/isezerano-online-logo.jpg',
                     click_action: url || `/?notice=${noticeId}`
                   },
                   data: {

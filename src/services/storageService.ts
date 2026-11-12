@@ -167,28 +167,59 @@ export const saveTeacherInfo = (info: TeacherInfo): void => {
   localStorage.setItem(STORAGE_KEYS.TEACHER, JSON.stringify(info));
 };
 
-export const getSavedLessonPlans = (): LessonPlan[] => {
+export const getLessonStorageKey = (userUid?: string): string => {
+  const auth = getFirebaseAuth();
+  const activeUid = userUid || auth?.currentUser?.uid;
+  return activeUid ? `${STORAGE_KEYS.LESSONS}_${activeUid}` : STORAGE_KEYS.LESSONS;
+};
+
+export const getSavedLessonPlans = (userUid?: string): LessonPlan[] => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.LESSONS);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const auth = getFirebaseAuth();
+    const activeUid = userUid || auth?.currentUser?.uid;
+    const key = getLessonStorageKey(activeUid);
+    const raw = localStorage.getItem(key);
+    let parsed: LessonPlan[] = [];
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) parsed = arr;
+    }
+    // Migration: If user has no plans in user-scoped key, check legacy shared key
+    if (parsed.length === 0 && activeUid) {
+      const legacyRaw = localStorage.getItem(STORAGE_KEYS.LESSONS);
+      if (legacyRaw) {
+        const legacyArr = JSON.parse(legacyRaw);
+        if (Array.isArray(legacyArr)) {
+          const userPlans = legacyArr.filter((p: LessonPlan) => !p.ownerUid || p.ownerUid === activeUid);
+          if (userPlans.length > 0) {
+            localStorage.setItem(key, JSON.stringify(userPlans));
+            return userPlans;
+          }
+        }
+      }
+    }
+    return parsed;
   } catch {
     return [];
   }
 };
 
-export const getLessonPlanById = (id: string): LessonPlan | null => {
-  const plans = getSavedLessonPlans();
+export const getLessonPlanById = (id: string, userUid?: string): LessonPlan | null => {
+  const plans = getSavedLessonPlans(userUid);
   return plans.find(p => p.id === id) || null;
 };
 
-export const saveLessonPlanLocal = (plan: LessonPlan): { success: boolean; error?: string } => {
+export const saveLessonPlanLocal = (plan: LessonPlan, userUid?: string): { success: boolean; error?: string } => {
   try {
-    const plans = getSavedLessonPlans();
+    const auth = getFirebaseAuth();
+    const activeUid = userUid || plan.ownerUid || auth?.currentUser?.uid;
+    const key = getLessonStorageKey(activeUid);
+    const plans = getSavedLessonPlans(activeUid);
     const existingIndex = plans.findIndex(p => p.id === plan.id);
     const updatedPlan: LessonPlan = {
       ...plan,
+      ownerUid: plan.ownerUid || activeUid || 'guest-teacher',
+      userId: plan.userId || plan.ownerUid || activeUid || 'guest-teacher',
       updatedAt: new Date().toISOString()
     };
 
@@ -198,7 +229,7 @@ export const saveLessonPlanLocal = (plan: LessonPlan): { success: boolean; error
       plans.unshift(updatedPlan);
     }
 
-    localStorage.setItem(STORAGE_KEYS.LESSONS, JSON.stringify(plans));
+    localStorage.setItem(key, JSON.stringify(plans));
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to save lesson plan';
@@ -206,11 +237,14 @@ export const saveLessonPlanLocal = (plan: LessonPlan): { success: boolean; error
   }
 };
 
-export const deleteLessonPlanLocal = (id: string): boolean => {
+export const deleteLessonPlanLocal = (id: string, userUid?: string): boolean => {
   try {
-    const plans = getSavedLessonPlans();
+    const auth = getFirebaseAuth();
+    const activeUid = userUid || auth?.currentUser?.uid;
+    const key = getLessonStorageKey(activeUid);
+    const plans = getSavedLessonPlans(activeUid);
     const filtered = plans.filter(p => p.id !== id);
-    localStorage.setItem(STORAGE_KEYS.LESSONS, JSON.stringify(filtered));
+    localStorage.setItem(key, JSON.stringify(filtered));
     return true;
   } catch {
     return false;
@@ -496,8 +530,12 @@ export const getFirebaseAuth = () => {
 };
 
 export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ success: boolean; error?: string; isCloudSynced?: boolean }> => {
-  // Always save locally first so public teachers can create, edit and download without disruption
-  saveLessonPlanLocal(plan);
+  const auth = getFirebaseAuth();
+  const currentUser = auth?.currentUser;
+  const userUid = currentUser?.uid || plan.ownerUid;
+
+  // Always save locally in user-scoped storage
+  saveLessonPlanLocal(plan, userUid);
 
   const db = initFirestoreIfConfigured();
   if (!db) {
@@ -506,10 +544,7 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
 
   // Save to Firestore for authenticated teachers or administrators
   try {
-    const auth = getFirebaseAuth();
-    const currentUser = auth?.currentUser;
     if (!currentUser || currentUser.isAnonymous) {
-      // Local fallback: plan is safely stored in browser storage
       return { success: true, isCloudSynced: false };
     }
 
@@ -517,6 +552,7 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
     const enriched = {
       ...plan,
       ownerUid: currentUser.uid,
+      userId: currentUser.uid,
       ownerEmail: currentUser.email || plan.ownerEmail || ''
     };
     await setDoc(docRef, enriched);
@@ -528,8 +564,8 @@ export const saveLessonPlanToFirestore = async (plan: LessonPlan): Promise<{ suc
   }
 };
 
-export const deleteLessonPlanFromFirestore = async (id: string): Promise<boolean> => {
-  deleteLessonPlanLocal(id);
+export const deleteLessonPlanFromFirestore = async (id: string, userUid?: string): Promise<boolean> => {
+  deleteLessonPlanLocal(id, userUid);
   const db = initFirestoreIfConfigured();
   if (!db) return true;
 
@@ -550,7 +586,7 @@ export const deleteLessonPlanFromFirestore = async (id: string): Promise<boolean
  */
 export const syncCloudLessonPlans = async (userUid: string, isAdmin: boolean): Promise<LessonPlan[]> => {
   const db = initFirestoreIfConfigured();
-  if (!db) return getSavedLessonPlans();
+  if (!db) return getSavedLessonPlans(userUid);
 
   try {
     let q;
@@ -566,16 +602,17 @@ export const syncCloudLessonPlans = async (userUid: string, isAdmin: boolean): P
     });
 
     if (remotePlans.length > 0) {
-      const local = getSavedLessonPlans();
+      const local = getSavedLessonPlans(userUid);
       const map = new Map<string, LessonPlan>();
       local.forEach(p => map.set(p.id, p));
       remotePlans.forEach(p => map.set(p.id, p));
       const merged = Array.from(map.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      localStorage.setItem(STORAGE_KEYS.LESSONS, JSON.stringify(merged));
+      const key = getLessonStorageKey(userUid);
+      localStorage.setItem(key, JSON.stringify(merged));
       return merged;
     }
   } catch (err) {
     console.warn('Could not sync cloud lesson plans:', err);
   }
-  return getSavedLessonPlans();
+  return getSavedLessonPlans(userUid);
 };
