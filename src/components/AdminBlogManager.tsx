@@ -208,7 +208,7 @@ export const AdminBlogManager: React.FC = () => {
       content: post.content || '',
       thumbnailUrl: resolvedThumb,
       thumbnailAlt: post.thumbnailAlt || post.title,
-      thumbnailStorageMode: post.thumbnailStorageMode,
+      ...(post.thumbnailStorageMode ? { thumbnailStorageMode: post.thumbnailStorageMode } : {}),
       thumbnailIsCustomOverride: isCustomOverride,
       status: post.status,
       publishedAt: post.publishedAt || '',
@@ -303,6 +303,12 @@ export const AdminBlogManager: React.FC = () => {
         ? draft.thumbnailUrl
         : firstContentMeta?.src || (isValidPersistentImageSrc(draft.thumbnailUrl) ? draft.thumbnailUrl : '');
 
+    const validStorageMode =
+      draft.thumbnailStorageMode === 'firebase_storage' ||
+      draft.thumbnailStorageMode === 'firestore_embedded'
+        ? draft.thumbnailStorageMode
+        : undefined;
+
     return {
       id: draft.id,
       title: draft.title.trim(),
@@ -312,13 +318,13 @@ export const AdminBlogManager: React.FC = () => {
       thumbnailUrl: resolvedThumbnailUrl,
       thumbnailAlt:
         draft.thumbnailAlt.trim() || firstContentMeta?.alt || draft.title.trim(),
-      thumbnailStorageMode: draft.thumbnailStorageMode,
+      ...(validStorageMode ? { thumbnailStorageMode: validStorageMode } : {}),
       thumbnailIsCustomOverride: draft.thumbnailIsCustomOverride,
       category: draft.category,
       author: {
         name: draft.authorName.trim() || 'GS GITUMBA Editorial',
         role: draft.authorRole.trim() || 'Administrator',
-        email: user?.email || undefined
+        ...(user?.email ? { email: user.email } : {})
       },
       publishedAt:
         targetStatus === 'published'

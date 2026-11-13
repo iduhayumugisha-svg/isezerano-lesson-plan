@@ -17,13 +17,49 @@ import {
   getFirebaseAuth
 } from './storageService';
 import { isAuthorizedAdminEmail } from './authService';
-import { BlogImageUploadResult, BlogPost } from '../types/blog';
+import { BlogImageStorageMode, BlogImageUploadResult, BlogPost } from '../types/blog';
 import { isValidDateString } from '../utils/dateUtils';
 import {
   estimateUtf8Bytes,
   extractPlainTextExcerpt,
   sanitizePostThumbnail
 } from '../utils/thumbnailUtils';
+
+const VALID_STORAGE_MODES: readonly BlogImageStorageMode[] = [
+  'firebase_storage',
+  'firestore_embedded'
+];
+
+/**
+ * Recursively strips any keys with `undefined` values from plain objects/arrays
+ * so Cloud Firestore `setDoc()` / `updateDoc()` never fail on unsupported `undefined` values.
+ */
+export const stripUndefinedForFirestore = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedForFirestore(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        out[k] = stripUndefinedForFirestore(v);
+      }
+    }
+    return out as T;
+  }
+  return value;
+};
+
+const normalizeBlogStorageMode = (
+  mode: unknown
+): BlogImageStorageMode | undefined => {
+  if (typeof mode === 'string' && (VALID_STORAGE_MODES as readonly string[]).includes(mode)) {
+    return mode as BlogImageStorageMode;
+  }
+  return undefined;
+};
 
 // Old blog posts have been permanently removed; never seed sample articles.
 export const SEED_BLOG_POSTS: BlogPost[] = [];
@@ -286,23 +322,54 @@ export const prepareBlogPostPayload = (
     existingPosts
   );
 
-  const payload: BlogPost = {
+  const normalizedStorageMode = normalizeBlogStorageMode(sanitized.thumbnailStorageMode);
+  const normalizedTags = Array.isArray(sanitized.tags)
+    ? sanitized.tags
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+        .map((t) => t.trim())
+    : undefined;
+
+  const authorEmail =
+    typeof sanitized.author?.email === 'string' && sanitized.author.email.trim()
+      ? sanitized.author.email.trim()
+      : undefined;
+
+  const rawPayload: BlogPost = {
     ...sanitized,
     id: sanitized.id || `post_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     title: sanitized.title.trim(),
     slug: uniqueSlug,
     excerpt: (sanitized.excerpt || '').trim() || extractPlainTextExcerpt(sanitized.content, 160),
-    category: sanitized.category || 'School News',
+    content: sanitized.content || '',
+    thumbnailUrl: sanitized.thumbnailUrl || '',
+    thumbnailAlt: (sanitized.thumbnailAlt || `${sanitized.title.trim()} – Featured Image`).trim(),
+    thumbnailIsCustomOverride: Boolean(sanitized.thumbnailIsCustomOverride),
+    category: (sanitized.category || '').trim() || 'School News',
     author: {
       name: sanitized.author?.name?.trim() || 'GS GITUMBA Editorial',
       role: sanitized.author?.role?.trim() || 'Administrator',
-      ...(sanitized.author?.email ? { email: sanitized.author.email } : {})
+      ...(authorEmail ? { email: authorEmail } : {})
     },
-    readTimeMinutes: calculateReadingTime(sanitized.content || ''),
     publishedAt: resolvedPublishedAt,
     updatedAt: new Date().toISOString(),
+    status: sanitized.status === 'published' ? 'published' : 'draft',
+    readTimeMinutes: calculateReadingTime(sanitized.content || ''),
     views: typeof sanitized.views === 'number' && sanitized.views >= 0 ? sanitized.views : 0
   };
+
+  if (normalizedStorageMode) {
+    rawPayload.thumbnailStorageMode = normalizedStorageMode;
+  } else {
+    delete rawPayload.thumbnailStorageMode;
+  }
+
+  if (normalizedTags) {
+    rawPayload.tags = normalizedTags;
+  } else {
+    delete rawPayload.tags;
+  }
+
+  const payload = stripUndefinedForFirestore(rawPayload);
 
   const payloadBytes = estimateUtf8Bytes(payload);
   if (payloadBytes > MAX_FIRESTORE_POST_BYTES) {
@@ -356,9 +423,10 @@ export const saveBlogPost = async (
 
   try {
     const docRef = doc(db, 'posts', prepared.post.id);
-    await setDoc(docRef, prepared.post, { merge: true });
+    const firestorePayload = stripUndefinedForFirestore(prepared.post);
+    await setDoc(docRef, firestorePayload, { merge: true });
     purgeLocalBlogPosts();
-    return { success: true, post: prepared.post };
+    return { success: true, post: firestorePayload };
   } catch (err: unknown) {
     console.error('Firestore saveBlogPost failed:', err);
     const msg =

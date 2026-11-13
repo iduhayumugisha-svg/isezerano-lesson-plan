@@ -6,6 +6,7 @@ import {
   generateSlug,
   ensureUniqueSlug,
   prepareBlogPostPayload,
+  stripUndefinedForFirestore,
   calculateReadingTime,
   MAX_FIRESTORE_POST_BYTES
 } from '../src/services/blogService';
@@ -321,10 +322,142 @@ function testMultiArticleLifecycleAndSecurity() {
   console.log('✓ 6. Multi-article distinct thumbnails, unique slugs, byte-limit guards, and security verified');
 }
 
+function assertNoUndefinedValuesForFirestore(value: unknown, fieldPath: string = 'root'): void {
+  if (value === undefined) {
+    throw new Error(`Firestore invalid data: Unsupported field value: undefined (found in field ${fieldPath})`);
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, idx) => assertNoUndefinedValuesForFirestore(item, `${fieldPath}[${idx}]`));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      assertNoUndefinedValuesForFirestore(val, `${fieldPath}.${key}`);
+    }
+  }
+}
+
+function testFirestoreUndefinedFieldSafety() {
+  const inlinePhoto = 'data:image/jpeg;base64,' + 'E'.repeat(240);
+  const updatedPhoto = 'data:image/png;base64,' + 'F'.repeat(240);
+  const customCloudUrl = 'https://firebasestorage.googleapis.com/v0/b/isezerano-news.firebasestorage.app/o/posts%2Fcover.jpg?alt=media';
+
+  // 1. Creating & publishing a new Blog article with thumbnailStorageMode: undefined
+  const newPublishedInput: BlogPost = {
+    id: 'post_1794565379907_bdjru',
+    title: 'CBC Formative Assessment Strategies',
+    slug: 'cbc-formative-assessment-strategies',
+    content: `<p>Practical rubric guidance.</p><figure data-blog-figure="true"><img src="${inlinePhoto}" data-width="500" data-height="312" alt="Rubric" /></figure>`,
+    excerpt: '',
+    thumbnailUrl: inlinePhoto,
+    thumbnailStorageMode: undefined,
+    thumbnailIsCustomOverride: false,
+    category: 'CBC Curriculum',
+    author: { name: 'Twizere Felix', role: 'Administrator', email: undefined },
+    publishedAt: new Date('2026-11-13T08:00:00Z').toISOString(),
+    tags: undefined,
+    status: 'published'
+  };
+
+  const publishedRes = prepareBlogPostPayload(newPublishedInput, []);
+  if (!publishedRes.ok) throw new Error(publishedRes.error);
+  assertNoUndefinedValuesForFirestore(publishedRes.post, 'posts/post_1794565379907_bdjru');
+  assert.equal('thumbnailStorageMode' in publishedRes.post, false, 'Undefined thumbnailStorageMode must be omitted');
+  assert.equal('email' in publishedRes.post.author, false, 'Undefined author.email must be omitted');
+  assert.equal('tags' in publishedRes.post, false, 'Undefined tags must be omitted');
+  assert.equal(publishedRes.post.id, 'post_1794565379907_bdjru');
+  assert.equal(publishedRes.post.thumbnailUrl, inlinePhoto);
+
+  // 2. Saving a draft with undefined optional fields
+  const draftInput: BlogPost = {
+    ...newPublishedInput,
+    id: 'post_draft_regression_1',
+    status: 'draft',
+    publishedAt: '',
+    thumbnailStorageMode: undefined
+  };
+  const draftRes = prepareBlogPostPayload(draftInput, [{ id: publishedRes.post.id, slug: publishedRes.post.slug }]);
+  if (!draftRes.ok) throw new Error(draftRes.error);
+  assertNoUndefinedValuesForFirestore(draftRes.post, 'posts/post_draft_regression_1');
+  assert.equal(draftRes.post.status, 'draft');
+  assert.equal('thumbnailStorageMode' in draftRes.post, false);
+
+  // 3. Publishing an existing draft preserves exact ID, slug, content, and omits undefined fields (no duplicate post)
+  const publishExistingDraftInput: BlogPost = {
+    ...draftRes.post,
+    status: 'published',
+    thumbnailStorageMode: undefined
+  };
+  const publishedDraftRes = prepareBlogPostPayload(publishExistingDraftInput, [
+    { id: publishedRes.post.id, slug: publishedRes.post.slug },
+    { id: draftRes.post.id, slug: draftRes.post.slug }
+  ]);
+  if (!publishedDraftRes.ok) throw new Error(publishedDraftRes.error);
+  assertNoUndefinedValuesForFirestore(publishedDraftRes.post, 'posts/post_draft_regression_1');
+  assert.equal(publishedDraftRes.post.id, draftRes.post.id, 'Existing draft ID must be preserved without duplication');
+  assert.equal(publishedDraftRes.post.slug, draftRes.post.slug, 'Existing draft slug must be preserved without duplication');
+  assert.equal(publishedDraftRes.post.status, 'published');
+  assert.equal(publishedDraftRes.post.thumbnailUrl, inlinePhoto);
+
+  // 4. Editing an existing article preserves valid storage modes ('firebase_storage' / 'firestore_embedded')
+  const embeddedEditRes = prepareBlogPostPayload(
+    {
+      ...publishedDraftRes.post,
+      content: `<p>Updated body.</p><figure data-blog-figure="true"><img src="${updatedPhoto}" data-width="500" data-height="312" alt="Updated" /></figure>`,
+      thumbnailUrl: customCloudUrl,
+      thumbnailIsCustomOverride: true,
+      thumbnailStorageMode: 'firebase_storage'
+    },
+    [{ id: publishedDraftRes.post.id, slug: publishedDraftRes.post.slug }]
+  );
+  if (!embeddedEditRes.ok) throw new Error(embeddedEditRes.error);
+  assertNoUndefinedValuesForFirestore(embeddedEditRes.post, 'posts/edit_with_storage_mode');
+  assert.equal(embeddedEditRes.post.thumbnailStorageMode, 'firebase_storage');
+  assert.equal(embeddedEditRes.post.thumbnailUrl, customCloudUrl);
+
+  // Switching back from custom cover to first article image updates thumbnail to first content image cleanly
+  const switchToFirstImgRes = prepareBlogPostPayload(
+    {
+      ...embeddedEditRes.post,
+      thumbnailIsCustomOverride: false,
+      thumbnailStorageMode: undefined
+    },
+    [{ id: embeddedEditRes.post.id, slug: embeddedEditRes.post.slug }]
+  );
+  if (!switchToFirstImgRes.ok) throw new Error(switchToFirstImgRes.error);
+  assertNoUndefinedValuesForFirestore(switchToFirstImgRes.post, 'posts/switch_to_first_img');
+  assert.equal(switchToFirstImgRes.post.thumbnailUrl, updatedPhoto);
+  assert.equal('thumbnailStorageMode' in switchToFirstImgRes.post, false);
+
+  // Recursive sanitizer strips deeply nested undefined fields and array undefined items
+  const deeplySanitized = stripUndefinedForFirestore({
+    a: 1,
+    b: undefined,
+    nested: { keep: 'ok', drop: undefined },
+    list: ['tag1', undefined, 'tag2']
+  });
+  assertNoUndefinedValuesForFirestore(deeplySanitized);
+  assert.deepEqual(deeplySanitized, {
+    a: 1,
+    nested: { keep: 'ok' },
+    list: ['tag1', 'tag2']
+  });
+
+  // Verify saveBlogPost sanitizes right before setDoc and AdminBlogManager guards draft building
+  const blogServiceCode = fs.readFileSync(path.join(rootDir, 'src/services/blogService.ts'), 'utf8');
+  const adminBlogCode = fs.readFileSync(path.join(rootDir, 'src/components/AdminBlogManager.tsx'), 'utf8');
+  assert.equal(blogServiceCode.includes('const firestorePayload = stripUndefinedForFirestore(prepared.post);'), true);
+  assert.equal(blogServiceCode.includes('await setDoc(docRef, firestorePayload, { merge: true });'), true);
+  assert.equal(adminBlogCode.includes('email: user?.email || undefined'), false);
+
+  console.log('✓ 7. Firestore undefined-value guard & thumbnailStorageMode regression tests verified');
+}
+
 testImageCleanupAndPreservedAssets();
 testNoFakeArticlesOrStockFallbacks();
 testAutomaticFirstImageThumbnails();
 testImageResizingAndAlignment();
 testEditorAndAdminUiConstraints();
 testMultiArticleLifecycleAndSecurity();
+testFirestoreUndefinedFieldSafety();
 console.log('\nALL BLOG THUMBNAIL & IMAGE SIZING VERIFICATION TESTS PASSED!');
