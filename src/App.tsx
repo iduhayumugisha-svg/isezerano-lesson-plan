@@ -56,6 +56,12 @@ import { FEATURE_FLAGS } from './config/features';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
 import { updateWebsiteBrandingSeo } from './services/seoService';
+import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from './types/blog';
+import { subscribeToBlogPosts } from './services/blogService';
+import {
+  subscribeToBlogCategories,
+  mergeCategoriesForDisplay
+} from './services/blogCategoryService';
 
 export type AppPage = WebsitePage | 'admin';
 
@@ -126,6 +132,15 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
   const [activeBlogSlug, setActiveBlogSlug] = useState<string | null>(() => getBlogSlugFromUrl());
 
+  // Shared Newspaper Feed & Live Firestore Categories
+  const [publishedPosts, setPublishedPosts] = useState<BlogPost[]>([]);
+  const [rawNewsCategories, setRawNewsCategories] = useState<BlogCategory[]>(
+    DEFAULT_AI_BLOG_CATEGORIES
+  );
+  const [newsCategoriesInitialized, setNewsCategoriesInitialized] = useState<boolean>(false);
+  const [isNewsLoading, setIsNewsLoading] = useState<boolean>(true);
+  const [selectedNewsCategory, setSelectedNewsCategory] = useState<string>('All Categories');
+
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
   const [editingPlan, setEditingPlan] = useState<LessonPlan | null>(null);
@@ -146,6 +161,31 @@ function AppContent() {
       });
     }
   }, [user?.uid, isAdmin]);
+
+  // Live newspaper articles and Firestore categories subscription
+  useEffect(() => {
+    setIsNewsLoading(true);
+    const unsubPosts = subscribeToBlogPosts((posts) => {
+      setPublishedPosts(posts);
+      setIsNewsLoading(false);
+    }, false);
+
+    const unsubCategories = subscribeToBlogCategories((fetchedCats, initialized) => {
+      setRawNewsCategories(fetchedCats);
+      setNewsCategoriesInitialized(initialized);
+    });
+
+    return () => {
+      unsubPosts();
+      unsubCategories();
+    };
+  }, []);
+
+  const newsCategories = mergeCategoriesForDisplay(
+    rawNewsCategories,
+    newsCategoriesInitialized,
+    publishedPosts
+  );
 
   useEffect(() => {
 
@@ -321,6 +361,22 @@ function AppContent() {
     }
   };
 
+  const handleOpenNewspaperArticle = (post: BlogPost) => {
+    setActiveBlogSlug(post.slug);
+    setCurrentPage('blog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (typeof window !== 'undefined') {
+      try {
+        const targetPath = `/blog/${encodeURIComponent(post.slug)}`;
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ page: 'blog', slug: post.slug }, '', targetPath);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'nursery'].includes(currentPage);
 
 
@@ -334,12 +390,15 @@ function AppContent() {
       }}
     >
       
-      {/* 1. Global Professional Public Website Header */}
+      {/* 1. Global Professional Newspaper & Platform Header */}
       <WebsiteHeader
         currentPage={currentPage}
         onNavigate={handleNavigate}
         savedCount={lessonPlans.length}
         onSelectAnnouncement={(notice) => setSelectedNotice(notice)}
+        newsCategories={newsCategories}
+        selectedCategory={selectedNewsCategory}
+        onSelectCategory={setSelectedNewsCategory}
       />
 
       {/* Ad Placement: Below Header */}
@@ -348,19 +407,28 @@ function AppContent() {
       {/* 2. Main Content Area */}
       <main className="flex-1 w-full overflow-x-hidden">
         
-        {/* PUBLIC PAGE 1: Home View (Default opening page at /) */}
+        {/* PUBLIC PAGE 1: Online Newspaper Homepage (Default opening page at /) */}
         {currentPage === 'home' && (
           <HomeView
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
+            posts={publishedPosts}
+            categories={newsCategories}
+            isNewsLoading={isNewsLoading}
+            selectedCategory={selectedNewsCategory}
+            onSelectCategory={setSelectedNewsCategory}
+            onOpenArticle={handleOpenNewspaperArticle}
           />
         )}
 
-        {/* PUBLIC PAGE 1B: Public Blog & Educational Articles */}
+        {/* PUBLIC PAGE 1B: Public Blog & Article Reading View */}
         {currentPage === 'blog' && (
           <BlogView
             initialSlug={activeBlogSlug}
             onSelectPostSlug={handleSelectBlogPostSlug}
+            selectedCategory={selectedNewsCategory}
+            onSelectCategory={setSelectedNewsCategory}
+            onReturnHome={() => handleNavigate('home')}
           />
         )}
 

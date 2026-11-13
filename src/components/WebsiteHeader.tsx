@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Globe, 
-  LayoutDashboard,
-  GraduationCap,
+import {
+  Globe,
   ShieldCheck,
   LogOut,
   User,
   MoreVertical,
   Award,
   BookOpen,
-  FileText
+  Newspaper,
+  ChevronRight
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
@@ -17,54 +16,80 @@ import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { NotificationBell } from './NotificationBell';
 import { PushAnnouncement } from '../types/announcement';
+import { BlogCategory, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
+import {
+  subscribeToBlogCategories,
+  mergeCategoriesForDisplay
+} from '../services/blogCategoryService';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'blog' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
+export type WebsitePage =
+  | 'home'
+  | 'dashboard'
+  | 'create'
+  | 'saved'
+  | 'settings'
+  | 'nursery'
+  | 'blog'
+  | 'about'
+  | 'contact'
+  | 'privacy'
+  | 'terms'
+  | 'admin'
+  | 'profile';
 
 interface WebsiteHeaderProps {
   currentPage: string;
   onNavigate: (page: WebsitePage) => void;
   savedCount?: number;
   onSelectAnnouncement?: (announcement: PushAnnouncement) => void;
+  newsCategories?: BlogCategory[];
+  selectedCategory?: string;
+  onSelectCategory?: (category: string) => void;
 }
 
 export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   currentPage,
   onNavigate,
-  savedCount = 0,
-  onSelectAnnouncement
+  onSelectAnnouncement,
+  newsCategories,
+  selectedCategory = 'All Categories',
+  onSelectCategory
 }) => {
   const { language, setLanguage } = useLanguage();
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
   const [logoLoadError, setLogoLoadError] = useState(false);
+
+  // Fallback live subscription when WebsiteHeader is rendered without newsCategories prop
+  const [fallbackRawCategories, setFallbackRawCategories] = useState<BlogCategory[]>(
+    DEFAULT_AI_BLOG_CATEGORIES
+  );
+  const [fallbackInitialized, setFallbackInitialized] = useState(false);
 
   useEffect(() => {
     setLogoLoadError(false);
   }, [logoUrl]);
 
-  // Helper for dynamic navigation icons
-  const renderNavIcon = (iconName?: string) => {
-    switch (iconName) {
-      case 'BookOpen': return <BookOpen className="w-3.5 h-3.5 text-teal-700" />;
-      case 'Award': return <Award className="w-3.5 h-3.5 text-amber-600" />;
-      case 'ShieldCheck': return <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />;
-      case 'FileText': return <FileText className="w-3.5 h-3.5 text-teal-700" />;
-      case 'GraduationCap': return <GraduationCap className="w-3.5 h-3.5 text-teal-700" />;
-      case 'User': return <User className="w-3.5 h-3.5 text-slate-700" />;
-      default: return null;
+  useEffect(() => {
+    if (newsCategories && newsCategories.length > 0) {
+      return;
     }
-  };
+    const unsub = subscribeToBlogCategories((fetchedCats, initialized) => {
+      setFallbackRawCategories(fetchedCats);
+      setFallbackInitialized(initialized);
+    });
+    return () => unsub();
+  }, [newsCategories]);
 
-  // Header active items sorted by order
-  const headerNavItems = (navigationMenus || [])
-    .filter(item => item.enabled && (item.location === 'header' || item.location === 'both'))
-    .sort((a, b) => a.order - b.order);
+  const resolvedCategories =
+    newsCategories && newsCategories.length > 0
+      ? newsCategories
+      : mergeCategoriesForDisplay(fallbackRawCategories, fallbackInitialized, []);
 
-  // Three-dot dropdown state & ref for click-outside
+  // Three-dot dropdown state & ref for click-outside / Escape key
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -72,19 +97,39 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       }
     };
 
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false);
+      }
+    };
+
     if (isMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, [isMenuOpen]);
 
   const handleNavClick = (page: WebsitePage) => {
+    if (page === 'home') {
+      onSelectCategory?.('All Categories');
+    }
     onNavigate(page);
+    setIsMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCategoryClick = (categoryName: string) => {
+    onSelectCategory?.(categoryName);
+    if (currentPage !== 'home') {
+      onNavigate('home');
+    }
     setIsMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -95,8 +140,10 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     handleNavClick('home');
   };
 
+  const isNewsFeedPage = currentPage === 'home' || currentPage === 'blog';
+
   return (
-    <header 
+    <header
       className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
       style={{
         backgroundColor: colors.headerBg,
@@ -105,12 +152,10 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
         {/* TIER 1: UPPER-LEFT BRANDING AREA (LOGO LEFT -> WEBSITE NAME & DESCRIPTION) & UPPER-RIGHT UTILITIES */}
-        <div className="flex items-center justify-between gap-3 pt-3 sm:pt-4 pb-2.5 border-b border-slate-100/80">
-          
+        <div className="flex items-center justify-between gap-3 pt-3 sm:pt-3.5 pb-2.5 border-b border-slate-200/80">
           {/* Upper-Left Branding Area: Horizontal Logo FIRST, followed by Website Name & Description */}
-          <div 
+          <div
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer group select-none min-w-0 flex-1"
             title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
@@ -136,14 +181,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             <div className="flex flex-col justify-center min-w-0">
               {branding?.showWebsiteName !== false && (
                 <>
-                  <span 
+                  <span
                     className="font-serif font-extrabold tracking-tight transition-colors leading-tight text-lg sm:text-2xl md:text-[26px] truncate"
                     style={{ color: colors.headerText }}
                   >
                     {branding?.platformTitle || 'ISEZERANO ONLINE'}
                   </span>
                   {branding?.platformSubtitle && (
-                    <span 
+                    <span
                       className="font-semibold tracking-wider uppercase leading-none mt-0.5 text-[11px] sm:text-xs text-teal-700 truncate"
                       style={{ color: colors.navLinkActive }}
                     >
@@ -154,7 +199,9 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               )}
               {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
                 <span
-                  className={`text-[11px] sm:text-xs leading-snug line-clamp-1 max-w-xl ${branding?.showWebsiteName !== false ? 'mt-0.5' : ''}`}
+                  className={`text-[11px] sm:text-xs leading-snug line-clamp-1 max-w-xl ${
+                    branding?.showWebsiteName !== false ? 'mt-0.5' : ''
+                  }`}
                   style={{ color: colors.mutedText || '#64748b' }}
                 >
                   {branding.websiteDescription}
@@ -163,9 +210,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             </div>
           </div>
 
-          {/* Upper-Right Utilities: Notification Bell, Language Switcher, User / Menu Button */}
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            {/* Notification Bell (FCM Push Announcements) */}
+          {/* Upper-Right Utilities: Notification Bell, Language Switcher, Three-Dot Overflow Menu (⋮) */}
+          <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
             <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
 
             {/* Language Selector */}
@@ -176,6 +222,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 onChange={(e) => setLanguage(e.target.value as Language)}
                 className="bg-transparent text-xs font-semibold text-slate-800 py-1 pr-2 pl-1 rounded focus:outline-none cursor-pointer"
                 title="Select Language"
+                aria-label="Select Language"
               >
                 <option value="en">EN</option>
                 <option value="rw">RW</option>
@@ -183,52 +230,66 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               </select>
             </div>
 
-            {/* Three-Dot Menu Dropdown (⋮) */}
+            {/* Three-Dot Overflow Menu (⋮): Lesson Preparation, CBC Report Cards N1-N3, Admin Portal */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                aria-label="Platform navigation menu"
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                aria-label="More sections menu"
+                aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
-                title="Platform Navigation Menu"
-                className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                title="Education Tools & Admin Menu"
+                className={`min-w-[40px] min-h-[40px] px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   isMenuOpen
                     ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-teal-500/30'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
                 }`}
               >
                 <MoreVertical className="w-5 h-5" />
                 {isAdmin && (
-                  <span 
-                    className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" 
+                  <span
+                    className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
                     title="Admin signed in"
                   />
                 )}
               </button>
 
-              {/* Dropdown Menu Popup */}
               {isMenuOpen && (
-                <div 
-                  className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
+                <div
+                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
                   role="menu"
                 >
-                  {/* User Profile Identity or Sign In Prompt */}
+                  {/* User Profile Identity or Google Sign In */}
                   {user ? (
                     <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 mb-1">
                       <div className="flex items-center space-x-2.5">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                          isAdmin ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-teal-100 text-teal-800 border-teal-200'
-                        }`}>
-                          {user.displayName ? user.displayName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
+                            isAdmin
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                              : 'bg-teal-100 text-teal-800 border-teal-200'
+                          }`}
+                        >
+                          {user.displayName ? (
+                            user.displayName.charAt(0).toUpperCase()
+                          ) : (
+                            <User className="w-4 h-4" />
+                          )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
                             <p className="text-xs font-bold text-slate-900 truncate">
-                              {user.displayName || user.email?.split('@')[0] || (isAdmin ? 'Administrator' : 'Teacher')}
+                              {user.displayName ||
+                                user.email?.split('@')[0] ||
+                                (isAdmin ? 'Administrator' : 'Teacher')}
                             </p>
-                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                              isAdmin ? 'bg-amber-100 text-amber-900' : 'bg-teal-100 text-teal-900'
-                            }`}>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+                                isAdmin
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-teal-100 text-teal-900'
+                              }`}
+                            >
                               {isAdmin ? 'Admin' : 'Mwarimu'}
                             </span>
                           </div>
@@ -240,11 +301,15 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                       <div className="mt-2.5 pt-2 border-t border-slate-200/70">
                         <button
                           type="button"
+                          role="menuitem"
                           onClick={() => handleNavClick('profile')}
-                          className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
+                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
                         >
-                          <User className="w-3.5 h-3.5 text-teal-700" />
-                          <span>Profil ya Mwarimu (Teacher Profile)</span>
+                          <span className="inline-flex items-center space-x-2">
+                            <User className="w-3.5 h-3.5 text-teal-700" />
+                            <span>Teacher Profile (Profil)</span>
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-teal-700" />
                         </button>
                       </div>
                     </div>
@@ -252,68 +317,106 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     <div className="px-3 py-2 border-b border-slate-100 mb-1">
                       <button
                         type="button"
+                        role="menuitem"
                         onClick={async () => {
                           setIsMenuOpen(false);
                           await signInWithGoogle();
                         }}
-                        className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                        className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                       >
                         <User className="w-3.5 h-3.5" />
-                        <span>Injira na Google (Sign In)</span>
+                        <span>Sign In with Google</span>
                       </button>
                     </div>
                   )}
 
-                  {/* Section 1: Lesson Plan & Reports */}
-                  <div className="px-1.5 py-0.5">
+                  {/* Platform Tools & Sections moved into Overflow Menu */}
+                  <div className="px-4 pt-2 pb-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      Education &amp; School Tools
+                    </p>
+                  </div>
+
+                  <div className="px-1.5 py-0.5 space-y-0.5">
                     <button
                       type="button"
-                      onClick={() => handleNavClick('create')}
-                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer"
+                      role="menuitem"
+                      onClick={() => handleNavClick('dashboard')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
+                        ['dashboard', 'create', 'saved', 'settings'].includes(currentPage)
+                          ? 'bg-teal-50 text-teal-900'
+                          : 'text-slate-800 hover:bg-teal-50 hover:text-teal-900'
+                      }`}
                     >
-                      <FileText className="w-4 h-4 text-teal-700" />
-                      <span>Lesson Plan (Gutegura Isomo)</span>
+                      <span className="flex items-center space-x-3">
+                        <BookOpen className="w-4 h-4 text-teal-700 shrink-0" />
+                        <span>Lesson Preparation</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
 
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => handleNavClick('nursery')}
-                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-amber-50 hover:text-amber-900 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'nursery'
+                          ? 'bg-amber-50 text-amber-950'
+                          : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
+                      }`}
                     >
-                      <Award className="w-4 h-4 text-amber-700" />
-                      <span>Report Cards (Indangamanota)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleNavClick('blog')}
-                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
-                    >
-                      <BookOpen className="w-4 h-4 text-teal-700" />
-                      <span>Blog & Articles</span>
+                      <span className="flex items-center space-x-3">
+                        <Award className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>CBC Report Cards N1-N3</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                   </div>
 
-                  {/* Section 2: Administrator Portal */}
-                  <div className="my-1 border-t border-slate-100" />
-                  <div className="px-1.5 py-0.5">
+                  {/* Administrator Portal */}
+                  <div className="my-1.5 border-t border-slate-100" />
+                  <div className="px-1.5 py-0.5 space-y-0.5">
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => handleNavClick('admin')}
-                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:text-slate-900 rounded-xl transition-colors text-left cursor-pointer"
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'admin'
+                          ? 'bg-slate-100 text-slate-950'
+                          : 'text-slate-800 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
                     >
-                      <ShieldCheck className="w-4 h-4 text-slate-700" />
-                      <span>Admin Dashboard</span>
+                      <span className="flex items-center space-x-3">
+                        <ShieldCheck className="w-4 h-4 text-slate-700 shrink-0" />
+                        <span>Admin Portal</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
+
+                    {currentPage !== 'home' && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => handleNavClick('home')}
+                        className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <span className="flex items-center space-x-3">
+                          <Newspaper className="w-4 h-4 text-teal-700 shrink-0" />
+                          <span>All News (Front Page)</span>
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-teal-600" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Section 3: Sign Out */}
+                  {/* Sign Out */}
                   {user && (
                     <>
                       <div className="my-1 border-t border-slate-100" />
                       <div className="px-1.5 py-0.5">
                         <button
                           type="button"
+                          role="menuitem"
                           onClick={handleSignOut}
                           className="w-full flex items-center space-x-3 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
                         >
@@ -329,63 +432,44 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           </div>
         </div>
 
-        {/* TIER 2: NAVIGATION MENU BAR (SITTING DIRECTLY BELOW THE BRANDING AREA) */}
-        <div className="flex items-center justify-between py-2 sm:py-2.5 overflow-x-auto no-scrollbar">
-          <nav className="flex items-center space-x-1 sm:space-x-2">
-            {headerNavItems.map((item) => {
-              const isCurrent = currentPage === item.path || 
-                (item.path === 'dashboard' && (currentPage === 'create' || currentPage === 'saved' || currentPage === 'settings'));
+        {/* TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR (DYNAMICALLY LOADED FROM FIRESTORE) */}
+        <div className="flex items-center overflow-x-auto no-scrollbar">
+          <nav aria-label="News categories" className="flex items-center space-x-5 sm:space-x-6 min-w-full">
+            <button
+              type="button"
+              onClick={() => handleCategoryClick('All Categories')}
+              style={{ fontSize: `${typography.navMenuSize}px` }}
+              className={`py-2.5 border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
+                isNewsFeedPage && selectedCategory === 'All Categories'
+                  ? 'border-teal-700 text-teal-800 font-bold'
+                  : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'
+              }`}
+            >
+              All News
+            </button>
 
-              const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
-
-              if (isExternal) {
-                return (
-                  <a
-                    key={item.id}
-                    href={item.path}
-                    target={item.openInNewTab ? '_blank' : '_self'}
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize: `${typography.navMenuSize}px`,
-                      color: colors.headerText
-                    }}
-                    className="px-3 py-1.5 rounded-lg font-semibold transition-all hover:bg-slate-100 inline-flex items-center space-x-1.5 text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    {renderNavIcon(item.icon)}
-                    <span>{item.label}</span>
-                  </a>
-                );
-              }
-
+            {resolvedCategories.map((category) => {
+              const isCurrent = isNewsFeedPage && selectedCategory === category.name;
               return (
                 <button
-                  key={item.id}
+                  key={category.id || category.name}
                   type="button"
-                  onClick={() => handleNavClick(item.path as WebsitePage)}
-                  style={{
-                    fontSize: `${typography.navMenuSize}px`,
-                    color: isCurrent ? colors.navLinkActive : colors.headerText
-                  }}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer inline-flex items-center space-x-1.5 text-xs sm:text-sm whitespace-nowrap ${
+                  onClick={() => handleCategoryClick(category.name)}
+                  style={{ fontSize: `${typography.navMenuSize}px` }}
+                  className={`py-2.5 border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
                     isCurrent
-                      ? 'font-bold bg-slate-100 text-teal-800 shadow-2xs'
-                      : 'hover:bg-slate-50'
+                      ? 'border-teal-700 text-teal-800 font-bold'
+                      : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'
                   }`}
                 >
-                  {renderNavIcon(item.icon)}
-                  <span>{item.label}</span>
-                  {item.badge && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold bg-teal-100 text-teal-800">
-                      {item.badge}
-                    </span>
-                  )}
+                  {category.name}
                 </button>
               );
             })}
           </nav>
         </div>
-
       </div>
     </header>
   );
 };
+

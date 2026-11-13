@@ -20,6 +20,7 @@ import {
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { formatPublicationDate } from '../utils/dateUtils';
+import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import {
   extractFirstImageFromContent,
   extractPlainTextExcerpt,
@@ -29,47 +30,18 @@ import {
 interface BlogViewProps {
   initialSlug?: string | null;
   onSelectPostSlug?: (slug: string | null) => void;
+  selectedCategory?: string;
+  onSelectCategory?: (category: string) => void;
+  onReturnHome?: () => void;
 }
 
-const ArticleThumbnailImage: React.FC<{
-  src: string;
-  alt: string;
-  className?: string;
-}> = ({ src, alt, className = '' }) => {
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    setHasError(false);
-  }, [src]);
-
-  if (!src || hasError) {
-    return (
-      <div
-        role="img"
-        aria-label={alt || 'Article placeholder'}
-        className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex flex-col items-center justify-center text-slate-400 p-4 text-center space-y-1.5"
-      >
-        <FileText className="w-7 h-7 opacity-55" />
-        <span className="text-[11px] font-medium tracking-wide uppercase text-slate-500">
-          GS GITUMBA
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      referrerPolicy="no-referrer"
-      loading="lazy"
-      onError={() => setHasError(true)}
-    />
-  );
-};
-
-export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelectPostSlug }) => {
+export const BlogView: React.FC<BlogViewProps> = ({
+  initialSlug = null,
+  onSelectPostSlug,
+  selectedCategory: externalSelectedCategory,
+  onSelectCategory,
+  onReturnHome
+}) => {
   const { branding } = useWebsiteDesign();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
@@ -77,9 +49,19 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
   const [isLoading, setIsLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(initialSlug);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
+  const [internalSelectedCategory, setInternalSelectedCategory] = useState<string>('All Categories');
   const [copiedLink, setCopiedLink] = useState(false);
   const incrementedPostIdsRef = useRef<Set<string>>(new Set());
+
+  const selectedCategory =
+    externalSelectedCategory !== undefined ? externalSelectedCategory : internalSelectedCategory;
+  const setSelectedCategory = (category: string) => {
+    if (onSelectCategory) {
+      onSelectCategory(category);
+    } else {
+      setInternalSelectedCategory(category);
+    }
+  };
 
   useEffect(() => {
     setActiveSlug(initialSlug || null);
@@ -142,7 +124,11 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
 
   const closeArticle = () => {
     setActiveSlug(null);
-    onSelectPostSlug?.(null);
+    if (onReturnHome) {
+      onReturnHome();
+    } else {
+      onSelectPostSlug?.(null);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -231,7 +217,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
             className="inline-flex items-center space-x-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-teal-800 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Blog</span>
+            <span>Back to News</span>
           </button>
 
           <button
@@ -333,7 +319,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
                     <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
                       <ArticleThumbnailImage
                         src={relThumb}
-                        alt={related.thumbnailAlt || related.title}
+                        alt={related.thumbnailAlt || related.title || 'Article placeholder'}
                         className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                       />
                     </div>
