@@ -1,6 +1,10 @@
 import { BlogPost } from '../types/blog';
 import { WebsiteBrandingSettings } from '../types/websiteDesign';
-import { getSingleArticleThumbnailUrl, isValidHttpsImageUrl } from '../utils/thumbnailUtils';
+import {
+  computeImageDataUriHash8,
+  getSingleArticleThumbnailUrl,
+  isValidHttpsImageUrl
+} from '../utils/thumbnailUtils';
 
 export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
 export const DEFAULT_SEO_DESCRIPTION =
@@ -8,7 +12,9 @@ export const DEFAULT_SEO_DESCRIPTION =
 export const DEFAULT_OG_IMAGE = 'https://isezerano.online/og-isezerano-online.jpg';
 export const DEFAULT_CANONICAL_ORIGIN = 'https://isezerano.online';
 const BASE_URL =
-  typeof window !== 'undefined' && window.location.protocol === 'https:'
+  typeof window !== 'undefined' &&
+  window.location.protocol === 'https:' &&
+  !window.location.hostname.startsWith('ais-dev-')
     ? window.location.origin
     : DEFAULT_CANONICAL_ORIGIN;
 
@@ -121,9 +127,26 @@ export const updateBlogPostSeo = (
 
   const { fullTitle } = resolveSiteBrandingSeo(branding);
   const pageTitle = `${post.title} – ${fullTitle}`;
-  const postUrl = `${BASE_URL}/blog/${post.slug}`;
+  const postUrl = `${BASE_URL}/blog/${encodeURIComponent(post.slug || post.id)}`;
   const thumb = getSingleArticleThumbnailUrl(post);
-  const ogHttpsImage = isValidHttpsImageUrl(thumb) ? thumb : DEFAULT_OG_IMAGE;
+  const rawSlug = (post.slug || post.id || 'article')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/^-+|-+$/g, '') || 'article';
+  const dataUriExt = thumb.startsWith('data:image/png')
+    ? 'png'
+    : thumb.startsWith('data:image/webp')
+    ? 'webp'
+    : thumb.startsWith('data:image/gif')
+    ? 'gif'
+    : 'jpg';
+  const ogHttpsImage = isValidHttpsImageUrl(thumb)
+    ? thumb
+    : thumb.startsWith('data:image/') && !thumb.startsWith('data:image/svg+xml')
+    ? `${BASE_URL}/og-blog/${encodeURIComponent(
+        `${rawSlug}-${computeImageDataUriHash8(thumb)}.${dataUriExt}`
+      )}`
+    : DEFAULT_OG_IMAGE;
   const isDefaultFallback = ogHttpsImage === DEFAULT_OG_IMAGE;
   const description = post.excerpt || post.title;
 

@@ -472,7 +472,8 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
  */
 export const compressImageToPersistentDataUri = async (
   file: File,
-  targetMaxBytes: number = MAX_EMBEDDED_THUMBNAIL_BYTES
+  targetMaxBytes: number = MAX_EMBEDDED_THUMBNAIL_BYTES,
+  preferJpeg: boolean = false
 ): Promise<{ dataUri: string; byteSize: number }> => {
   if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
     const svgUri = await new Promise<string>((resolve, reject) => {
@@ -491,12 +492,13 @@ export const compressImageToPersistentDataUri = async (
   }
 
   const img = await loadImageFromFile(file);
-  const dimensionSteps = [1080, 900, 720, 560, 420];
+  const dimensionSteps = [1200, 1080, 900, 720, 560, 420];
   const qualitySteps = [0.84, 0.72, 0.6, 0.48, 0.36];
   const hasTransparency =
-    file.type === 'image/png' ||
-    file.type === 'image/webp' ||
-    /\.(png|webp)$/i.test(file.name);
+    !preferJpeg &&
+    (file.type === 'image/png' ||
+      file.type === 'image/webp' ||
+      /\.(png|webp)$/i.test(file.name));
 
   let bestUri = '';
   let bestBytes = Infinity;
@@ -530,8 +532,10 @@ export const compressImageToPersistentDataUri = async (
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, width, height);
 
-    // Try WebP first (significantly smaller), then JPEG
-    const mimeCandidates = hasTransparency
+    // For thumbnails / social cards, prefer JPEG so WhatsApp, Facebook, and Telegram always render previews
+    const mimeCandidates = preferJpeg
+      ? ['image/jpeg', 'image/webp']
+      : hasTransparency
       ? ['image/webp', 'image/jpeg']
       : ['image/jpeg', 'image/webp'];
 
@@ -766,7 +770,11 @@ export const uploadAndOptimizeBlogImage = async (
     onProgress?.(65, 'Optimizing image for persistent Cloud Firestore storage...');
     const targetBytes =
       purpose === 'inline' ? MAX_EMBEDDED_INLINE_IMAGE_BYTES : MAX_EMBEDDED_THUMBNAIL_BYTES;
-    const { dataUri, byteSize } = await compressImageToPersistentDataUri(file, targetBytes);
+    const { dataUri, byteSize } = await compressImageToPersistentDataUri(
+      file,
+      targetBytes,
+      purpose === 'thumbnail'
+    );
     onProgress?.(100, 'Ready for Cloud Firestore');
     return {
       success: true,
