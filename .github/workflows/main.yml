@@ -7,37 +7,35 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: firebase-hosting
-  cancel-in-progress: true
-
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get source code
-        uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '24.12.0'
-          package-manager-cache: false
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build website
         run: npm run build
 
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@14
+
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}'
-          projectId: isezerano-news
-          channelId: live
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -e
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+          firebase deploy --only hosting --project isezerano-news --non-interactive
+          rm -f "$RUNNER_TEMP/firebase-sa.json"
