@@ -906,7 +906,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   rows={2}
                   value={draftSettings.branding?.websiteDescription ?? ''}
                   onChange={(e) => updateDraftBranding({ websiteDescription: e.target.value })}
-                  placeholder="Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog."
+                  placeholder="ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators."
                   className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed"
                 />
                 <p className="text-[11px] text-slate-500">

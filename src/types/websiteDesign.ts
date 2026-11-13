@@ -223,7 +223,7 @@ export interface WebsiteDesignSettings {
 export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
   platformTitle: 'ISEZERANO ONLINE',
   platformSubtitle: 'GS GITUMBA',
-  websiteDescription: 'Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog for GS GITUMBA.',
+  websiteDescription: 'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.',
   showWebsiteName: true,
   showWebsiteDescription: true,
   schoolName: 'GS GITUMBA',

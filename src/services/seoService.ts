@@ -4,8 +4,13 @@ import { getSingleArticleThumbnailUrl, isValidHttpsImageUrl } from '../utils/thu
 
 export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
 export const DEFAULT_SEO_DESCRIPTION =
-  'Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog for GS GITUMBA.';
-const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://isezerano.online';
+  'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
+export const DEFAULT_OG_IMAGE = 'https://isezerano.online/og-isezerano-online.jpg';
+export const DEFAULT_CANONICAL_ORIGIN = 'https://isezerano.online';
+const BASE_URL =
+  typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? window.location.origin
+    : DEFAULT_CANONICAL_ORIGIN;
 
 export interface SiteBrandingSeoInput {
   siteName?: string;
@@ -64,7 +69,7 @@ const setLinkTag = (rel: string, href: string) => {
 
 /**
  * Updates global browser title, meta description, OpenGraph, and Twitter tags
- * dynamically from Admin branding settings.
+ * dynamically from Admin branding settings while keeping HTTPS social card images intact.
  */
 export const updateWebsiteBrandingSeo = (
   branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput,
@@ -74,23 +79,29 @@ export const updateWebsiteBrandingSeo = (
 
   const { fullTitle, siteDescription } = resolveSiteBrandingSeo(branding);
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
+  const pageUrl = `${BASE_URL}/`;
 
   document.title = resolvedTitle;
   setMetaTag('name', 'description', siteDescription);
-  setLinkTag('canonical', BASE_URL);
+  setLinkTag('canonical', pageUrl);
 
   setMetaTag('property', 'og:type', 'website');
   setMetaTag('property', 'og:site_name', fullTitle);
   setMetaTag('property', 'og:title', resolvedTitle);
   setMetaTag('property', 'og:description', siteDescription);
-  setMetaTag('property', 'og:url', BASE_URL);
-  setMetaTag('property', 'og:image', '');
-  setMetaTag('property', 'og:image:secure_url', '');
+  setMetaTag('property', 'og:url', pageUrl);
+  setMetaTag('property', 'og:image', DEFAULT_OG_IMAGE);
+  setMetaTag('property', 'og:image:secure_url', DEFAULT_OG_IMAGE);
+  setMetaTag('property', 'og:image:type', 'image/jpeg');
+  setMetaTag('property', 'og:image:width', '1376');
+  setMetaTag('property', 'og:image:height', '768');
+  setMetaTag('property', 'og:image:alt', siteDescription);
 
-  setMetaTag('name', 'twitter:card', 'summary');
+  setMetaTag('name', 'twitter:card', 'summary_large_image');
   setMetaTag('name', 'twitter:title', resolvedTitle);
   setMetaTag('name', 'twitter:description', siteDescription);
-  setMetaTag('name', 'twitter:image', '');
+  setMetaTag('name', 'twitter:image', DEFAULT_OG_IMAGE);
+  setMetaTag('name', 'twitter:image:alt', siteDescription);
 
   const scriptTag = document.getElementById('blog-post-schema-jsonld');
   if (scriptTag) {
@@ -100,7 +111,7 @@ export const updateWebsiteBrandingSeo = (
 
 /**
  * Updates SEO, OpenGraph, Twitter Cards, and Schema.org metadata for a blog post.
- * External social meta tags only reference HTTPS image URLs (skipping embedded Data URIs).
+ * External social meta tags only reference HTTPS image URLs (falling back to DEFAULT_OG_IMAGE for Data URIs or text-only posts).
  */
 export const updateBlogPostSeo = (
   post: BlogPost,
@@ -112,7 +123,8 @@ export const updateBlogPostSeo = (
   const pageTitle = `${post.title} – ${fullTitle}`;
   const postUrl = `${BASE_URL}/blog/${post.slug}`;
   const thumb = getSingleArticleThumbnailUrl(post);
-  const ogHttpsImage = isValidHttpsImageUrl(thumb) ? thumb : '';
+  const ogHttpsImage = isValidHttpsImageUrl(thumb) ? thumb : DEFAULT_OG_IMAGE;
+  const isDefaultFallback = ogHttpsImage === DEFAULT_OG_IMAGE;
   const description = post.excerpt || post.title;
 
   document.title = pageTitle;
@@ -126,13 +138,22 @@ export const updateBlogPostSeo = (
   setMetaTag('property', 'og:url', postUrl);
   setMetaTag('property', 'og:image', ogHttpsImage);
   setMetaTag('property', 'og:image:secure_url', ogHttpsImage);
-  setMetaTag('property', 'og:image:alt', ogHttpsImage ? post.title : '');
+  setMetaTag('property', 'og:image:alt', post.title);
+  if (isDefaultFallback) {
+    setMetaTag('property', 'og:image:type', 'image/jpeg');
+    setMetaTag('property', 'og:image:width', '1376');
+    setMetaTag('property', 'og:image:height', '768');
+  } else {
+    setMetaTag('property', 'og:image:type', '');
+    setMetaTag('property', 'og:image:width', '');
+    setMetaTag('property', 'og:image:height', '');
+  }
 
-  setMetaTag('name', 'twitter:card', ogHttpsImage ? 'summary_large_image' : 'summary');
+  setMetaTag('name', 'twitter:card', 'summary_large_image');
   setMetaTag('name', 'twitter:title', post.title);
   setMetaTag('name', 'twitter:description', description);
   setMetaTag('name', 'twitter:image', ogHttpsImage);
-  setMetaTag('name', 'twitter:image:alt', ogHttpsImage ? post.title : '');
+  setMetaTag('name', 'twitter:image:alt', post.title);
 
   let scriptTag = document.getElementById('blog-post-schema-jsonld') as HTMLScriptElement | null;
   if (!scriptTag) {
@@ -151,6 +172,7 @@ export const updateBlogPostSeo = (
     },
     headline: post.title,
     description,
+    image: [ogHttpsImage],
     datePublished: post.publishedAt,
     dateModified: post.updatedAt || post.publishedAt,
     author: {
@@ -163,10 +185,6 @@ export const updateBlogPostSeo = (
       name: fullTitle
     }
   };
-
-  if (ogHttpsImage) {
-    structuredData.image = [ogHttpsImage];
-  }
 
   scriptTag.textContent = JSON.stringify(structuredData, null, 2);
 };

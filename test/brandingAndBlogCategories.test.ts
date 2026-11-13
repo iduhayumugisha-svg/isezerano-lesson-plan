@@ -14,7 +14,8 @@ import {
   resolveSiteBrandingSeo,
   updateWebsiteBrandingSeo,
   updateBlogPostSeo,
-  DEFAULT_SEO_DESCRIPTION
+  DEFAULT_SEO_DESCRIPTION,
+  DEFAULT_OG_IMAGE
 } from '../src/services/seoService';
 import { isAuthorizedAdminEmail } from '../src/services/authService';
 
@@ -55,6 +56,38 @@ function testWebsiteBrandingDefaultsAndLayout() {
 }
 
 function testDynamicSeoMetadataUpdates() {
+  const expectedDesc =
+    'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
+  assert.equal(DEFAULT_SEO_DESCRIPTION, expectedDesc);
+  assert.equal(DEFAULT_WEBSITE_BRANDING.websiteDescription, expectedDesc);
+  assert.equal(DEFAULT_OG_IMAGE.startsWith('https://'), true, 'Default OG image must use public HTTPS URL');
+
+  const ogImageFile = path.join(rootDir, 'public/og-isezerano-online.jpg');
+  assert.equal(fs.existsSync(ogImageFile), true, 'public/og-isezerano-online.jpg must exist');
+  assert.equal(fs.statSync(ogImageFile).size > 10000, true, 'OG social card image must be non-empty');
+
+  const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+  assert.equal(
+    indexHtml.includes('8-column lesson planning platform for educators and teachers at GS GITUMBA and across Rwanda'),
+    false,
+    'Old description must be removed from index.html'
+  );
+  assert.equal(
+    (indexHtml.match(new RegExp(expectedDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length >= 4,
+    true,
+    'index.html must include consistent updated description in meta, og:description, twitter:description, and JSON-LD'
+  );
+  for (const tagSnippet of [
+    '<meta property="og:title" content="ISEZERANO ONLINE – GS GITUMBA"',
+    'property="og:description"',
+    `<meta property="og:image" content="${DEFAULT_OG_IMAGE}"`,
+    '<meta property="og:url" content="https://isezerano.online/"',
+    '<meta name="twitter:card" content="summary_large_image"',
+    `<meta name="twitter:image" content="${DEFAULT_OG_IMAGE}"`
+  ]) {
+    assert.equal(indexHtml.includes(tagSnippet), true, `index.html initial HTML missing required tag: ${tagSnippet}`);
+  }
+
   const customBranding: WebsiteBrandingSettings = {
     ...DEFAULT_WEBSITE_BRANDING,
     platformTitle: 'GS GITUMBA PORTAL',
@@ -143,6 +176,9 @@ function testDynamicSeoMetadataUpdates() {
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Custom school portal description managed by Admin.');
     assert.equal(metaMap.get('property=og:site_name')?.attrs.content, 'GS GITUMBA PORTAL – NORDIC CBC HUB');
     assert.equal(metaMap.get('property=og:description')?.attrs.content, 'Custom school portal description managed by Admin.');
+    assert.equal(metaMap.get('property=og:image')?.attrs.content, DEFAULT_OG_IMAGE);
+    assert.equal(metaMap.get('name=twitter:image')?.attrs.content, DEFAULT_OG_IMAGE);
+    assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
 
     updateBlogPostSeo(
       {
@@ -161,12 +197,13 @@ function testDynamicSeoMetadataUpdates() {
     );
     assert.equal(mockDocument.title, 'Term 2 Reopening – GS GITUMBA PORTAL – NORDIC CBC HUB');
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Classes resume Monday.');
+    assert.equal(metaMap.get('property=og:image')?.attrs.content, DEFAULT_OG_IMAGE);
   } finally {
     if (prevDoc === undefined) delete (globalThis as any).document;
     else (globalThis as any).document = prevDoc;
   }
 
-  console.log('✓ 2. Dynamic browser title, meta description, OpenGraph, and Blog post SEO updates verified');
+  console.log('✓ 2. Initial HTML SEO tags, og:image, twitter:card, and runtime metadata updates verified');
 }
 
 function testBlogCategoryDiscoveryAndValidation() {
