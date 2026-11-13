@@ -373,12 +373,21 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     location: 'both'
   },
   {
+    id: 'nav-blog',
+    label: 'Blog & Articles',
+    path: 'blog',
+    icon: 'FileText',
+    enabled: true,
+    order: 4,
+    location: 'both'
+  },
+  {
     id: 'nav-about',
     label: 'Ibyerekeye GS GITUMBA',
     path: 'about',
     icon: 'Compass',
     enabled: true,
-    order: 4,
+    order: 5,
     location: 'footer'
   },
   {
@@ -387,7 +396,7 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     path: 'contact',
     icon: 'MapPin',
     enabled: true,
-    order: 5,
+    order: 6,
     location: 'footer'
   },
   {
@@ -396,7 +405,7 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     path: 'admin',
     icon: 'ShieldCheck',
     enabled: true,
-    order: 6,
+    order: 7,
     location: 'both'
   }
 ];

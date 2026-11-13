@@ -58,6 +58,7 @@ import { AdsManager } from '../components/AdsManager';
 import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAndColorsManager';
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
 import { AdminSchoolDirectoryPanel } from '../components/AdminSchoolDirectoryPanel';
+import { AdminBlogManager } from '../components/AdminBlogManager';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -71,7 +72,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'design' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'blog' | 'design' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -402,6 +403,21 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
+          onClick={() => setActiveTab('blog')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'blog'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-teal-400" />
+          <span>Blog Management</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'blog' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+            Articles & Photos
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('design')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'design'
@@ -558,6 +574,11 @@ promoteToAdmin('admin@example.com');`;
       {/* ================= TAB: WEBSITE PAGES MANAGEMENT (About, Contact, Privacy, Terms) ================= */}
       {activeTab === 'pages' && (
         <WebsitePagesManager />
+      )}
+
+      {/* ================= TAB: BLOG ARTICLES & MEDIA MANAGEMENT ================= */}
+      {activeTab === 'blog' && (
+        <AdminBlogManager />
       )}
 
       {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}

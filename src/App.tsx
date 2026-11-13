@@ -24,6 +24,7 @@ import {
 import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
 import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
+import { BlogView } from './views/BlogView';
 import { AboutView } from './views/AboutView';
 import { ContactView } from './views/ContactView';
 import { PrivacyPolicyView } from './views/PrivacyPolicyView';
@@ -89,6 +90,7 @@ const getPageFromUrl = (): AppPage => {
     return 'nursery';
   }
   if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'dashboard';
+  if (pathname === '/blog' || pathname.startsWith('/blog/') || hash === '#blog' || hash.startsWith('#blog/') || search.get('page') === 'blog') return 'blog';
   if (pathname === '/profile' || pathname.startsWith('/profile') || hash === '#profile' || search.get('page') === 'profile') return 'profile';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
@@ -98,6 +100,22 @@ const getPageFromUrl = (): AppPage => {
   return 'home';
 };
 
+const getBlogSlugFromUrl = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const pathname = window.location.pathname;
+  if (pathname.toLowerCase().startsWith('/blog/')) {
+    const slug = decodeURIComponent(pathname.slice('/blog/'.length)).replace(/\/+$/, '');
+    return slug || null;
+  }
+  const hash = window.location.hash;
+  if (hash.toLowerCase().startsWith('#blog/')) {
+    const slug = decodeURIComponent(hash.slice('#blog/'.length)).replace(/\/+$/, '');
+    return slug || null;
+  }
+  const searchSlug = new URLSearchParams(window.location.search).get('post');
+  return searchSlug || null;
+};
+
 function AppContent() {
   const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
@@ -105,6 +123,7 @@ function AppContent() {
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
+  const [activeBlogSlug, setActiveBlogSlug] = useState<string | null>(() => getBlogSlugFromUrl());
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -151,6 +170,7 @@ function AppContent() {
     const handleUrlChange = () => {
       const detected = getPageFromUrl();
       setCurrentPage(detected);
+      setActiveBlogSlug(getBlogSlugFromUrl());
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -258,6 +278,9 @@ function AppContent() {
 
   const handleNavigate = (page: WebsitePage | AppPage | 'admin' | 'students') => {
     setCurrentPage(page as AppPage);
+    if (page === 'blog') {
+      setActiveBlogSlug(null);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (typeof window !== 'undefined') {
@@ -272,6 +295,20 @@ function AppContent() {
         }
       } catch {
         // Fallback or hash
+      }
+    }
+  };
+
+  const handleSelectBlogPostSlug = (slug: string | null) => {
+    setActiveBlogSlug(slug);
+    if (typeof window !== 'undefined') {
+      try {
+        const targetPath = slug ? `/blog/${encodeURIComponent(slug)}` : '/blog';
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({ page: 'blog', slug }, '', targetPath);
+        }
+      } catch {
+        // ignore
       }
     }
   };
@@ -308,6 +345,14 @@ function AppContent() {
           <HomeView
             onNavigate={handleNavigate}
             savedPlansCount={lessonPlans.length}
+          />
+        )}
+
+        {/* PUBLIC PAGE 1B: Public Blog & Educational Articles */}
+        {currentPage === 'blog' && (
+          <BlogView
+            initialSlug={activeBlogSlug}
+            onSelectPostSlug={handleSelectBlogPostSlug}
           />
         )}
 

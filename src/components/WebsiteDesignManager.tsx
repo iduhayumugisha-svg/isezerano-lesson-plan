@@ -767,7 +767,7 @@ export const WebsiteDesignManager: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Restore Original Website Logo?</h3>
-                <p className="text-xs text-slate-500">Reverts to the official Bible & Cross logo.</p>
+                <p className="text-xs text-slate-500">Reverts to the default school platform branding.</p>
               </div>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
@@ -1052,7 +1052,7 @@ export const WebsiteDesignManager: React.FC = () => {
             <div>
               <h3 className="text-lg font-bold text-slate-900">Official Website Logo Management</h3>
               <p className="text-xs text-slate-500">
-                Upload a school crest, Bible image, or institution logo. The logo applies consistently across the header, footer, admin portal, and printed lesson plans.
+                Upload a school crest or institution logo. The logo applies consistently across the header, footer, admin portal, and printed lesson plans.
               </p>
             </div>
 

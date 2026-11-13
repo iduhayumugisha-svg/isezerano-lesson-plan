@@ -1,37 +1,31 @@
 import { BlogPost } from '../types/blog';
-import { getSingleArticleThumbnailUrl } from '../utils/thumbnailUtils';
+import { getSingleArticleThumbnailUrl, isValidHttpsImageUrl } from '../utils/thumbnailUtils';
 
 const DEFAULT_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
-const DEFAULT_DESCRIPTION = 'Specialized pedagogical lesson-planning platform helping primary and secondary school teachers in Rwanda prepare official REB-compliant 8-column Competence-Based Curriculum (CBC) lesson plans.';
-const DEFAULT_IMAGE = '';
+const DEFAULT_DESCRIPTION =
+  'Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog for GS GITUMBA.';
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://isezerano.online';
 
-/**
- * Sets or creates a meta tag with the given attribute and content.
- */
 const setMetaTag = (attributeName: string, attributeValue: string, content: string) => {
   if (typeof document === 'undefined') return;
 
-  let element = document.querySelector(`meta[${attributeName}="${attributeValue}"]`) as HTMLMetaElement;
+  const element = document.querySelector(`meta[${attributeName}="${attributeValue}"]`) as HTMLMetaElement | null;
   if (!content) {
     if (element) element.remove();
     return;
   }
+  const target = element || document.createElement('meta');
   if (!element) {
-    element = document.createElement('meta');
-    element.setAttribute(attributeName, attributeValue);
-    document.head.appendChild(element);
+    target.setAttribute(attributeName, attributeValue);
+    document.head.appendChild(target);
   }
-  element.setAttribute('content', content);
+  target.setAttribute('content', content);
 };
 
-/**
- * Sets or creates a link tag with the given rel attribute.
- */
 const setLinkTag = (rel: string, href: string) => {
   if (typeof document === 'undefined') return;
 
-  let element = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement;
+  let element = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
   if (!element) {
     element = document.createElement('link');
     element.setAttribute('rel', rel);
@@ -41,43 +35,38 @@ const setLinkTag = (rel: string, href: string) => {
 };
 
 /**
- * Updates all SEO, OpenGraph, Twitter Cards, and Schema.org metadata for a specific blog post.
+ * Updates SEO, OpenGraph, Twitter Cards, and Schema.org metadata for a blog post.
+ * External social meta tags only reference HTTPS image URLs (skipping embedded Data URIs).
  */
 export const updateBlogPostSeo = (post: BlogPost): void => {
   if (typeof document === 'undefined') return;
 
   const pageTitle = `${post.title} – ISEZERANO ONLINE – GS GITUMBA`;
   const postUrl = `${BASE_URL}/blog/${post.slug}`;
-  
-  // Ensure image URL is valid absolute HTTPS for WhatsApp, Facebook, Telegram, and X crawlers
-  const absoluteImageUrl = getSingleArticleThumbnailUrl(post);
-
+  const thumb = getSingleArticleThumbnailUrl(post);
+  const ogHttpsImage = isValidHttpsImageUrl(thumb) ? thumb : '';
   const description = post.excerpt || post.title;
 
-  // 1. Standard HTML Title and Meta Description
   document.title = pageTitle;
   setMetaTag('name', 'description', description);
   setLinkTag('canonical', postUrl);
 
-  // 2. OpenGraph (Facebook, WhatsApp, Telegram, LinkedIn, Discord)
   setMetaTag('property', 'og:type', 'article');
   setMetaTag('property', 'og:site_name', 'ISEZERANO ONLINE – GS GITUMBA');
   setMetaTag('property', 'og:title', post.title);
   setMetaTag('property', 'og:description', description);
   setMetaTag('property', 'og:url', postUrl);
-  setMetaTag('property', 'og:image', absoluteImageUrl);
-  setMetaTag('property', 'og:image:secure_url', absoluteImageUrl);
-  setMetaTag('property', 'og:image:alt', post.title);
+  setMetaTag('property', 'og:image', ogHttpsImage);
+  setMetaTag('property', 'og:image:secure_url', ogHttpsImage);
+  setMetaTag('property', 'og:image:alt', ogHttpsImage ? post.title : '');
 
-  // 3. Twitter / X Cards (summary_large_image)
-  setMetaTag('name', 'twitter:card', 'summary_large_image');
+  setMetaTag('name', 'twitter:card', ogHttpsImage ? 'summary_large_image' : 'summary');
   setMetaTag('name', 'twitter:title', post.title);
   setMetaTag('name', 'twitter:description', description);
-  setMetaTag('name', 'twitter:image', absoluteImageUrl);
-  setMetaTag('name', 'twitter:image:alt', post.title);
+  setMetaTag('name', 'twitter:image', ogHttpsImage);
+  setMetaTag('name', 'twitter:image:alt', ogHttpsImage ? post.title : '');
 
-  // 4. Schema.org BlogPosting JSON-LD Structured Data
-  let scriptTag = document.getElementById('blog-post-schema-jsonld') as HTMLScriptElement;
+  let scriptTag = document.getElementById('blog-post-schema-jsonld') as HTMLScriptElement | null;
   if (!scriptTag) {
     scriptTag = document.createElement('script');
     scriptTag.id = 'blog-post-schema-jsonld';
@@ -85,7 +74,7 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
     document.head.appendChild(scriptTag);
   }
 
-  const structuredData = {
+  const structuredData: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
     mainEntityOfPage: {
@@ -93,8 +82,7 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
       '@id': postUrl
     },
     headline: post.title,
-    description: description,
-    image: [absoluteImageUrl],
+    description,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt || post.publishedAt,
     author: {
@@ -104,20 +92,17 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
     },
     publisher: {
       '@type': 'EducationalOrganization',
-      name: 'ISEZERANO ONLINE – GS GITUMBA',
-      logo: {
-        '@type': 'ImageObject',
-        url: DEFAULT_IMAGE
-      }
+      name: 'ISEZERANO ONLINE – GS GITUMBA'
     }
   };
+
+  if (ogHttpsImage) {
+    structuredData.image = [ogHttpsImage];
+  }
 
   scriptTag.textContent = JSON.stringify(structuredData, null, 2);
 };
 
-/**
- * Restores global default website SEO and OpenGraph metadata when leaving blog post pages.
- */
 export const resetDefaultSeo = (): void => {
   if (typeof document === 'undefined') return;
 
@@ -130,13 +115,13 @@ export const resetDefaultSeo = (): void => {
   setMetaTag('property', 'og:title', DEFAULT_TITLE);
   setMetaTag('property', 'og:description', DEFAULT_DESCRIPTION);
   setMetaTag('property', 'og:url', BASE_URL);
-  setMetaTag('property', 'og:image', DEFAULT_IMAGE);
-  setMetaTag('property', 'og:image:secure_url', DEFAULT_IMAGE);
+  setMetaTag('property', 'og:image', '');
+  setMetaTag('property', 'og:image:secure_url', '');
 
-  setMetaTag('name', 'twitter:card', 'summary_large_image');
+  setMetaTag('name', 'twitter:card', 'summary');
   setMetaTag('name', 'twitter:title', DEFAULT_TITLE);
   setMetaTag('name', 'twitter:description', DEFAULT_DESCRIPTION);
-  setMetaTag('name', 'twitter:image', DEFAULT_IMAGE);
+  setMetaTag('name', 'twitter:image', '');
 
   const scriptTag = document.getElementById('blog-post-schema-jsonld');
   if (scriptTag) {

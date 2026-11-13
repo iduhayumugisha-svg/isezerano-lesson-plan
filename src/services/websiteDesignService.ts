@@ -12,11 +12,29 @@ import {
   DEFAULT_ANNOUNCEMENT_STRIP,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
+  NavigationMenuItem,
   WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 
 const DESIGN_STORAGE_KEY = 'isezerano_website_design';
+
+const ensureBlogNavItem = (menus?: NavigationMenuItem[]): NavigationMenuItem[] => {
+  const list = Array.isArray(menus) && menus.length > 0 ? [...menus] : [...DEFAULT_NAVIGATION_MENUS];
+  const hasBlog = list.some((m) => m.path === 'blog' || m.id === 'nav-blog');
+  if (!hasBlog) {
+    list.push({
+      id: 'nav-blog',
+      label: 'Blog & Articles',
+      path: 'blog',
+      icon: 'FileText',
+      enabled: true,
+      order: 4,
+      location: 'both'
+    });
+  }
+  return list;
+};
 
 export interface LogoUploadProgress {
   percent: number;
@@ -84,7 +102,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-        navigationMenus: parsed.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+        navigationMenus: ensureBlogNavItem(parsed.navigationMenus),
         versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
@@ -108,7 +126,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-          navigationMenus: data.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+          navigationMenus: ensureBlogNavItem(data.navigationMenus),
           versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
@@ -161,7 +179,7 @@ export const subscribeToWebsiteDesign = (
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-          navigationMenus: data.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+          navigationMenus: ensureBlogNavItem(data.navigationMenus),
           versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'

@@ -1,28 +1,28 @@
 export interface BlogAuthor {
   name: string;
   role: string;
-  avatarUrl?: string;
+  email?: string;
 }
+
+export type BlogImageStorageMode = 'firebase_storage' | 'firestore_embedded';
 
 export interface BlogPost {
   id: string;
   title: string;
-  slug: string; // Unique SEO-friendly URL slug (e.g. rwanda-cbc-lesson-planning-guidelines)
-  content: string; // Rich HTML formatted content
-  excerpt: string; // Short summary (120-160 chars) for cards and meta description
-  thumbnailUrl: string; // Absolute HTTPS image URL for featured banner & social sharing cards
+  slug: string; // Unique SEO-friendly URL slug
+  content: string; // Rich HTML formatted content (multiple paragraphs & typography)
+  excerpt: string; // Short summary for cards and meta description
+  thumbnailUrl: string; // Persistent HTTPS Storage URL or compressed Data URI
   thumbnailAlt?: string;
-  category: string; // e.g. "CBC Curriculum", "School News", "Academic Guidance", "Teacher Resources"
+  thumbnailStorageMode?: BlogImageStorageMode;
+  category: string;
   author: BlogAuthor;
-  publishedAt: string; // ISO 8601 date string
+  publishedAt: string; // ISO 8601 date string (empty when draft never published)
   updatedAt?: string;
   status: 'published' | 'draft';
   tags?: string[];
   views?: number;
   readTimeMinutes?: number;
-  thumbnailAuditStatus?: 'verified' | 'upgraded' | 'extracted_from_content' | 'using_fallback';
-  needsImageReview?: boolean;
-  thumbnailAuditNote?: string;
 }
 
 export const BLOG_CATEGORIES = [
@@ -34,3 +34,16 @@ export const BLOG_CATEGORIES = [
   'Pedagogical Innovation',
   'Announcements'
 ] as const;
+
+export const BLOG_WRITE_CATEGORIES = BLOG_CATEGORIES.filter(
+  (c) => c !== 'All Categories'
+);
+
+export interface BlogImageUploadResult {
+  success: boolean;
+  url?: string;
+  storageMode?: BlogImageStorageMode;
+  byteSize?: number;
+  fallbackNotice?: string;
+  error?: string;
+}

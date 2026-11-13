@@ -18,7 +18,7 @@ import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { NotificationBell } from './NotificationBell';
 import { PushAnnouncement } from '../types/announcement';
 
-export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
+export type WebsitePage = 'home' | 'dashboard' | 'create' | 'saved' | 'settings' | 'nursery' | 'blog' | 'about' | 'contact' | 'privacy' | 'terms' | 'admin' | 'profile';
 
 interface WebsiteHeaderProps {
   currentPage: string;
@@ -243,6 +243,15 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     >
                       <Award className="w-4 h-4 text-amber-700" />
                       <span>Report Cards (Indangamanota)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('blog')}
+                      className="w-full flex items-center space-x-3 px-3.5 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50 hover:text-teal-900 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
+                    >
+                      <BookOpen className="w-4 h-4 text-teal-700" />
+                      <span>Blog & Articles</span>
                     </button>
                   </div>
 
