@@ -138,7 +138,7 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
     if (/\b(emoji|twemoji|wp-smiley|icon|favicon|badge|decorative|spacer|avatar-icon|logo)\b/i.test(`${classAttr} ${idAttr}`)) {
       return true;
     }
-    if (/(?:favicon|\/icons?\/|twemoji|wp-includes\/images\/|1x1|pixel\.|og-isezerano-online\.jpg|(?:^|\/|[-_])logo(?:[-_.]|$))/i.test(lowerSrc)) {
+    if (/(?:favicon|\/icons?\/|twemoji|wp-includes\/images\/|1x1|pixel\.|(?:^|\/|[-_])logo(?:[-_.]|$))/i.test(lowerSrc)) {
       return true;
     }
   }
@@ -190,7 +190,7 @@ export function extractFirstImageFromContent(htmlContent: string | null | undefi
  * 2. Otherwise, always use the first actual article image inside `post.content`
  *    (so an older/stale `thumbnailUrl` never overrides the article's real first image).
  * 3. Otherwise, fall back to valid `post.thumbnailUrl` (standalone cover when body has no images).
- * 4. Otherwise -> '' (Blog listing shows default placeholder; social meta uses website default banner).
+ * 4. Otherwise -> '' (Blog listing shows default placeholder; social meta omits article image metadata).
  */
 export function getSingleArticleThumbnailUrl(
   post?: {

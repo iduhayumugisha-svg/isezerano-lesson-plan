@@ -213,7 +213,7 @@ async function runTests(): Promise<void> {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    // 1. Homepage preserves website-level metadata cleanly
+    // 1. Homepage preserves website-level metadata cleanly without deleted og-isezerano-online.jpg
     const homeRes = await fetch(`${baseUrl}/`, {
       headers: { 'User-Agent': 'WhatsApp/2.23.20.0' }
     });
@@ -221,12 +221,10 @@ async function runTests(): Promise<void> {
     const homeHtml = await homeRes.text();
     assert.equal(homeHtml.includes('<meta property="og:type" content="website" />'), true);
     assert.equal(homeHtml.includes('<meta property="og:title" content="ISEZERANO ONLINE – GS GITUMBA" />'), true);
-    assert.equal(
-      homeHtml.includes('<meta property="og:image" content="https://isezerano.online/og-isezerano-online.jpg" />'),
-      true
-    );
+    assert.equal(homeHtml.includes('og-isezerano-online.jpg'), false, 'Homepage must not reference deleted og-isezerano-online.jpg');
+    assert.equal(homeHtml.includes('property="og:image"'), false, 'Homepage omits og:image when no public HTTPS site banner is configured');
     assert.equal(homeHtml.includes('Rwanda CBC Term 1 Lesson Guide'), false, 'Homepage must not leak article metadata');
-    console.log('✓ 1. Homepage retains website title, description, and branded OG image');
+    console.log('✓ 1. Homepage retains website title and description without deleted default image');
 
     // 2. Article A: first real content image overrides stale thumbnailUrl & skips decorative/icon tags
     const articleARes = await fetch(`${baseUrl}/blog/rwanda-cbc-term-1-lesson-guide`, {
@@ -333,10 +331,33 @@ async function runTests(): Promise<void> {
     const articleERes = await fetch(`${baseUrl}/blog/text-only-educational-notice`);
     const articleEHtml = await articleERes.text();
     assert.equal(
-      articleEHtml.includes('<meta property="og:image" content="https://isezerano.online/og-isezerano-online.jpg" />'),
-      true
+      articleEHtml.includes('og-isezerano-online.jpg'),
+      false,
+      'Image-free article must never reference deleted og-isezerano-online.jpg'
     );
-    console.log('✓ 5. External HTTPS, explicit custom cover, and image-free default banner fallback all verified');
+    assert.equal(
+      articleEHtml.includes('property="og:image"'),
+      false,
+      'Image-free article must omit og:image metadata'
+    );
+    assert.equal(
+      articleEHtml.includes('property="og:image:secure_url"'),
+      false,
+      'Image-free article must omit og:image:secure_url metadata'
+    );
+    assert.equal(
+      articleEHtml.includes('name="twitter:image"'),
+      false,
+      'Image-free article must omit twitter:image metadata'
+    );
+    assert.equal(
+      articleEHtml.includes('<meta name="twitter:card" content="summary" />'),
+      true,
+      'Image-free article uses summary twitter:card'
+    );
+    const articleEImgRes = await fetch(`${baseUrl}/og-blog/text-only-educational-notice.jpg`);
+    assert.equal(articleEImgRes.status, 404, 'Image-free article thumbnail endpoint must return 404 instead of deleted banner');
+    console.log('✓ 5. External HTTPS, explicit custom cover, and image-free metadata omission verified');
 
     // 6. Query-param share route /blog?post=... works too
     const queryRouteRes = await fetch(`${baseUrl}/blog?post=nursery-report-card-term-updates`);
@@ -362,10 +383,6 @@ async function runTests(): Promise<void> {
     try {
       const realIndexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
       fs.writeFileSync(path.join(tempDistDir, 'index.html'), realIndexHtml, 'utf-8');
-      const realBanner = path.resolve(process.cwd(), 'public', 'og-isezerano-online.jpg');
-      if (fs.existsSync(realBanner)) {
-        fs.copyFileSync(realBanner, path.join(tempDistDir, 'og-isezerano-online.jpg'));
-      }
 
       const prerenderRes = await prerenderStaticBlogDist({
         distDir: tempDistDir,
@@ -410,6 +427,15 @@ async function runTests(): Promise<void> {
         fs.readFileSync(path.join(tempDistDir, 'og-blog', fileD)).equals(customCoverJpg.rawBuffer),
         true,
         'dist/og-blog file bytes must match Article D custom cover'
+      );
+      const generatedHtmlE = fs.readFileSync(
+        path.join(tempDistDir, 'blog', 'text-only-educational-notice', 'index.html'),
+        'utf-8'
+      );
+      assert.equal(
+        generatedHtmlE.includes('og-isezerano-online.jpg') || generatedHtmlE.includes('property="og:image"'),
+        false,
+        'Pre-rendered image-free article HTML must omit og:image and deleted banner'
       );
 
       // Simulate static Firebase Hosting (cleanUrls: true, trailingSlash: false, rewrite ** -> /index.html)

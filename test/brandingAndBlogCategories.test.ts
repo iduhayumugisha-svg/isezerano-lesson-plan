@@ -14,8 +14,7 @@ import {
   resolveSiteBrandingSeo,
   updateWebsiteBrandingSeo,
   updateBlogPostSeo,
-  DEFAULT_SEO_DESCRIPTION,
-  DEFAULT_OG_IMAGE
+  DEFAULT_SEO_DESCRIPTION
 } from '../src/services/seoService';
 import { isAuthorizedAdminEmail } from '../src/services/authService';
 
@@ -60,17 +59,19 @@ function testDynamicSeoMetadataUpdates() {
     'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
   assert.equal(DEFAULT_SEO_DESCRIPTION, expectedDesc);
   assert.equal(DEFAULT_WEBSITE_BRANDING.websiteDescription, expectedDesc);
-  assert.equal(DEFAULT_OG_IMAGE.startsWith('https://'), true, 'Default OG image must use public HTTPS URL');
-
   const ogImageFile = path.join(rootDir, 'public/og-isezerano-online.jpg');
-  assert.equal(fs.existsSync(ogImageFile), true, 'public/og-isezerano-online.jpg must exist');
-  assert.equal(fs.statSync(ogImageFile).size > 10000, true, 'OG social card image must be non-empty');
+  assert.equal(fs.existsSync(ogImageFile), false, 'public/og-isezerano-online.jpg must be permanently deleted');
 
   const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
   assert.equal(
     indexHtml.includes('8-column lesson planning platform for educators and teachers at GS GITUMBA and across Rwanda'),
     false,
     'Old description must be removed from index.html'
+  );
+  assert.equal(
+    indexHtml.includes('og-isezerano-online.jpg'),
+    false,
+    'Deleted og-isezerano-online.jpg reference must be removed from index.html'
   );
   assert.equal(
     (indexHtml.match(new RegExp(expectedDesc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length >= 4,
@@ -80,10 +81,8 @@ function testDynamicSeoMetadataUpdates() {
   for (const tagSnippet of [
     '<meta property="og:title" content="ISEZERANO ONLINE – GS GITUMBA"',
     'property="og:description"',
-    `<meta property="og:image" content="${DEFAULT_OG_IMAGE}"`,
     '<meta property="og:url" content="https://isezerano.online/"',
-    '<meta name="twitter:card" content="summary_large_image"',
-    `<meta name="twitter:image" content="${DEFAULT_OG_IMAGE}"`
+    '<meta name="twitter:card" content="summary_large_image"'
   ]) {
     assert.equal(indexHtml.includes(tagSnippet), true, `index.html initial HTML missing required tag: ${tagSnippet}`);
   }
@@ -176,8 +175,8 @@ function testDynamicSeoMetadataUpdates() {
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Custom school portal description managed by Admin.');
     assert.equal(metaMap.get('property=og:site_name')?.attrs.content, 'GS GITUMBA PORTAL – NORDIC CBC HUB');
     assert.equal(metaMap.get('property=og:description')?.attrs.content, 'Custom school portal description managed by Admin.');
-    assert.equal(metaMap.get('property=og:image')?.attrs.content, DEFAULT_OG_IMAGE);
-    assert.equal(metaMap.get('name=twitter:image')?.attrs.content, DEFAULT_OG_IMAGE);
+    assert.equal(metaMap.has('property=og:image'), false);
+    assert.equal(metaMap.has('name=twitter:image'), false);
     assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
 
     updateBlogPostSeo(
@@ -197,13 +196,35 @@ function testDynamicSeoMetadataUpdates() {
     );
     assert.equal(mockDocument.title, 'Term 2 Reopening – GS GITUMBA PORTAL – NORDIC CBC HUB');
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Classes resume Monday.');
-    assert.equal(metaMap.get('property=og:image')?.attrs.content, DEFAULT_OG_IMAGE);
+    assert.equal(metaMap.has('property=og:image'), false, 'Image-free post must omit og:image');
+    assert.equal(metaMap.has('name=twitter:image'), false, 'Image-free post must omit twitter:image');
+    assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary');
+
+    updateBlogPostSeo(
+      {
+        id: 'post_seo_2',
+        title: 'Science Fair Gallery',
+        slug: 'science-fair-gallery',
+        content: '<p>Photos from campus.</p><img src="https://cdn.example.org/fair.jpg" alt="Fair" />',
+        excerpt: 'Students showcase projects.',
+        thumbnailUrl: '',
+        category: 'School News',
+        author: { name: 'Twizere Felix', role: 'Administrator' },
+        publishedAt: '2026-11-11T08:00:00Z',
+        status: 'published'
+      },
+      customBranding
+    );
+    assert.equal(metaMap.get('property=og:image')?.attrs.content, 'https://cdn.example.org/fair.jpg');
+    assert.equal(metaMap.get('property=og:image:secure_url')?.attrs.content, 'https://cdn.example.org/fair.jpg');
+    assert.equal(metaMap.get('name=twitter:image')?.attrs.content, 'https://cdn.example.org/fair.jpg');
+    assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
   } finally {
     if (prevDoc === undefined) delete (globalThis as any).document;
     else (globalThis as any).document = prevDoc;
   }
 
-  console.log('✓ 2. Initial HTML SEO tags, og:image, twitter:card, and runtime metadata updates verified');
+  console.log('✓ 2. Initial HTML SEO tags, article og:image, twitter:card, and runtime metadata updates verified');
 }
 
 function testBlogCategoryDiscoveryAndValidation() {

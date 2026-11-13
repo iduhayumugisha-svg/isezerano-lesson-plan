@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
 import type { Request, Response } from 'express';
@@ -11,7 +9,6 @@ export const DEFAULT_PUBLIC_ORIGIN = 'https://isezerano.online';
 export const DEFAULT_SITE_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
 export const DEFAULT_SITE_DESCRIPTION =
   'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
-export const DEFAULT_OG_IMAGE_PATH = '/og-isezerano-online.jpg';
 
 export interface DecodedImageAsset {
   buffer: Buffer;
@@ -156,7 +153,7 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
       return true;
     }
     if (
-      /(?:favicon|\/icons?\/|twemoji|wp-includes\/images\/|1x1|pixel\.|og-isezerano-online\.jpg|(?:^|\/|[-_])logo(?:[-_.]|$))/i.test(
+      /(?:favicon|\/icons?\/|twemoji|wp-includes\/images\/|1x1|pixel\.|(?:^|\/|[-_])logo(?:[-_.]|$))/i.test(
         lowerSrc
       )
     ) {
@@ -189,7 +186,7 @@ export function extractFirstContentImage(htmlContent: string | null | undefined)
  * 1. Explicit custom cover ONLY when `post.thumbnailIsCustomOverride === true` and `thumbnailUrl` is valid.
  * 2. Otherwise, always prefer the first actual non-decorative article image inside `post.content`.
  * 3. Otherwise, fall back to valid `post.thumbnailUrl` (standalone cover when body has no images).
- * 4. Otherwise, return '' (triggers default website OG banner).
+ * 4. Otherwise, return '' (omits article-specific social image metadata rather than substituting a default image).
  */
 export function resolvePostThumbnailSource(post?: Partial<BlogPost> | null): string {
   if (!post) return '';
@@ -621,13 +618,14 @@ export function renderBlogArticleHtml(
       imageHeight = decodedData.height;
       imageMime = decodedData.mimeType;
     } else {
-      imageUrl = `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
-      imageWidth = 1376;
-      imageHeight = 768;
-      imageMime = 'image/jpeg';
+      imageUrl = '';
+      imageWidth = undefined;
+      imageHeight = undefined;
+      imageMime = undefined;
     }
   }
 
+  const hasImage = Boolean(imageUrl);
   const imageAlt = (post.thumbnailAlt || articleTitle).trim();
   const authorName = post.author?.name || 'GS GITUMBA Editorial Team';
   const authorRole = post.author?.role || 'Educator';
@@ -641,7 +639,7 @@ export function renderBlogArticleHtml(
     },
     headline: articleTitle,
     description,
-    image: [imageUrl],
+    ...(hasImage ? { image: [imageUrl] } : {}),
     datePublished: post.publishedAt || post.updatedAt || '',
     dateModified: post.updatedAt || post.publishedAt || '',
     author: {
@@ -656,8 +654,8 @@ export function renderBlogArticleHtml(
   };
 
   const optionalDimTags = [
-    imageMime ? `    <meta property="og:image:type" content="${escapeHtml(imageMime)}" />` : '',
-    imageWidth && imageHeight
+    hasImage && imageMime ? `    <meta property="og:image:type" content="${escapeHtml(imageMime)}" />` : '',
+    hasImage && imageWidth && imageHeight
       ? `    <meta property="og:image:width" content="${imageWidth}" />\n    <meta property="og:image:height" content="${imageHeight}" />`
       : ''
   ]
@@ -672,10 +670,10 @@ export function renderBlogArticleHtml(
     `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
     `    <meta property="og:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(description)}" />`,
-    `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
-    `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />`,
+    hasImage ? `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />` : '',
+    hasImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />` : '',
     optionalDimTags,
-    `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
+    hasImage ? `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
     `    <meta property="og:url" content="${escapeHtml(articleUrl)}" />`,
     post.publishedAt
       ? `    <meta property="article:published_time" content="${escapeHtml(post.publishedAt)}" />`
@@ -686,11 +684,11 @@ export function renderBlogArticleHtml(
     post.category
       ? `    <meta property="article:section" content="${escapeHtml(post.category)}" />`
       : '',
-    `    <meta name="twitter:card" content="summary_large_image" />`,
+    `    <meta name="twitter:card" content="${hasImage ? 'summary_large_image' : 'summary'}" />`,
     `    <meta name="twitter:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(description)}" />`,
-    `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
-    `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />`,
+    hasImage ? `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />` : '',
+    hasImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ]
     .filter(Boolean)
@@ -700,7 +698,7 @@ export function renderBlogArticleHtml(
 }
 
 /**
- * Renders homepage or section-level HTML retaining the website's own title, description, and banner.
+ * Renders homepage or section-level HTML retaining the website's own title and description cleanly.
  */
 export function renderWebsiteDefaultHtml(
   templateHtml: string,
@@ -714,7 +712,6 @@ export function renderWebsiteDefaultHtml(
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const normalizedPath = pagePath.startsWith('/') ? pagePath : `/${pagePath}`;
   const canonicalUrl = `${cleanOrigin}${normalizedPath}`;
-  const imageUrl = `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -724,7 +721,6 @@ export function renderWebsiteDefaultHtml(
     applicationCategory: 'EducationalApplication',
     operatingSystem: 'All',
     description: siteDescription,
-    image: imageUrl,
     url: `${cleanOrigin}/`,
     offers: {
       '@type': 'Offer',
@@ -751,18 +747,10 @@ export function renderWebsiteDefaultHtml(
     `    <meta property="og:site_name" content="${escapeHtml(fullTitle)}" />`,
     `    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(siteDescription)}" />`,
-    `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
-    `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />`,
-    `    <meta property="og:image:type" content="image/jpeg" />`,
-    `    <meta property="og:image:width" content="1376" />`,
-    `    <meta property="og:image:height" content="768" />`,
-    `    <meta property="og:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(siteDescription)}" />`,
-    `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
-    `    <meta name="twitter:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ].join('\n');
 
@@ -877,23 +865,6 @@ export async function handleBlogOgImageRequest(
     return;
   }
 
-  // Case 3: Article has no custom or inline image -> serve the branded site social banner cleanly
-  const publicDir = providers.publicDir || path.resolve(process.cwd(), 'public');
-  const fallbackPath = path.join(publicDir, 'og-isezerano-online.jpg');
-  if (fs.existsSync(fallbackPath)) {
-    const buf = fs.readFileSync(fallbackPath);
-    res.status(200);
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Content-Length', String(buf.length));
-    res.setHeader('Cache-Control', 'public, max-age=300');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    if (req.method === 'HEAD') {
-      res.end();
-    } else {
-      res.send(buf);
-    }
-    return;
-  }
-
+  // Case 3: Article has no custom or inline image -> return 404 (never substitute a deleted default image)
   res.status(404).type('text/plain').send('No thumbnail available.');
 }

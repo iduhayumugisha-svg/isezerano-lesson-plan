@@ -153,11 +153,11 @@ export async function prerenderStaticBlogDist(
     const fileSlug = safeFileSlug(rawSlug);
 
     const thumbSrc = resolvePostThumbnailSource(post);
-    let staticImageUrl = `${origin}/og-isezerano-online.jpg`;
+    let staticImageUrl = '';
     let writtenImagePath: string | null = null;
-    let imageWidth: number | undefined = 1376;
-    let imageHeight: number | undefined = 768;
-    let imageMimeType: string | undefined = 'image/jpeg';
+    let imageWidth: number | undefined;
+    let imageHeight: number | undefined;
+    let imageMimeType: string | undefined;
 
     if (thumbSrc.startsWith('data:image/')) {
       const decoded = decodeImageDataUri(thumbSrc);
@@ -193,7 +193,7 @@ export async function prerenderStaticBlogDist(
     }
 
     const articleHtml = renderBlogArticleHtml(templateHtml, post, origin, branding, {
-      overrideImageUrl: staticImageUrl,
+      overrideImageUrl: staticImageUrl || undefined,
       imageWidth,
       imageHeight,
       imageMimeType
