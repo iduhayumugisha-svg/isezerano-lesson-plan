@@ -78,15 +78,66 @@ export function normalizeThumbnailSrc(rawSrc: string | null | undefined): string
 }
 
 /**
- * Resolves the single authoritative thumbnail for an article card or featured banner.
- * Strictly returns the article's own uploaded thumbnail or '' if none was provided.
+ * Extracts the first valid persistent image (src + alt) inserted inside an article's HTML content.
+ * Used to automatically set the article's thumbnail from its first image without double-uploading.
+ */
+export function extractFirstImageMetaFromContent(
+  htmlContent: string | null | undefined
+): { src: string; alt: string } | null {
+  if (!htmlContent || typeof htmlContent !== 'string') return null;
+
+  const imgTagRegex = /<img\b[^>]*>/gi;
+  let tagMatch: RegExpExecArray | null;
+
+  while ((tagMatch = imgTagRegex.exec(htmlContent)) !== null) {
+    const tag = tagMatch[0];
+    const srcMatch =
+      tag.match(/\bsrc\s*=\s*"([^"]+)"/i) ||
+      tag.match(/\bsrc\s*=\s*'([^']+)'/i);
+
+    if (srcMatch && srcMatch[1]) {
+      const normalized = normalizeThumbnailSrc(srcMatch[1]);
+      if (normalized) {
+        const altMatch =
+          tag.match(/\balt\s*=\s*"([^"]*)"/i) ||
+          tag.match(/\balt\s*=\s*'([^']*)'/i);
+        return {
+          src: normalized,
+          alt: (altMatch?.[1] || '').trim()
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Convenience helper returning only the normalized URL/Data URI of the first image in content.
+ */
+export function extractFirstImageFromContent(htmlContent: string | null | undefined): string {
+  return extractFirstImageMetaFromContent(htmlContent)?.src || '';
+}
+
+/**
+ * Resolves the single authoritative thumbnail for an article card or preview.
+ * Priority:
+ * 1. Valid persistent `post.thumbnailUrl` (if explicitly set / stored)
+ * 2. Automatic fallback to the first valid image inside `post.content`
+ * 3. '' (empty string -> UI displays a clean default placeholder)
+ *
  * Never substitutes another article's image or external stock photos.
  */
 export function getSingleArticleThumbnailUrl(
-  post?: { thumbnailUrl?: string | null } | null
+  post?: { thumbnailUrl?: string | null; content?: string | null } | null
 ): string {
   if (!post) return '';
-  return normalizeThumbnailSrc(post.thumbnailUrl);
+  const direct = normalizeThumbnailSrc(post.thumbnailUrl);
+  if (direct) return direct;
+  if (post.content) {
+    return extractFirstImageFromContent(post.content);
+  }
+  return '';
 }
 
 /**
@@ -121,13 +172,32 @@ export function extractPlainTextExcerpt(htmlContent: string, maxLength: number =
 }
 
 /**
- * Preserves the article's own thumbnail cleanly when saving.
+ * Automatically derives and preserves the article's thumbnail before saving:
+ * - If `thumbnailIsCustomOverride` is true and `thumbnailUrl` is valid, keep the custom cover.
+ * - Otherwise, automatically use the first image inside `post.content` if one exists,
+ *   or keep `thumbnailUrl` if provided, or cleanly persist '' (for default placeholder).
  */
 export function sanitizePostThumbnail(post: BlogPost): BlogPost {
-  const cleanThumb = normalizeThumbnailSrc(post.thumbnailUrl);
+  const explicitThumb = normalizeThumbnailSrc(post.thumbnailUrl);
+  const firstContentImg = extractFirstImageMetaFromContent(post.content);
+
+  let resolvedThumb = '';
+  let resolvedAlt = (post.thumbnailAlt || '').trim();
+
+  if (post.thumbnailIsCustomOverride && explicitThumb) {
+    resolvedThumb = explicitThumb;
+  } else if (firstContentImg) {
+    resolvedThumb = firstContentImg.src;
+    if (!resolvedAlt && firstContentImg.alt) {
+      resolvedAlt = firstContentImg.alt;
+    }
+  } else {
+    resolvedThumb = explicitThumb;
+  }
+
   return {
     ...post,
-    thumbnailUrl: cleanThumb,
-    thumbnailAlt: (post.thumbnailAlt || `${post.title} – Featured Image`).trim()
+    thumbnailUrl: resolvedThumb,
+    thumbnailAlt: resolvedAlt || `${post.title} – Featured Image`
   };
 }

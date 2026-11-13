@@ -50,30 +50,51 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
           <div className="md:col-span-2 space-y-4">
             <div 
               onClick={() => handleLink('home')} 
-              className="cursor-pointer group inline-block"
+              className="cursor-pointer group inline-flex items-center gap-3"
             >
-              <div className="flex flex-col justify-center">
-                <span 
-                  className="font-serif font-extrabold tracking-tight leading-tight"
+              {logoSettings?.showInFooter !== false && logoUrl && (
+                <div
+                  className={`shrink-0 overflow-hidden bg-white/10 border border-white/15 flex items-center justify-center ${logoSettings?.borderRadius || 'rounded-xl'}`}
                   style={{
-                    fontSize: `${typography.websiteTitleSize - 2}px`,
-                    color: colors.footerHeadingText
+                    height: `${Math.min(Math.max(logoSettings?.displayHeight || 40, 28), 52)}px`,
+                    width: `${Math.min(Math.max(logoSettings?.displayHeight || 40, 28), 52)}px`
                   }}
                 >
-                  {branding?.platformTitle || 'ISEZERANO ONLINE'}
-                </span>
-                <span 
-                  className="font-semibold tracking-wider uppercase mt-0.5 text-xs text-teal-400"
-                  style={{ color: colors.footerLinkColor }}
-                >
-                  {branding?.platformSubtitle || 'GS GITUMBA'} • CBC & Educational Platform
-                </span>
-              </div>
+                  <img
+                    src={logoUrl}
+                    alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
+                    className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+
+              {branding?.showWebsiteName !== false && (
+                <div className="flex flex-col justify-center">
+                  <span 
+                    className="font-serif font-extrabold tracking-tight leading-tight"
+                    style={{
+                      fontSize: `${typography.websiteTitleSize - 2}px`,
+                      color: colors.footerHeadingText
+                    }}
+                  >
+                    {branding?.platformTitle || 'ISEZERANO ONLINE'}
+                  </span>
+                  <span 
+                    className="font-semibold tracking-wider uppercase mt-0.5 text-xs text-teal-400"
+                    style={{ color: colors.footerLinkColor }}
+                  >
+                    {branding?.platformSubtitle || 'GS GITUMBA'} • CBC & Educational Platform
+                  </span>
+                </div>
+              )}
             </div>
 
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md">
-              {branding?.footerTagline || 'Serving Rwandan educators and communities from GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province). Providing pedagogical tools, CBC curriculum guidance, and educational excellence.'}
-            </p>
+            {branding?.showWebsiteDescription !== false && (
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md">
+                {branding?.websiteDescription?.trim() || branding?.footerTagline || 'Serving Rwandan educators and communities from GS GITUMBA (Buyoga Sector, Rulindo District, Northern Province).'}
+              </p>
+            )}
 
             <div className="space-y-1.5 pt-1 text-xs text-slate-400">
               <div className="flex items-center space-x-2">

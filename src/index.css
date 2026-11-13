@@ -25,6 +25,32 @@
   }
 }
 
+/* Responsive Blog Article Image Display (preserves admin widths/heights while never overflowing) */
+.blog-article-body figure,
+.blog-rich-editor-surface figure {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.blog-article-body img,
+.blog-rich-editor-surface img {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .blog-article-body figure[data-align],
+  .blog-rich-editor-surface figure[data-align] {
+    max-width: 100% !important;
+  }
+
+  .blog-article-body img,
+  .blog-rich-editor-surface img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}
+
 /* Screen mode: strictly hide print portal from UI */
 @media screen {
   #rwanda-cbc-print-portal {

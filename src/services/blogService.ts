@@ -22,7 +22,6 @@ import { isValidDateString } from '../utils/dateUtils';
 import {
   estimateUtf8Bytes,
   extractPlainTextExcerpt,
-  isValidPersistentImageSrc,
   sanitizePostThumbnail
 } from '../utils/thumbnailUtils';
 
@@ -270,12 +269,6 @@ export const prepareBlogPostPayload = (
   }
 
   const sanitized = sanitizePostThumbnail(post);
-  if (!sanitized.thumbnailUrl || !isValidPersistentImageSrc(sanitized.thumbnailUrl)) {
-    return {
-      ok: false,
-      error: 'Please upload a valid featured image from your device before saving this article.'
-    };
-  }
 
   const contentText = extractPlainTextExcerpt(sanitized.content || '', 500);
   if (!contentText) {

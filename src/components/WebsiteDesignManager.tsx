@@ -302,11 +302,12 @@ export const WebsiteDesignManager: React.FC = () => {
     cancelDraft,
     publishSettings,
     uploadLogoFile,
+    removeLogoFile,
     setPreviewingDraft,
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'menus' | 'preview' | 'history'>('layout');
+  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'menus' | 'preview' | 'history'>('branding');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -458,23 +459,14 @@ export const WebsiteDesignManager: React.FC = () => {
     }
   };
 
-  // Restore Default Logo and immediately publish to Firestore
+  // Restore Default / Remove Logo and immediately update Firestore
   const handleRestoreDefaultLogo = async () => {
-    updateDraftLogo({
-      logoUrl: DEFAULT_WEBSITE_LOGO.logoUrl,
-      isCustomLogo: false,
-      displayHeight: DEFAULT_WEBSITE_LOGO.displayHeight,
-      displayFit: DEFAULT_WEBSITE_LOGO.displayFit,
-      borderRadius: DEFAULT_WEBSITE_LOGO.borderRadius
-    });
     setConfirmResetLogo(false);
-
-    // Also publish directly so the database is updated immediately
-    const res = await publishSettings();
+    const res = await removeLogoFile();
     if (res.success) {
-      showStatus('success', 'Original default ISEZERANO ONLINE logo restored and published live!');
+      showStatus('success', 'Uploaded website logo removed and updated in Cloud Firestore.');
     } else {
-      showStatus('success', 'Original default logo applied to draft.');
+      showStatus('error', res.error || 'Could not remove website logo.');
     }
   };
 
@@ -482,11 +474,7 @@ export const WebsiteDesignManager: React.FC = () => {
   const handlePublish = async () => {
     const res = await publishSettings();
     if (res.success) {
-      if ((res as any).isLocalFallback) {
-        showStatus('success', '✅ Design & typography changes published and applied live! (Saved locally on this device; cloud sync will link to all devices once Firestore rules are published).');
-      } else {
-        showStatus('success', '🎉 All design, typography & logo changes are published and live across the entire website!');
-      }
+      showStatus('success', 'Website branding, name, description, design, and logo changes published live to Cloud Firestore!');
     } else {
       showStatus('error', res.error || 'Failed to publish changes.');
     }
@@ -798,9 +786,9 @@ export const WebsiteDesignManager: React.FC = () => {
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Platform Branding & School Identity</h3>
+              <h3 className="text-lg font-bold text-slate-900">Website Name, Description, Header Logo &amp; Visibility</h3>
               <p className="text-xs text-slate-500">
-                Manage platform titles, official school names, announcement banners, and footer attributions displayed to public visitors and educators.
+                Edit the website name, description, visibility toggles, and top header logo. Saved changes update the live header, footer, browser title, and SEO metadata.
               </p>
             </div>
 
@@ -814,37 +802,212 @@ export const WebsiteDesignManager: React.FC = () => {
             </button>
           </div>
 
+          {/* Website Name & Description with Independent Visibility Toggles */}
+          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Website Name + Visibility Toggle */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Website Name (Main Header Title &amp; Browser Tab)
+                  </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={draftSettings.branding?.showWebsiteName !== false}
+                    onClick={() =>
+                      updateDraftBranding({
+                        showWebsiteName: !(draftSettings.branding?.showWebsiteName !== false)
+                      })
+                    }
+                    className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                      draftSettings.branding?.showWebsiteName !== false
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-slate-200 border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    {draftSettings.branding?.showWebsiteName !== false ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Name Visible</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" />
+                        <span>Name Hidden</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.platformTitle ?? ''}
+                  onChange={(e) => updateDraftBranding({ platformTitle: e.target.value })}
+                  placeholder="ISEZERANO ONLINE"
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Displayed to the right of the header logo, in the footer, and in browser tab/SEO titles.
+                </p>
+              </div>
+
+              {/* Platform Subtitle */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  School Subtitle Label (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draftSettings.branding?.platformSubtitle ?? ''}
+                  onChange={(e) => updateDraftBranding({ platformSubtitle: e.target.value })}
+                  placeholder="GS GITUMBA"
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Sub-brand label displayed beneath the website name when the website name is visible.
+                </p>
+              </div>
+
+              {/* Website Description + Independent Visibility Toggle */}
+              <div className="md:col-span-2 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Website Description (Public Branding &amp; SEO Meta Description)
+                  </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={draftSettings.branding?.showWebsiteDescription !== false}
+                    onClick={() =>
+                      updateDraftBranding({
+                        showWebsiteDescription: !(draftSettings.branding?.showWebsiteDescription !== false)
+                      })
+                    }
+                    className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                      draftSettings.branding?.showWebsiteDescription !== false
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-slate-200 border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    {draftSettings.branding?.showWebsiteDescription !== false ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Description Visible</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" />
+                        <span>Description Hidden</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <textarea
+                  rows={2}
+                  value={draftSettings.branding?.websiteDescription ?? ''}
+                  onChange={(e) => updateDraftBranding({ websiteDescription: e.target.value })}
+                  placeholder="Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog."
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Shown on the public website when Description Visible is enabled, and automatically synced to SEO metadata (`&lt;meta name=&quot;description&quot;&gt;` &amp; OpenGraph).
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Header Branding Preview + Logo Upload */}
+            <div className="pt-4 border-t border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  Header Layout Preview (Logo Left → Website Name → Description)
+                </span>
+                <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 min-w-0">
+                  {draftSettings.logo.showInHeader && draftSettings.logo.logoUrl ? (
+                    <div
+                      className={`shrink-0 overflow-hidden bg-white border border-slate-200 flex items-center justify-center ${draftSettings.logo.borderRadius}`}
+                      style={{
+                        height: `${Math.min(Math.max(draftSettings.logo.displayHeight || 44, 32), 56)}px`,
+                        width: `${Math.min(Math.max(draftSettings.logo.displayHeight || 44, 32), 56)}px`
+                      }}
+                    >
+                      <img
+                        src={draftSettings.logo.logoUrl}
+                        alt={draftSettings.logo.altText || 'Header logo'}
+                        className={`w-full h-full ${draftSettings.logo.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0">
+                    {draftSettings.branding?.showWebsiteName !== false ? (
+                      <>
+                        <div className="font-serif font-extrabold text-sm sm:text-base text-slate-900 truncate">
+                          {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'}
+                        </div>
+                        {draftSettings.branding?.platformSubtitle && (
+                          <div className="text-[11px] font-semibold uppercase tracking-wider text-teal-700 truncate">
+                            {draftSettings.branding.platformSubtitle}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-[11px] italic text-slate-400">(Website name hidden)</div>
+                    )}
+                    {draftSettings.branding?.showWebsiteDescription !== false && draftSettings.branding?.websiteDescription?.trim() ? (
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                        {draftSettings.branding.websiteDescription}
+                      </div>
+                    ) : draftSettings.branding?.showWebsiteDescription === false ? (
+                      <div className="text-[11px] italic text-slate-400">(Website description hidden)</div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleLogoFileChange}
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUploading ? 'Uploading Logo...' : draftSettings.logo.logoUrl ? 'Replace Header Logo' : 'Upload Logo from Device'}</span>
+                </button>
+                {draftSettings.logo.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResetLogo(true)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-bold cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Logo</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('logo')}
+                  className="inline-flex items-center space-x-1 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Logo Sizing</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Platform Title */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800">
-                Platform Name (Main Header Title)
-              </label>
-              <input
-                type="text"
-                value={draftSettings.branding?.platformTitle || ''}
-                onChange={(e) => updateDraftBranding({ platformTitle: e.target.value })}
-                placeholder="ISEZERANO ONLINE"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-bold"
-              />
-              <p className="text-[11px] text-slate-500">Primary headline appearing in header, tabs, and footer.</p>
-            </div>
-
-            {/* Platform Subtitle */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800">
-                Platform Subtitle (School Label)
-              </label>
-              <input
-                type="text"
-                value={draftSettings.branding?.platformSubtitle || ''}
-                onChange={(e) => updateDraftBranding({ platformSubtitle: e.target.value })}
-                placeholder="GS GITUMBA"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
-              />
-              <p className="text-[11px] text-slate-500">Sub-brand label displayed below the platform name.</p>
-            </div>
-
             {/* School Name */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800">
@@ -1076,30 +1239,36 @@ export const WebsiteDesignManager: React.FC = () => {
               </div>
               
               <div 
-                className={`overflow-hidden bg-slate-900 border border-slate-200 shadow-md flex items-center justify-center ${draftSettings.logo.borderRadius}`}
+                className={`overflow-hidden bg-white border border-slate-200 shadow-md flex items-center justify-center ${draftSettings.logo.borderRadius}`}
                 style={{
                   height: `${draftSettings.logo.displayHeight}px`,
                   width: `${draftSettings.logo.displayHeight}px`
                 }}
               >
-                <img 
-                  src={draftSettings.logo.logoUrl} 
-                  alt={draftSettings.logo.altText || 'Website Logo'} 
-                  className={`w-full h-full object-${draftSettings.logo.displayFit}`}
-                  referrerPolicy="no-referrer"
-                />
+                {draftSettings.logo.logoUrl ? (
+                  <img 
+                    src={draftSettings.logo.logoUrl} 
+                    alt={draftSettings.logo.altText || 'Website Logo'} 
+                    className={`w-full h-full object-${draftSettings.logo.displayFit}`}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-400">
+                    <ImageIcon className="w-5 h-5 opacity-60" />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                  draftSettings.logo.isCustomLogo 
+                  draftSettings.logo.logoUrl 
                     ? 'bg-teal-100 text-teal-800 border border-teal-200' 
                     : 'bg-slate-100 text-slate-700 border border-slate-200'
                 }`}>
-                  {draftSettings.logo.isCustomLogo ? 'Custom Uploaded Logo' : 'Official Default Logo'}
+                  {draftSettings.logo.logoUrl ? 'Uploaded Logo Active' : 'No Logo Uploaded'}
                 </span>
                 <p className="text-[11px] text-slate-400 font-mono truncate max-w-xs">
-                  {draftSettings.logo.logoUrl}
+                  {draftSettings.logo.logoUrl ? `${draftSettings.logo.logoUrl.slice(0, 48)}...` : 'Upload a PNG, JPG, WebP, or SVG logo'}
                 </p>
               </div>
             </div>
@@ -2971,13 +3140,13 @@ export const WebsiteDesignManager: React.FC = () => {
                   color: draftSettings.colors.headerText
                 }}
               >
-                <div className="flex items-center space-x-2.5">
-                  {draftSettings.logo.showInHeader && (
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  {draftSettings.logo.showInHeader && draftSettings.logo.logoUrl && (
                     <div 
-                      className={`overflow-hidden shrink-0 ${draftSettings.logo.borderRadius}`}
+                      className={`overflow-hidden shrink-0 bg-white border border-slate-200 ${draftSettings.logo.borderRadius}`}
                       style={{
-                        height: `${Math.min(draftSettings.logo.displayHeight, 42)}px`,
-                        width: `${Math.min(draftSettings.logo.displayHeight, 42)}px`
+                        height: `${Math.min(draftSettings.logo.displayHeight, 44)}px`,
+                        width: `${Math.min(draftSettings.logo.displayHeight, 44)}px`
                       }}
                     >
                       <img 
@@ -2987,19 +3156,30 @@ export const WebsiteDesignManager: React.FC = () => {
                       />
                     </div>
                   )}
-                  <div>
-                    <h5 
-                      className="font-bold leading-tight"
-                      style={{ fontSize: `${draftSettings.typography.websiteTitleSize}px` }}
-                    >
-                      ISEZERANO ONLINE
-                    </h5>
-                    <span 
-                      className="text-slate-500 block"
-                      style={{ fontSize: `${draftSettings.typography.websiteSubtitleSize}px` }}
-                    >
-                      GS GITUMBA
-                    </span>
+                  <div className="min-w-0">
+                    {draftSettings.branding?.showWebsiteName !== false && (
+                      <>
+                        <h5 
+                          className="font-bold leading-tight truncate"
+                          style={{ fontSize: `${draftSettings.typography.websiteTitleSize}px` }}
+                        >
+                          {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'}
+                        </h5>
+                        {draftSettings.branding?.platformSubtitle && (
+                          <span 
+                            className="text-slate-500 block truncate"
+                            style={{ fontSize: `${draftSettings.typography.websiteSubtitleSize}px` }}
+                          >
+                            {draftSettings.branding.platformSubtitle}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {draftSettings.branding?.showWebsiteDescription !== false && draftSettings.branding?.websiteDescription?.trim() && (
+                      <span className="text-[11px] text-slate-500 block truncate">
+                        {draftSettings.branding.websiteDescription}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -3114,9 +3294,9 @@ export const WebsiteDesignManager: React.FC = () => {
                 }}
               >
                 <div className="flex items-center space-x-2">
-                  {draftSettings.logo.showInFooter && (
+                  {draftSettings.logo.showInFooter && draftSettings.logo.logoUrl && (
                     <div 
-                      className={`overflow-hidden ${draftSettings.logo.borderRadius}`}
+                      className={`overflow-hidden bg-white/10 ${draftSettings.logo.borderRadius}`}
                       style={{
                         height: `${Math.min(draftSettings.logo.displayHeight, 32)}px`,
                         width: `${Math.min(draftSettings.logo.displayHeight, 32)}px`
@@ -3129,22 +3309,26 @@ export const WebsiteDesignManager: React.FC = () => {
                       />
                     </div>
                   )}
-                  <h6 
-                    className="font-bold"
-                    style={{ 
-                      color: draftSettings.colors.footerHeadingText,
-                      fontSize: `${draftSettings.typography.footerSize}px`
-                    }}
-                  >
-                    ISEZERANO ONLINE – GS GITUMBA
-                  </h6>
+                  {draftSettings.branding?.showWebsiteName !== false && (
+                    <h6 
+                      className="font-bold"
+                      style={{ 
+                        color: draftSettings.colors.footerHeadingText,
+                        fontSize: `${draftSettings.typography.footerSize}px`
+                      }}
+                    >
+                      {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'} – {draftSettings.branding?.platformSubtitle || 'GS GITUMBA'}
+                    </h6>
+                  )}
                 </div>
-                <p 
-                  className="leading-relaxed opacity-90"
-                  style={{ fontSize: `${draftSettings.typography.footerSize - 1}px` }}
-                >
-                  Buyoga Sector, Rulindo District, Northern Province, Rwanda.
-                </p>
+                {draftSettings.branding?.showWebsiteDescription !== false && (
+                  <p 
+                    className="leading-relaxed opacity-90"
+                    style={{ fontSize: `${draftSettings.typography.footerSize - 1}px` }}
+                  >
+                    {draftSettings.branding?.websiteDescription || draftSettings.branding?.schoolLocation || 'Buyoga Sector, Rulindo District, Northern Province, Rwanda.'}
+                  </p>
+                )}
               </div>
 
             </div>

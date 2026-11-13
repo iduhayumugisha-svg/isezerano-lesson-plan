@@ -55,6 +55,7 @@ import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesign
 import { FEATURE_FLAGS } from './config/features';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
+import { updateWebsiteBrandingSeo } from './services/seoService';
 
 export type AppPage = WebsitePage | 'admin';
 
@@ -119,7 +120,7 @@ const getBlogSlugFromUrl = (): string | null => {
 function AppContent() {
   const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
-  const { colors, typography } = useWebsiteDesign();
+  const { colors, typography, branding } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -205,10 +206,17 @@ function AppContent() {
     };
   }, []);
 
-  // Track SPA navigation in Google Analytics 4
+  // Track SPA navigation in Google Analytics 4 and keep browser title/SEO metadata in sync with Admin branding
   useEffect(() => {
     trackPageView(currentPage);
   }, [currentPage]);
+
+  useEffect(() => {
+    if (currentPage === 'blog' && activeBlogSlug) {
+      return; // BlogView manages per-article SEO tags cleanly
+    }
+    updateWebsiteBrandingSeo(branding);
+  }, [branding, currentPage, activeBlogSlug]);
 
   // Lesson plan save handler with ownerUid binding
   const handleSaveLessonPlan = async (plan: LessonPlan): Promise<{ success: boolean; error?: string }> => {

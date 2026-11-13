@@ -28,6 +28,7 @@ import {
   updateBrowserFavicon,
   subscribeToWebsiteDesign,
   uploadAndSaveWebsiteLogo,
+  removeAndSaveWebsiteLogo,
   LogoUploadProgress,
   LogoUploadResult
 } from '../services/websiteDesignService';
@@ -82,6 +83,7 @@ interface WebsiteDesignContextType {
   restoreVersion: (version: WebsiteDesignVersion) => Promise<{ success: boolean; error?: string }>;
   publishSettings: (summaryNote?: string) => Promise<{ success: boolean; error?: string }>;
   uploadLogoFile: (file: File, onProgress?: (progress: LogoUploadProgress) => void) => Promise<LogoUploadResult>;
+  removeLogoFile: () => Promise<{ success: boolean; error?: string }>;
   reloadSettings: () => Promise<void>;
 
   // Convenience Getters
@@ -705,13 +707,20 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const publishSettings = async (summaryNote?: string): Promise<{ success: boolean; error?: string; isLocalFallback?: boolean }> => {
+  const publishSettings = async (summaryNote?: string): Promise<{ success: boolean; error?: string }> => {
     setIsPublishing(true);
     try {
       const adminUid = user?.uid || user?.email || 'admin';
       const result = await saveWebsiteDesignSettings(draftSettings, adminUid, summaryNote);
-      
-      // Update published settings and sync DOM immediately
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to publish website settings to Cloud Firestore.'
+        };
+      }
+
+      // Sync published state and DOM variables after confirmed Firestore save
       setPublishedSettings(draftSettings);
       setIsDraftDirty(false);
       isDraftDirtyRef.current = false;
@@ -722,15 +731,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         updateBrowserFavicon(draftSettings.logo.logoUrl);
       }
 
-      if (result.success) {
-        return { success: true };
-      } else {
-        return { 
-          success: true, 
-          isLocalFallback: true, 
-          error: result.error 
-        };
-      }
+      return { success: true };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Publish error';
       return { success: false, error: message };
@@ -747,23 +748,23 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     const result = await uploadAndSaveWebsiteLogo(file, adminUid, onProgress);
 
     if (result.success && result.url) {
-      // Immediately reflect published logo
       setPublishedSettings(prev => ({
         ...prev,
         logo: {
           ...prev.logo,
           logoUrl: result.url!,
-          isCustomLogo: true
+          isCustomLogo: true,
+          showInHeader: true
         }
       }));
 
-      // Also update draft
       setDraftSettings(prev => ({
         ...prev,
         logo: {
           ...prev.logo,
           logoUrl: result.url!,
-          isCustomLogo: true
+          isCustomLogo: true,
+          showInHeader: true
         }
       }));
 
@@ -771,6 +772,23 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       updateBrowserFavicon(result.url);
     }
 
+    return result;
+  };
+
+  const removeLogoFile = async (): Promise<{ success: boolean; error?: string }> => {
+    const adminUid = user?.uid || user?.email || 'admin';
+    const result = await removeAndSaveWebsiteLogo(adminUid);
+    if (result.success) {
+      const resetLogo = {
+        ...DEFAULT_WEBSITE_LOGO,
+        logoUrl: '',
+        isCustomLogo: false
+      };
+      setPublishedSettings(prev => ({ ...prev, logo: resetLogo }));
+      setDraftSettings(prev => ({ ...prev, logo: resetLogo }));
+      setIsDraftDirty(false);
+      isDraftDirtyRef.current = false;
+    }
     return result;
   };
 
@@ -817,6 +835,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         restoreVersion,
         publishSettings,
         uploadLogoFile,
+        removeLogoFile,
         reloadSettings: loadSettings,
         branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
         announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,

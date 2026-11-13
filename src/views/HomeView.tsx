@@ -168,9 +168,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* Clean Institutional Footnote */}
       <footer className="text-center pt-4 border-t border-slate-100 text-xs text-slate-500">
-        <p className="font-semibold text-slate-700">
-          {branding?.platformTitle || 'ISEZERANO ONLINE'} • {branding?.platformSubtitle || 'GS GITUMBA'}
-        </p>
+        {branding?.showWebsiteName !== false && (
+          <p className="font-semibold text-slate-700">
+            {branding?.platformTitle || 'ISEZERANO ONLINE'}{branding?.platformSubtitle ? ` • ${branding.platformSubtitle}` : ''}
+          </p>
+        )}
+        {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl mx-auto">
+            {branding.websiteDescription}
+          </p>
+        )}
         <p className="text-[11px] text-slate-400 mt-0.5">
           {branding?.schoolLocation || 'Buyoga Sector, Rulindo District, Northern Province, Rwanda'}
         </p>

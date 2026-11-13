@@ -7,16 +7,24 @@ import {
   BookOpen,
   Share2,
   Check,
-  Image as ImageIcon,
   FileText,
   Loader2,
   Eye
 } from 'lucide-react';
-import { BlogPost, BLOG_CATEGORIES } from '../types/blog';
+import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
 import { subscribeToBlogPosts, incrementPostViews } from '../services/blogService';
+import {
+  subscribeToBlogCategories,
+  mergeCategoriesForDisplay
+} from '../services/blogCategoryService';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { formatPublicationDate } from '../utils/dateUtils';
-import { extractPlainTextExcerpt, getSingleArticleThumbnailUrl } from '../utils/thumbnailUtils';
+import {
+  extractFirstImageFromContent,
+  extractPlainTextExcerpt,
+  getSingleArticleThumbnailUrl
+} from '../utils/thumbnailUtils';
 
 interface BlogViewProps {
   initialSlug?: string | null;
@@ -37,9 +45,14 @@ const ArticleThumbnailImage: React.FC<{
   if (!src || hasError) {
     return (
       <div
-        className={`w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 ${className}`}
+        role="img"
+        aria-label={alt || 'Article placeholder'}
+        className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex flex-col items-center justify-center text-slate-400 p-4 text-center space-y-1.5"
       >
-        <ImageIcon className="w-7 h-7 opacity-60" />
+        <FileText className="w-7 h-7 opacity-55" />
+        <span className="text-[11px] font-medium tracking-wide uppercase text-slate-500">
+          GS GITUMBA
+        </span>
       </div>
     );
   }
@@ -57,7 +70,10 @@ const ArticleThumbnailImage: React.FC<{
 };
 
 export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelectPostSlug }) => {
+  const { branding } = useWebsiteDesign();
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
+  const [categoriesInitialized, setCategoriesInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(initialSlug);
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,16 +87,35 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
 
   useEffect(() => {
     setIsLoading(true);
-    const unsub = subscribeToBlogPosts((publishedPosts) => {
+    const unsubPosts = subscribeToBlogPosts((publishedPosts) => {
       setPosts(publishedPosts);
       setIsLoading(false);
     }, false);
 
+    const unsubCategories = subscribeToBlogCategories((fetchedCats, initialized) => {
+      setRawCategories(fetchedCats);
+      setCategoriesInitialized(initialized);
+    });
+
     return () => {
-      unsub();
-      resetDefaultSeo();
+      unsubPosts();
+      unsubCategories();
     };
   }, []);
+
+  const categories = mergeCategoriesForDisplay(rawCategories, categoriesInitialized, posts);
+  const categoryTabs = [
+    'All Categories',
+    ...categories.map((c) => c.name),
+    ...(posts.some((p) => p.category === 'Uncategorized') ? ['Uncategorized'] : [])
+  ];
+  const selectedCategoryObj = categories.find((c) => c.name === selectedCategory);
+
+  useEffect(() => {
+    if (selectedCategory !== 'All Categories' && !categoryTabs.includes(selectedCategory)) {
+      setSelectedCategory('All Categories');
+    }
+  }, [selectedCategory, categoryTabs]);
 
   const activePost = activeSlug
     ? posts.find((p) => p.slug === activeSlug || p.id === activeSlug) || null
@@ -89,15 +124,15 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
   // Update SEO metadata and increment views once when opening a published article
   useEffect(() => {
     if (activePost) {
-      updateBlogPostSeo(activePost);
+      updateBlogPostSeo(activePost, branding);
       if (!incrementedPostIdsRef.current.has(activePost.id)) {
         incrementedPostIdsRef.current.add(activePost.id);
         incrementPostViews(activePost.id);
       }
     } else {
-      resetDefaultSeo();
+      resetDefaultSeo(branding);
     }
-  }, [activePost?.id]);
+  }, [activePost?.id, branding]);
 
   const openArticle = (post: BlogPost) => {
     setActiveSlug(post.slug);
@@ -168,7 +203,23 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
     }
 
     const featuredThumb = getSingleArticleThumbnailUrl(activePost);
+    const firstBodyImg = extractFirstImageFromContent(activePost.content);
+    const showSeparateBanner = Boolean(
+      featuredThumb && (!firstBodyImg || featuredThumb !== firstBodyImg)
+    );
     const dateInfo = formatPublicationDate(activePost.publishedAt || activePost.updatedAt);
+
+    // Related articles: prioritize same category, then most recent (max 3)
+    const relatedPosts = posts
+      .filter((p) => p.id !== activePost.id)
+      .sort((a, b) => {
+        const aSameCat = a.category === activePost.category ? 1 : 0;
+        const bSameCat = b.category === activePost.category ? 1 : 0;
+        if (aSameCat !== bSameCat) return bSameCat - aSameCat;
+        return new Date(b.publishedAt || b.updatedAt || 0).getTime() -
+          new Date(a.publishedAt || a.updatedAt || 0).getTime();
+      })
+      .slice(0, 3);
 
     return (
       <article className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
@@ -245,22 +296,72 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
           </h1>
         </header>
 
-        {/* Featured Image */}
-        {featuredThumb && (
-          <figure className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+        {/* Featured Image Banner (only when distinct from the first body image so Admin-resized first images aren't duplicated) */}
+        {showSeparateBanner && (
+          <figure className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[16/9]">
             <ArticleThumbnailImage
               src={featuredThumb}
               alt={activePost.thumbnailAlt || activePost.title}
-              className="w-full max-h-[520px] object-cover"
+              className="w-full h-full object-cover"
             />
           </figure>
         )}
 
-        {/* Full Multi-Paragraph Formatted Content */}
+        {/* Full Multi-Paragraph Formatted Content (preserves Admin-selected image sizes and alignments) */}
         <div
           className="blog-article-body text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-6 [&_a]:text-teal-700 [&_a]:underline"
           dangerouslySetInnerHTML={{ __html: activePost.content }}
         />
+
+        {/* Related Articles Section (each displays its own correct thumbnail) */}
+        {relatedPosts.length > 0 && (
+          <section className="pt-8 border-t border-slate-200 space-y-5">
+            <h2 className="font-serif text-xl sm:text-2xl font-bold text-slate-900">
+              Related Articles
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              {relatedPosts.map((related) => {
+                const relThumb = getSingleArticleThumbnailUrl(related);
+                const relDate = formatPublicationDate(related.publishedAt || related.updatedAt);
+
+                return (
+                  <article
+                    key={related.id}
+                    onClick={() => openArticle(related)}
+                    className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-sm transition-all flex flex-col cursor-pointer"
+                  >
+                    <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                      <ArticleThumbnailImage
+                        src={relThumb}
+                        alt={related.thumbnailAlt || related.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                      />
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-2.5">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500">
+                          <span className="font-bold text-teal-800">{related.category}</span>
+                          {relDate && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span>{relDate.formattedDate}</span>
+                            </>
+                          )}
+                        </div>
+                        <h3 className="font-serif text-base font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                          {related.title}
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-500 tabular-nums">
+                        {related.readTimeMinutes || 1} min read
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Bottom Return Link */}
         <div className="pt-8 border-t border-slate-200 flex items-center justify-between">
@@ -278,17 +379,30 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
   }
 
   // ================= PUBLIC BLOG INDEX VIEW =================
+  const siteNameLabel =
+    branding?.showWebsiteName !== false
+      ? branding?.platformTitle?.trim() || 'ISEZERANO ONLINE'
+      : '';
+  const schoolSubtitleLabel = branding?.platformSubtitle?.trim() || 'GS GITUMBA';
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
       {/* Editorial Section Header */}
       <div className="border-b border-slate-200 pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1.5">
-          <div className="text-xs font-bold uppercase tracking-wider text-teal-800">
-            ISEZERANO ONLINE · GS GITUMBA
-          </div>
+          {(siteNameLabel || schoolSubtitleLabel) && (
+            <div className="text-xs font-bold uppercase tracking-wider text-teal-800">
+              {[siteNameLabel, schoolSubtitleLabel].filter(Boolean).join(' · ')}
+            </div>
+          )}
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            School Blog & Educational Articles
+            School Blog &amp; Educational Articles
           </h1>
+          {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
+            <p className="text-xs sm:text-sm text-slate-600 max-w-2xl">
+              {branding.websiteDescription}
+            </p>
+          )}
         </div>
 
         {/* Search Input */}
@@ -304,25 +418,34 @@ export const BlogView: React.FC<BlogViewProps> = ({ initialSlug = null, onSelect
         </div>
       </div>
 
-      {/* Category Filter Tabs (Clean editorial underline style) */}
-      <div className="flex items-center space-x-5 overflow-x-auto border-b border-slate-200 pb-0.5 no-scrollbar">
-        {BLOG_CATEGORIES.map((category) => {
-          const active = selectedCategory === category;
-          return (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setSelectedCategory(category)}
-              className={`pb-3 text-xs sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                active
-                  ? 'border-teal-700 text-teal-800 font-bold'
-                  : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              {category}
-            </button>
-          );
-        })}
+      {/* Category Filter Tabs (Live Firestore categories) */}
+      <div className="space-y-2.5">
+        <div className="flex items-center space-x-5 overflow-x-auto border-b border-slate-200 pb-0.5 no-scrollbar">
+          {categoryTabs.map((category) => {
+            const active = selectedCategory === category;
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => setSelectedCategory(category)}
+                className={`pb-3 text-xs sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                  active
+                    ? 'border-teal-700 text-teal-800 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {category}
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedCategoryObj?.description && (
+          <p className="text-xs text-slate-600">
+            <strong className="text-slate-800">{selectedCategoryObj.name}:</strong>{' '}
+            {selectedCategoryObj.description}
+          </p>
+        )}
       </div>
 
       {/* Blog Articles Feed */}

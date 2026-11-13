@@ -1,10 +1,38 @@
 import { BlogPost } from '../types/blog';
+import { WebsiteBrandingSettings } from '../types/websiteDesign';
 import { getSingleArticleThumbnailUrl, isValidHttpsImageUrl } from '../utils/thumbnailUtils';
 
-const DEFAULT_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
-const DEFAULT_DESCRIPTION =
+export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
+export const DEFAULT_SEO_DESCRIPTION =
   'Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog for GS GITUMBA.';
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://isezerano.online';
+
+export interface SiteBrandingSeoInput {
+  siteName?: string;
+  siteDescription?: string;
+  subtitle?: string;
+}
+
+export const resolveSiteBrandingSeo = (branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput): {
+  siteName: string;
+  fullTitle: string;
+  siteDescription: string;
+} => {
+  const b = (branding || {}) as Partial<WebsiteBrandingSettings> & SiteBrandingSeoInput;
+  const rawName = (b.siteName ?? b.platformTitle ?? '').trim();
+  const rawSub = (b.subtitle ?? b.platformSubtitle ?? '').trim();
+  const rawDesc = (b.siteDescription ?? b.websiteDescription ?? '').trim();
+
+  const siteName = rawName || 'ISEZERANO ONLINE';
+  const fullTitle = rawName
+    ? rawSub && !rawName.toLowerCase().includes(rawSub.toLowerCase())
+      ? `${rawName} – ${rawSub}`
+      : rawName
+    : DEFAULT_SEO_TITLE;
+
+  const siteDescription = rawDesc || DEFAULT_SEO_DESCRIPTION;
+  return { siteName, fullTitle, siteDescription };
+};
 
 const setMetaTag = (attributeName: string, attributeValue: string, content: string) => {
   if (typeof document === 'undefined') return;
@@ -35,13 +63,53 @@ const setLinkTag = (rel: string, href: string) => {
 };
 
 /**
+ * Updates global browser title, meta description, OpenGraph, and Twitter tags
+ * dynamically from Admin branding settings.
+ */
+export const updateWebsiteBrandingSeo = (
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput,
+  pageTitlePrefix?: string
+): void => {
+  if (typeof document === 'undefined') return;
+
+  const { fullTitle, siteDescription } = resolveSiteBrandingSeo(branding);
+  const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
+
+  document.title = resolvedTitle;
+  setMetaTag('name', 'description', siteDescription);
+  setLinkTag('canonical', BASE_URL);
+
+  setMetaTag('property', 'og:type', 'website');
+  setMetaTag('property', 'og:site_name', fullTitle);
+  setMetaTag('property', 'og:title', resolvedTitle);
+  setMetaTag('property', 'og:description', siteDescription);
+  setMetaTag('property', 'og:url', BASE_URL);
+  setMetaTag('property', 'og:image', '');
+  setMetaTag('property', 'og:image:secure_url', '');
+
+  setMetaTag('name', 'twitter:card', 'summary');
+  setMetaTag('name', 'twitter:title', resolvedTitle);
+  setMetaTag('name', 'twitter:description', siteDescription);
+  setMetaTag('name', 'twitter:image', '');
+
+  const scriptTag = document.getElementById('blog-post-schema-jsonld');
+  if (scriptTag) {
+    scriptTag.remove();
+  }
+};
+
+/**
  * Updates SEO, OpenGraph, Twitter Cards, and Schema.org metadata for a blog post.
  * External social meta tags only reference HTTPS image URLs (skipping embedded Data URIs).
  */
-export const updateBlogPostSeo = (post: BlogPost): void => {
+export const updateBlogPostSeo = (
+  post: BlogPost,
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput
+): void => {
   if (typeof document === 'undefined') return;
 
-  const pageTitle = `${post.title} – ISEZERANO ONLINE – GS GITUMBA`;
+  const { fullTitle } = resolveSiteBrandingSeo(branding);
+  const pageTitle = `${post.title} – ${fullTitle}`;
   const postUrl = `${BASE_URL}/blog/${post.slug}`;
   const thumb = getSingleArticleThumbnailUrl(post);
   const ogHttpsImage = isValidHttpsImageUrl(thumb) ? thumb : '';
@@ -52,7 +120,7 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
   setLinkTag('canonical', postUrl);
 
   setMetaTag('property', 'og:type', 'article');
-  setMetaTag('property', 'og:site_name', 'ISEZERANO ONLINE – GS GITUMBA');
+  setMetaTag('property', 'og:site_name', fullTitle);
   setMetaTag('property', 'og:title', post.title);
   setMetaTag('property', 'og:description', description);
   setMetaTag('property', 'og:url', postUrl);
@@ -92,7 +160,7 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
     },
     publisher: {
       '@type': 'EducationalOrganization',
-      name: 'ISEZERANO ONLINE – GS GITUMBA'
+      name: fullTitle
     }
   };
 
@@ -103,28 +171,9 @@ export const updateBlogPostSeo = (post: BlogPost): void => {
   scriptTag.textContent = JSON.stringify(structuredData, null, 2);
 };
 
-export const resetDefaultSeo = (): void => {
-  if (typeof document === 'undefined') return;
-
-  document.title = DEFAULT_TITLE;
-  setMetaTag('name', 'description', DEFAULT_DESCRIPTION);
-  setLinkTag('canonical', BASE_URL);
-
-  setMetaTag('property', 'og:type', 'website');
-  setMetaTag('property', 'og:site_name', DEFAULT_TITLE);
-  setMetaTag('property', 'og:title', DEFAULT_TITLE);
-  setMetaTag('property', 'og:description', DEFAULT_DESCRIPTION);
-  setMetaTag('property', 'og:url', BASE_URL);
-  setMetaTag('property', 'og:image', '');
-  setMetaTag('property', 'og:image:secure_url', '');
-
-  setMetaTag('name', 'twitter:card', 'summary');
-  setMetaTag('name', 'twitter:title', DEFAULT_TITLE);
-  setMetaTag('name', 'twitter:description', DEFAULT_DESCRIPTION);
-  setMetaTag('name', 'twitter:image', '');
-
-  const scriptTag = document.getElementById('blog-post-schema-jsonld');
-  if (scriptTag) {
-    scriptTag.remove();
-  }
+export const resetDefaultSeo = (
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput
+): void => {
+  updateWebsiteBrandingSeo(branding);
 };
+

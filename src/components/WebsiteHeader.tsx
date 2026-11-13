@@ -35,7 +35,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const { language, setLanguage } = useLanguage();
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { colors, typography, branding, navigationMenus } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    setLogoLoadError(false);
+  }, [logoUrl]);
 
   // Helper for dynamic navigation icons
   const renderNavIcon = (iconName?: string) => {
@@ -101,27 +106,61 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* TIER 1: UPPER-LEFT BRANDING AREA (ABOVE NAVIGATION MENU) & UPPER-RIGHT UTILITIES */}
-        <div className="flex items-center justify-between pt-3 sm:pt-4 pb-2 border-b border-slate-100/80">
+        {/* TIER 1: UPPER-LEFT BRANDING AREA (LOGO LEFT -> WEBSITE NAME & DESCRIPTION) & UPPER-RIGHT UTILITIES */}
+        <div className="flex items-center justify-between gap-3 pt-3 sm:pt-4 pb-2.5 border-b border-slate-100/80">
           
-          {/* Upper-Left Branding Area (Clean typography, no images/placeholders) */}
+          {/* Upper-Left Branding Area: Horizontal Logo FIRST, followed by Website Name & Description */}
           <div 
             onClick={() => handleNavClick('home')}
-            className="flex flex-col justify-center cursor-pointer group select-none min-w-0"
+            className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer group select-none min-w-0 flex-1"
             title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
           >
-            <span 
-              className="font-serif font-extrabold tracking-tight transition-colors leading-tight text-xl sm:text-2xl md:text-3xl"
-              style={{ color: colors.headerText }}
-            >
-              {branding?.platformTitle || 'ISEZERANO ONLINE'}
-            </span>
-            <span 
-              className="font-semibold tracking-wider uppercase leading-none mt-1 text-xs sm:text-sm text-teal-700"
-              style={{ color: colors.navLinkActive }}
-            >
-              {branding?.platformSubtitle || 'GS GITUMBA'}
-            </span>
+            {logoSettings?.showInHeader !== false && logoUrl && !logoLoadError && (
+              <div
+                className={`shrink-0 overflow-hidden bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center ${logoSettings?.borderRadius || 'rounded-xl'}`}
+                style={{
+                  height: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`,
+                  width: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`
+                }}
+              >
+                <img
+                  src={logoUrl}
+                  alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
+                  className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
+                  referrerPolicy="no-referrer"
+                  onError={() => setLogoLoadError(true)}
+                />
+              </div>
+            )}
+
+            <div className="flex flex-col justify-center min-w-0">
+              {branding?.showWebsiteName !== false && (
+                <>
+                  <span 
+                    className="font-serif font-extrabold tracking-tight transition-colors leading-tight text-lg sm:text-2xl md:text-[26px] truncate"
+                    style={{ color: colors.headerText }}
+                  >
+                    {branding?.platformTitle || 'ISEZERANO ONLINE'}
+                  </span>
+                  {branding?.platformSubtitle && (
+                    <span 
+                      className="font-semibold tracking-wider uppercase leading-none mt-0.5 text-[11px] sm:text-xs text-teal-700 truncate"
+                      style={{ color: colors.navLinkActive }}
+                    >
+                      {branding.platformSubtitle}
+                    </span>
+                  )}
+                </>
+              )}
+              {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
+                <span
+                  className={`text-[11px] sm:text-xs leading-snug line-clamp-1 max-w-xl ${branding?.showWebsiteName !== false ? 'mt-0.5' : ''}`}
+                  style={{ color: colors.mutedText || '#64748b' }}
+                >
+                  {branding.websiteDescription}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Upper-Right Utilities: Notification Bell, Language Switcher, User / Menu Button */}

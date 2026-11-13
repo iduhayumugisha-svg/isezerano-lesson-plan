@@ -16,8 +16,31 @@ import {
   WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
+import { isAuthorizedAdminEmail } from './authService';
 
 const DESIGN_STORAGE_KEY = 'isezerano_website_design';
+
+// Cache session flag when Storage bucket is confirmed unprovisioned (404) so uploads save instantly to Firestore
+let logoStorageBucketUnavailable = false;
+
+/**
+ * Recursively removes keys with `undefined` values so Firestore setDoc never rejects payloads.
+ */
+const stripUndefinedDeep = <T,>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        out[k] = stripUndefinedDeep(v);
+      }
+    }
+    return out as T;
+  }
+  return value;
+};
 
 const ensureBlogNavItem = (menus?: NavigationMenuItem[]): NavigationMenuItem[] => {
   const list = Array.isArray(menus) && menus.length > 0 ? [...menus] : [...DEFAULT_NAVIGATION_MENUS];
@@ -231,17 +254,18 @@ export const saveWebsiteDesignSettings = async (
   changeSummary?: string
 ): Promise<{ success: boolean; error?: string; code?: string; versionId?: string }> => {
   const versionId = `v_${Date.now()}`;
-  const newSnapshot: WebsiteDesignSettings = {
+  const rawSnapshot: WebsiteDesignSettings = {
     branding: { ...settings.branding },
     colors: { ...settings.colors },
     typography: { ...settings.typography },
     logo: { ...settings.logo },
-    announcements: settings.announcements ? { ...settings.announcements } : undefined,
+    ...(settings.announcements ? { announcements: { ...settings.announcements } } : {}),
     homepageSections: settings.homepageSections ? JSON.parse(JSON.stringify(settings.homepageSections)) : [],
     navigationMenus: settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : [],
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
   };
+  const newSnapshot = stripUndefinedDeep(rawSnapshot);
 
   const newVersion: WebsiteDesignVersion = {
     id: versionId,
@@ -255,14 +279,14 @@ export const saveWebsiteDesignSettings = async (
   const existingHistory = Array.isArray(settings.versionHistory) ? settings.versionHistory : [];
   const updatedHistory = [newVersion, ...existingHistory].slice(0, 15);
 
-  const payload: WebsiteDesignSettings = {
+  const payload: WebsiteDesignSettings = stripUndefinedDeep({
     ...settings,
     versionHistory: updatedHistory,
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
-  };
+  });
 
-  // Always update local cache immediately
+  // Update local cache
   try {
     localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(payload));
   } catch (err) {
@@ -275,8 +299,40 @@ export const saveWebsiteDesignSettings = async (
   const db = initFirestoreIfConfigured();
   if (db) {
     try {
+      const auth = getAuth();
+      const currentEmail = auth?.currentUser?.email;
+      if (!auth?.currentUser || !isAuthorizedAdminEmail(currentEmail)) {
+        return {
+          success: false,
+          code: 'permission-denied',
+          error: `Administrator sign-in required. Active account: ${currentEmail || 'Not signed in'}. Authorized admin is twizerefelix90@gmail.com.`
+        };
+      }
+
       const docRef = doc(db, 'appSettings', 'website_design');
       await setDoc(docRef, payload, { merge: true });
+
+      // Sync lightweight site branding/logo metadata to siteSettings/branding when valid
+      if (typeof payload.logo?.logoUrl === 'string' && payload.logo.logoUrl.length <= 680000) {
+        try {
+          await setDoc(
+            doc(db, 'siteSettings', 'branding'),
+            {
+              logoData: payload.logo.logoUrl,
+              siteName: payload.branding?.platformTitle || 'ISEZERANO ONLINE',
+              siteDescription: payload.branding?.websiteDescription || '',
+              showWebsiteName: payload.branding?.showWebsiteName !== false,
+              showWebsiteDescription: payload.branding?.showWebsiteDescription !== false,
+              updatedAt: payload.updatedAt,
+              updatedBy: currentEmail || adminUid
+            },
+            { merge: true }
+          );
+        } catch {
+          // Non-fatal secondary sync
+        }
+      }
+
       return { success: true, versionId };
     } catch (err: any) {
       console.error('Failed to save website_design to Firestore:', err);
@@ -288,15 +344,14 @@ export const saveWebsiteDesignSettings = async (
         const currentEmail = auth?.currentUser?.email;
         message = `Missing or insufficient permissions for 'appSettings/website_design'. ` +
           `Active account: ${currentEmail || 'Not signed in'}. ` +
-          `Authorized administrator is twizerefelix90@gmail.com. ` +
-          `If you are signed in as twizerefelix90@gmail.com, please ensure firestore.rules are deployed to project isezerano-news.`;
+          `Authorized administrator is twizerefelix90@gmail.com.`;
       }
 
       return { success: false, error: message, code };
     }
   }
 
-  return { success: true, versionId };
+  return { success: false, code: 'firestore/not-configured', error: 'Cloud Firestore is not configured.' };
 };
 
 /**
@@ -430,7 +485,6 @@ export const uploadAndSaveWebsiteLogo = async (
   adminUid: string,
   onProgress?: (progress: LogoUploadProgress) => void
 ): Promise<LogoUploadResult> => {
-  // 1. Validation
   onProgress?.({
     percent: 10,
     stage: 'validating',
@@ -444,11 +498,11 @@ export const uploadAndSaveWebsiteLogo = async (
     return { success: false, error: errorMsg, code: 'validation/invalid-file' };
   }
 
-  // 2. Authentication check
+  // 2. Strictly verify twizerefelix90@gmail.com authentication
   const auth = getAuth();
   const currentUser = auth.currentUser;
-  if (!currentUser) {
-    const errorMsg = 'Authentication required: You must be signed in with the authorized administrator account (twizerefelix90@gmail.com) to upload logos.';
+  if (!currentUser || !isAuthorizedAdminEmail(currentUser.email)) {
+    const errorMsg = 'Authentication required: Sign in with twizerefelix90@gmail.com to upload or replace the website logo.';
     onProgress?.({ percent: 0, stage: 'error', message: errorMsg });
     return { success: false, error: errorMsg, code: 'auth/unauthenticated' };
   }
@@ -466,16 +520,22 @@ export const uploadAndSaveWebsiteLogo = async (
   let isFallbackDataUri = false;
   let storageErrorNotice: string | null = null;
 
-  // 3. Attempt Firebase Storage upload with a strict 8-second timeout
-  if (app) {
+  // 3. Attempt Firebase Storage if not already confirmed unprovisioned in this session
+  if (app && !logoStorageBucketUnavailable) {
     try {
       onProgress?.({
         percent: 25,
         stage: 'uploading',
-        message: `Attempting upload to Firebase Storage bucket (${bucketName})...`
+        message: `Uploading logo to Firebase Storage (${bucketName})...`
       });
 
       const storage = getStorage(app, `gs://${bucketName}`);
+      try {
+        storage.maxUploadRetryTime = 4500;
+        storage.maxOperationRetryTime = 4500;
+      } catch {
+        // ignore
+      }
       const storageRef = ref(storage, storagePath);
 
       const metadata = {
@@ -487,20 +547,13 @@ export const uploadAndSaveWebsiteLogo = async (
         }
       };
 
-      // Strict 8-second timeout guard to prevent hanging at 15%
       const uploadPromise = uploadBytes(storageRef, file, metadata);
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          const timeoutErr: any = new Error(`Connection to Firebase Storage bucket (${bucketName}) timed out after 8s.`);
+          const timeoutErr: any = new Error(`Connection to Firebase Storage timed out after 4.5s.`);
           timeoutErr.code = 'storage/timeout';
           reject(timeoutErr);
-        }, 8000);
-      });
-
-      onProgress?.({
-        percent: 50,
-        stage: 'uploading',
-        message: 'Uploading image bytes to Firebase Cloud Storage...'
+        }, 4500);
       });
 
       const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
@@ -513,33 +566,33 @@ export const uploadAndSaveWebsiteLogo = async (
         message: 'Cloud Storage upload successful. Saving logo to Firestore...'
       });
     } catch (storageErr: any) {
-      console.warn('Firebase Storage upload failed or bucket unprovisioned:', storageErr?.code || storageErr?.message);
+      logoStorageBucketUnavailable = true;
       const errCode = storageErr?.code || 'storage/error';
-      
       if (errCode === 'storage/bucket-not-found' || storageErr?.status === 404) {
-        storageErrorNotice = `Cloud Storage bucket "${bucketName}" is not yet created in Firebase Console for project isezerano-news.`;
-      } else if (errCode === 'storage/unauthorized') {
-        storageErrorNotice = `Firebase Storage access was unauthorized. Check storage.rules for project isezerano-news.`;
-      } else if (errCode === 'storage/timeout') {
-        storageErrorNotice = `Firebase Storage bucket connection timed out (bucket may not be initialized).`;
+        storageErrorNotice = `Cloud Storage bucket "${bucketName}" is not provisioned. Saving compressed logo directly to Cloud Firestore.`;
       } else {
-        storageErrorNotice = storageErr?.message || 'Firebase Storage upload failed.';
+        storageErrorNotice = storageErr?.message || 'Cloud Storage unavailable; saving directly to Cloud Firestore.';
       }
     }
   }
 
-  // 4. Automatic Cloud Fallback: If Firebase Storage failed or bucket doesn't exist,
-  // compress image and store directly in Firestore `appSettings/website_design.logo.logoUrl`.
-  // This guarantees the admin's logo update works 100% of the time and never freezes.
+  // 4. Persistent Cloud Firestore embedded Data URI fallback (guaranteed <= 360 KB)
   if (!finalUrl) {
     onProgress?.({
       percent: 65,
       stage: 'uploading',
-      message: 'Optimizing and preparing image for direct Cloud Firestore storage...'
+      message: 'Optimizing logo for persistent Cloud Firestore storage...'
     });
 
     try {
-      finalUrl = await compressLogoFile(file, 512);
+      let candidate = await compressLogoFile(file, 360);
+      if (candidate.length > 350_000) {
+        candidate = await compressLogoFile(file, 220);
+      }
+      if (candidate.length > 550_000) {
+        throw new Error('Logo image is too large for Firestore document storage. Please select a smaller image.');
+      }
+      finalUrl = candidate;
       isFallbackDataUri = true;
     } catch (compressionErr: any) {
       const errorMsg = `Failed to process image: ${compressionErr?.message || 'Compression error'}`;
@@ -548,7 +601,7 @@ export const uploadAndSaveWebsiteLogo = async (
     }
   }
 
-  // 5. Save logo URL to Cloud Firestore `appSettings/website_design`
+  // 5. Persist to Cloud Firestore `appSettings/website_design` and `siteSettings/branding`
   onProgress?.({
     percent: 88,
     stage: 'saving_database',
@@ -556,109 +609,158 @@ export const uploadAndSaveWebsiteLogo = async (
   });
 
   const db = initFirestoreIfConfigured();
-  if (db) {
-    try {
-      const currentSettings = await getWebsiteDesignSettings();
-      const updatedSettings: WebsiteDesignSettings = {
-        ...currentSettings,
-        logo: {
-          ...currentSettings.logo,
-          logoUrl: finalUrl,
-          isCustomLogo: true
-        },
-        updatedAt: new Date().toISOString(),
-        updatedBy: currentUser.email || adminUid
-      };
-
-      const docRef = doc(db, 'appSettings', 'website_design');
-      await setDoc(docRef, updatedSettings, { merge: true });
-
-      // Cache locally
-      try {
-        localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
-      } catch {
-        // ignore
-      }
-
-      if (updatedSettings.logo.updateFavicon) {
-        updateBrowserFavicon(finalUrl);
-      }
-
-      const successMessage = isFallbackDataUri
-        ? 'Logo successfully optimized and published to Cloud Firestore! (Storage bucket was not found, so it was saved directly to the database).'
-        : 'Logo successfully uploaded to Firebase Storage and published across the website!';
-
-      onProgress?.({
-        percent: 100,
-        stage: 'complete',
-        message: successMessage
-      });
-
-      return {
-        success: true,
-        url: finalUrl,
-        storageBucket: usedStorageBucket,
-        sizeBytes: file.size,
-        isFallbackDataUri,
-        isStorage: !isFallbackDataUri,
-        error: storageErrorNotice || undefined
-      };
-    } catch (dbErr: any) {
-      console.error('Failed to save logo to Firestore appSettings/website_design:', dbErr);
-      const isPermissionDenied = dbErr?.code === 'permission-denied';
-      const dbErrorMsg = isPermissionDenied
-        ? `Permission denied saving to Firestore 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com and firestore.rules are deployed.`
-        : `Database save error: ${dbErr?.message || 'Could not write to Firestore'}`;
-
-      onProgress?.({
-        percent: 0,
-        stage: 'error',
-        message: dbErrorMsg
-      });
-
-      return { 
-        success: false, 
-        error: dbErrorMsg, 
-        code: dbErr?.code || 'firestore/error',
-        url: finalUrl 
-      };
-    }
+  if (!db) {
+    const msg = 'Cloud Firestore is not connected. Cannot save persistent website logo.';
+    onProgress?.({ percent: 0, stage: 'error', message: msg });
+    return { success: false, error: msg, code: 'firestore/not-configured' };
   }
 
-  // If no DB configured, update local cache
   try {
     const currentSettings = await getWebsiteDesignSettings();
-    const updatedSettings: WebsiteDesignSettings = {
+    const updatedSettings: WebsiteDesignSettings = stripUndefinedDeep({
       ...currentSettings,
       logo: {
         ...currentSettings.logo,
         logoUrl: finalUrl,
-        isCustomLogo: true
+        isCustomLogo: true,
+        showInHeader: true
       },
       updatedAt: new Date().toISOString(),
-      updatedBy: adminUid
-    };
-    localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
+      updatedBy: currentUser.email || adminUid
+    });
+
+    await setDoc(doc(db, 'appSettings', 'website_design'), updatedSettings, { merge: true });
+
+    try {
+      await setDoc(
+        doc(db, 'siteSettings', 'branding'),
+        {
+          logoData: finalUrl,
+          siteName: updatedSettings.branding?.platformTitle || 'ISEZERANO ONLINE',
+          siteDescription: updatedSettings.branding?.websiteDescription || '',
+          showWebsiteName: updatedSettings.branding?.showWebsiteName !== false,
+          showWebsiteDescription: updatedSettings.branding?.showWebsiteDescription !== false,
+          updatedAt: updatedSettings.updatedAt,
+          updatedBy: currentUser.email || adminUid
+        },
+        { merge: true }
+      );
+    } catch {
+      // Non-fatal secondary branding doc sync
+    }
+
+    try {
+      localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
+    } catch {
+      // ignore
+    }
+
     if (updatedSettings.logo.updateFavicon) {
       updateBrowserFavicon(finalUrl);
     }
-  } catch {
-    // ignore
+
+    const successMessage = isFallbackDataUri
+      ? 'Logo optimized and saved persistently in Cloud Firestore!'
+      : 'Logo uploaded to Firebase Storage and published across the website!';
+
+    onProgress?.({
+      percent: 100,
+      stage: 'complete',
+      message: successMessage
+    });
+
+    return {
+      success: true,
+      url: finalUrl,
+      storageBucket: usedStorageBucket,
+      sizeBytes: file.size,
+      isFallbackDataUri,
+      isStorage: !isFallbackDataUri,
+      error: storageErrorNotice || undefined
+    };
+  } catch (dbErr: any) {
+    console.error('Failed to save logo to Firestore:', dbErr);
+    const isPermissionDenied = dbErr?.code === 'permission-denied';
+    const dbErrorMsg = isPermissionDenied
+      ? `Permission denied saving to Firestore 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com.`
+      : `Database save error: ${dbErr?.message || 'Could not write to Firestore'}`;
+
+    onProgress?.({
+      percent: 0,
+      stage: 'error',
+      message: dbErrorMsg
+    });
+
+    return {
+      success: false,
+      error: dbErrorMsg,
+      code: dbErr?.code || 'firestore/error',
+      url: finalUrl
+    };
+  }
+};
+
+/**
+ * Removes the uploaded website logo from Firestore and restores empty default logo state.
+ */
+export const removeAndSaveWebsiteLogo = async (
+  adminUid: string
+): Promise<{ success: boolean; error?: string }> => {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser || !isAuthorizedAdminEmail(currentUser.email)) {
+    return {
+      success: false,
+      error: 'Administrator authentication required (twizerefelix90@gmail.com).'
+    };
   }
 
-  onProgress?.({
-    percent: 100,
-    stage: 'complete',
-    message: 'Logo saved locally.'
-  });
+  const db = initFirestoreIfConfigured();
+  if (!db) {
+    return { success: false, error: 'Cloud Firestore is not connected.' };
+  }
 
-  return {
-    success: true,
-    url: finalUrl,
-    storageBucket: usedStorageBucket,
-    sizeBytes: file.size,
-    isFallbackDataUri
-  };
+  try {
+    const currentSettings = await getWebsiteDesignSettings();
+    const updatedSettings: WebsiteDesignSettings = stripUndefinedDeep({
+      ...currentSettings,
+      logo: {
+        ...DEFAULT_WEBSITE_DESIGN.logo,
+        logoUrl: '',
+        isCustomLogo: false
+      },
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.email || adminUid
+    });
+
+    await setDoc(doc(db, 'appSettings', 'website_design'), updatedSettings, { merge: true });
+    try {
+      await setDoc(
+        doc(db, 'siteSettings', 'branding'),
+        {
+          logoData: '',
+          updatedAt: updatedSettings.updatedAt,
+          updatedBy: currentUser.email || adminUid
+        },
+        { merge: true }
+      );
+    } catch {
+      // non-fatal
+    }
+
+    try {
+      localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(updatedSettings));
+    } catch {
+      // ignore
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to remove logo.'
+    };
+  }
 };
 
 /**

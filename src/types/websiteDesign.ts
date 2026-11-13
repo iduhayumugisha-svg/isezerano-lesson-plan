@@ -83,8 +83,11 @@ export interface WebsiteLogoSettings {
 }
 
 export interface WebsiteBrandingSettings {
-  platformTitle: string;          // Main platform title in header, footer, meta
+  platformTitle: string;          // Main website name in header, footer, meta
   platformSubtitle: string;       // Subtitle (e.g. GS GITUMBA)
+  websiteDescription: string;     // Public website description displayed in branding & SEO metadata
+  showWebsiteName: boolean;       // Visibility toggle: show/hide website name on public website
+  showWebsiteDescription: boolean;// Visibility toggle: show/hide website description on public website
   schoolName: string;             // School name
   schoolLocation: string;         // School location (Sector, District, Province)
   headerAnnouncement: string;     // Top banner announcement text
@@ -220,6 +223,9 @@ export interface WebsiteDesignSettings {
 export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
   platformTitle: 'ISEZERANO ONLINE',
   platformSubtitle: 'GS GITUMBA',
+  websiteDescription: 'Official Rwanda Competence-Based Curriculum (CBC) lesson planning, nursery report cards, and school blog for GS GITUMBA.',
+  showWebsiteName: true,
+  showWebsiteDescription: true,
   schoolName: 'GS GITUMBA',
   schoolLocation: 'Buyoga Sector, Rulindo District, Northern Province, Rwanda',
   headerAnnouncement: '',

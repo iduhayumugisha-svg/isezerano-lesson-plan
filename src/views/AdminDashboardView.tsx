@@ -413,7 +413,7 @@ promoteToAdmin('admin@example.com');`;
           <BookOpen className="w-4 h-4 text-teal-400" />
           <span>Blog Management</span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'blog' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Articles & Photos
+            Articles &amp; Categories
           </span>
         </button>
 
@@ -426,9 +426,9 @@ promoteToAdmin('admin@example.com');`;
           }`}
         >
           <Palette className="w-4 h-4 text-amber-300" />
-          <span>Website Design & Logo</span>
+          <span>Website Branding &amp; Logo</span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'design' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Colors, Fonts & Logo
+            Name, Desc &amp; Logo
           </span>
         </button>
 

@@ -14,6 +14,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { WebsitePage } from '../components/WebsiteHeader';
 import { 
   getFirebaseConfig, 
@@ -31,6 +32,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   onNavigate 
 }) => {
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
+  const { logoUrl, logoSettings, branding } = useWebsiteDesign();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -205,15 +207,26 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         {/* Brand Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-teal-950 p-6 sm:p-8 text-white relative">
           <div className="flex items-center space-x-3.5 mb-3">
-            <div className="w-11 h-11 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0 shadow-inner">
-              <ShieldCheck className="w-6 h-6 text-teal-400" />
-            </div>
+            {logoSettings?.showInAdminGateway !== false && logoUrl ? (
+              <div className={`w-11 h-11 overflow-hidden bg-white border border-teal-500/20 flex items-center justify-center shrink-0 shadow-inner ${logoSettings?.borderRadius || 'rounded-xl'}`}>
+                <img
+                  src={logoUrl}
+                  alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
+                  className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : (
+              <div className="w-11 h-11 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shrink-0 shadow-inner">
+                <ShieldCheck className="w-6 h-6 text-teal-400" />
+              </div>
+            )}
             <div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
-                ISEZERANO ONLINE
+                {branding?.platformTitle || 'ISEZERANO ONLINE'}
               </h1>
               <span className="text-xs font-semibold text-teal-400 tracking-wider uppercase">
-                GS GITUMBA • Administrator Portal
+                {branding?.platformSubtitle || 'GS GITUMBA'} • Administrator Portal
               </span>
             </div>
           </div>

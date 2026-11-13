@@ -19,9 +19,11 @@ import {
   Loader2,
   User,
   Calendar,
-  BookOpen
+  BookOpen,
+  Tag,
+  FolderKanban
 } from 'lucide-react';
-import { BlogPost, BLOG_CATEGORIES, BLOG_WRITE_CATEGORIES } from '../types/blog';
+import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeToBlogPosts,
@@ -32,9 +34,18 @@ import {
   calculateReadingTime,
   generateSlug
 } from '../services/blogService';
+import {
+  subscribeToBlogCategories,
+  mergeCategoriesForDisplay,
+  saveBlogCategory,
+  deleteBlogCategory,
+  updatePostCategory
+} from '../services/blogCategoryService';
 import { RichTextEditor } from './RichTextEditor';
 import { formatPublicationDate } from '../utils/dateUtils';
 import {
+  extractFirstImageFromContent,
+  extractFirstImageMetaFromContent,
   extractPlainTextExcerpt,
   getSingleArticleThumbnailUrl,
   isValidPersistentImageSrc
@@ -52,22 +63,28 @@ interface EditorDraft {
   thumbnailUrl: string;
   thumbnailAlt: string;
   thumbnailStorageMode?: 'firebase_storage' | 'firestore_embedded';
+  thumbnailIsCustomOverride: boolean;
   status: 'published' | 'draft';
   publishedAt: string;
   views: number;
 }
 
-const createEmptyDraft = (adminName: string, adminEmail?: string): EditorDraft => ({
+const createEmptyDraft = (
+  adminName: string,
+  adminEmail?: string,
+  defaultCategory: string = DEFAULT_AI_BLOG_CATEGORIES[0].name
+): EditorDraft => ({
   id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
   title: '',
   slug: '',
-  category: BLOG_WRITE_CATEGORIES[0],
+  category: defaultCategory,
   authorName: adminName || (adminEmail ? adminEmail.split('@')[0] : 'GS GITUMBA Admin'),
   authorRole: 'Administrator',
   excerpt: '',
   content: '',
   thumbnailUrl: '',
   thumbnailAlt: '',
+  thumbnailIsCustomOverride: false,
   status: 'draft',
   publishedAt: '',
   views: 0
@@ -76,12 +93,26 @@ const createEmptyDraft = (adminName: string, adminEmail?: string): EditorDraft =
 export const AdminBlogManager: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
+  const [categoriesInitialized, setCategoriesInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Dashboard filters
+  // Dashboard sub-tab & filters
+  const [dashboardTab, setDashboardTab] = useState<'articles' | 'categories'>('articles');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All Categories');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+
+  // Category CRUD state
+  const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<BlogCategory | null>(null);
+  const [catName, setCatName] = useState('');
+  const [catDescription, setCatDescription] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<BlogCategory | null>(null);
+  const [reassignCategoryTarget, setReassignCategoryTarget] = useState('Uncategorized');
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [updatingPostCategoryId, setUpdatingPostCategoryId] = useState<string | null>(null);
 
   // Editor state
   const [mode, setMode] = useState<'list' | 'editor'>('list');
@@ -111,13 +142,24 @@ export const AdminBlogManager: React.FC = () => {
 
   useEffect(() => {
     setIsLoading(true);
-    const unsub = subscribeToBlogPosts((fetchedPosts) => {
+    const unsubPosts = subscribeToBlogPosts((fetchedPosts) => {
       setPosts(fetchedPosts);
       setIsLoading(false);
     }, true);
 
-    return () => unsub();
+    const unsubCategories = subscribeToBlogCategories((fetchedCats, initialized) => {
+      setRawCategories(fetchedCats);
+      setCategoriesInitialized(initialized);
+    });
+
+    return () => {
+      unsubPosts();
+      unsubCategories();
+    };
   }, []);
+
+  const categories = mergeCategoriesForDisplay(rawCategories, categoriesInitialized, posts);
+  const categoryNames = categories.map((c) => c.name);
 
   if (!isAdmin) {
     return (
@@ -139,7 +181,8 @@ export const AdminBlogManager: React.FC = () => {
   };
 
   const handleStartNewArticle = () => {
-    setDraft(createEmptyDraft(user?.displayName || 'GS GITUMBA Admin', user?.email));
+    const defaultCat = categoryNames[0] || DEFAULT_AI_BLOG_CATEGORIES[0].name;
+    setDraft(createEmptyDraft(user?.displayName || 'GS GITUMBA Admin', user?.email, defaultCat));
     setIsEditingExisting(false);
     setStorageNotice(null);
     setStatusBanner(null);
@@ -147,18 +190,26 @@ export const AdminBlogManager: React.FC = () => {
   };
 
   const handleEditArticle = (post: BlogPost) => {
+    const resolvedThumb = getSingleArticleThumbnailUrl(post);
+    const firstContentThumb = extractFirstImageFromContent(post.content);
+    const isCustomOverride =
+      typeof post.thumbnailIsCustomOverride === 'boolean'
+        ? post.thumbnailIsCustomOverride
+        : Boolean(resolvedThumb && resolvedThumb !== firstContentThumb);
+
     setDraft({
       id: post.id,
       title: post.title,
       slug: post.slug,
-      category: post.category || BLOG_WRITE_CATEGORIES[0],
+      category: post.category || categoryNames[0] || DEFAULT_AI_BLOG_CATEGORIES[0].name,
       authorName: post.author?.name || user?.displayName || 'GS GITUMBA Admin',
       authorRole: post.author?.role || 'Administrator',
       excerpt: post.excerpt || '',
       content: post.content || '',
-      thumbnailUrl: getSingleArticleThumbnailUrl(post),
+      thumbnailUrl: resolvedThumb,
       thumbnailAlt: post.thumbnailAlt || post.title,
       thumbnailStorageMode: post.thumbnailStorageMode,
+      thumbnailIsCustomOverride: isCustomOverride,
       status: post.status,
       publishedAt: post.publishedAt || '',
       views: typeof post.views === 'number' ? post.views : 0
@@ -195,6 +246,7 @@ export const AdminBlogManager: React.FC = () => {
         ...prev,
         thumbnailUrl: result.url!,
         thumbnailStorageMode: result.storageMode,
+        thumbnailIsCustomOverride: true,
         thumbnailAlt: prev.thumbnailAlt || prev.title || file.name.replace(/\.[^/.]+$/, '')
       }));
 
@@ -212,36 +264,74 @@ export const AdminBlogManager: React.FC = () => {
     }
   };
 
-  const buildPostFromDraft = (targetStatus: 'published' | 'draft'): BlogPost => ({
-    id: draft.id,
-    title: draft.title.trim(),
-    slug: draft.slug ? generateSlug(draft.slug) : generateSlug(draft.title),
-    content: draft.content,
-    excerpt: draft.excerpt.trim() || extractPlainTextExcerpt(draft.content, 160),
-    thumbnailUrl: draft.thumbnailUrl,
-    thumbnailAlt: draft.thumbnailAlt.trim() || draft.title.trim(),
-    thumbnailStorageMode: draft.thumbnailStorageMode,
-    category: draft.category,
-    author: {
-      name: draft.authorName.trim() || 'GS GITUMBA Editorial',
-      role: draft.authorRole.trim() || 'Administrator',
-      email: user?.email || undefined
-    },
-    publishedAt:
-      targetStatus === 'published'
-        ? draft.publishedAt || new Date().toISOString()
-        : draft.publishedAt || '',
-    updatedAt: new Date().toISOString(),
-    status: targetStatus,
-    views: draft.views,
-    readTimeMinutes: calculateReadingTime(draft.content || '')
-  });
+  const handleEditorContentChange = (html: string) => {
+    setDraft((prev) => {
+      if (prev.thumbnailIsCustomOverride && isValidPersistentImageSrc(prev.thumbnailUrl)) {
+        return { ...prev, content: html };
+      }
+      const firstMeta = extractFirstImageMetaFromContent(html);
+      return {
+        ...prev,
+        content: html,
+        thumbnailUrl: firstMeta?.src || '',
+        thumbnailAlt:
+          prev.thumbnailAlt ||
+          firstMeta?.alt ||
+          prev.title
+      };
+    });
+  };
+
+  const handleUseFirstArticleImage = () => {
+    setDraft((prev) => {
+      const firstMeta = extractFirstImageMetaFromContent(prev.content);
+      return {
+        ...prev,
+        thumbnailIsCustomOverride: false,
+        thumbnailUrl: firstMeta?.src || '',
+        thumbnailStorageMode: undefined,
+        thumbnailAlt: prev.thumbnailAlt || firstMeta?.alt || prev.title
+      };
+    });
+    setStorageNotice(null);
+  };
+
+  const buildPostFromDraft = (targetStatus: 'published' | 'draft'): BlogPost => {
+    const firstContentMeta = extractFirstImageMetaFromContent(draft.content);
+    const resolvedThumbnailUrl =
+      draft.thumbnailIsCustomOverride && isValidPersistentImageSrc(draft.thumbnailUrl)
+        ? draft.thumbnailUrl
+        : firstContentMeta?.src || (isValidPersistentImageSrc(draft.thumbnailUrl) ? draft.thumbnailUrl : '');
+
+    return {
+      id: draft.id,
+      title: draft.title.trim(),
+      slug: draft.slug ? generateSlug(draft.slug) : generateSlug(draft.title),
+      content: draft.content,
+      excerpt: draft.excerpt.trim() || extractPlainTextExcerpt(draft.content, 160),
+      thumbnailUrl: resolvedThumbnailUrl,
+      thumbnailAlt:
+        draft.thumbnailAlt.trim() || firstContentMeta?.alt || draft.title.trim(),
+      thumbnailStorageMode: draft.thumbnailStorageMode,
+      thumbnailIsCustomOverride: draft.thumbnailIsCustomOverride,
+      category: draft.category,
+      author: {
+        name: draft.authorName.trim() || 'GS GITUMBA Editorial',
+        role: draft.authorRole.trim() || 'Administrator',
+        email: user?.email || undefined
+      },
+      publishedAt:
+        targetStatus === 'published'
+          ? draft.publishedAt || new Date().toISOString()
+          : draft.publishedAt || '',
+      updatedAt: new Date().toISOString(),
+      status: targetStatus,
+      views: draft.views,
+      readTimeMinutes: calculateReadingTime(draft.content || '')
+    };
+  };
 
   const handleSaveArticle = async (targetStatus: 'published' | 'draft') => {
-    if (!isValidPersistentImageSrc(draft.thumbnailUrl)) {
-      showBanner('error', 'Step 1 required: Select and upload a photo from your device first.');
-      return;
-    }
     if (!draft.title.trim()) {
       showBanner('error', 'Please enter an article title.');
       return;
@@ -315,6 +405,116 @@ export const AdminBlogManager: React.FC = () => {
     }
   };
 
+  // ================= CATEGORY MANAGEMENT HANDLERS =================
+  const handleOpenAddCategory = () => {
+    setEditingCategory(null);
+    setCatName('');
+    setCatDescription('');
+    setIsCategoryFormOpen(true);
+    setStatusBanner(null);
+  };
+
+  const handleOpenEditCategory = (cat: BlogCategory) => {
+    setEditingCategory(cat);
+    setCatName(cat.name);
+    setCatDescription(cat.description || '');
+    setIsCategoryFormOpen(true);
+    setStatusBanner(null);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingCategory(true);
+    setStatusBanner(null);
+    try {
+      const res = await saveBlogCategory(
+        {
+          id: editingCategory?.id,
+          name: catName,
+          description: catDescription,
+          previousName: editingCategory?.name,
+          isDefault: editingCategory?.isDefault
+        },
+        categories,
+        posts
+      );
+      if (!res.success || !res.category) {
+        showBanner('error', res.error || 'Could not save Blog category.');
+        return;
+      }
+
+      const updatedMsg =
+        res.updatedPostsCount && res.updatedPostsCount > 0
+          ? ` Updated ${res.updatedPostsCount} article(s) to "${res.category.name}".`
+          : '';
+      showBanner(
+        'success',
+        `${editingCategory ? 'Updated' : 'Added'} category "${res.category.name}".${updatedMsg}`
+      );
+      if (editingCategory && categoryFilter === editingCategory.name) {
+        setCategoryFilter(res.category.name);
+      }
+      setIsCategoryFormOpen(false);
+      setEditingCategory(null);
+      setCatName('');
+      setCatDescription('');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handlePromptDeleteCategory = (cat: BlogCategory) => {
+    const firstAlternative =
+      categories.find((c) => c.id !== cat.id)?.name || 'Uncategorized';
+    setReassignCategoryTarget(firstAlternative);
+    setConfirmDeleteCategory(cat);
+  };
+
+  const handleConfirmDeleteCategory = async () => {
+    if (!confirmDeleteCategory) return;
+    setIsDeletingCategory(true);
+    try {
+      const res = await deleteBlogCategory(
+        confirmDeleteCategory,
+        posts,
+        reassignCategoryTarget
+      );
+      if (!res.success) {
+        showBanner('error', res.error || 'Failed to delete category.');
+        return;
+      }
+      if (categoryFilter === confirmDeleteCategory.name) {
+        setCategoryFilter('All Categories');
+      }
+      const reassignedNote =
+        res.reassignedCount && res.reassignedCount > 0
+          ? ` Reassigned ${res.reassignedCount} article(s) to "${reassignCategoryTarget}".`
+          : '';
+      showBanner(
+        'success',
+        `Category "${confirmDeleteCategory.name}" deleted permanently.${reassignedNote}`
+      );
+      setConfirmDeleteCategory(null);
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  };
+
+  const handleInlinePostCategoryChange = async (post: BlogPost, newCategory: string) => {
+    if (!newCategory || newCategory === post.category) return;
+    setUpdatingPostCategoryId(post.id);
+    try {
+      const res = await updatePostCategory(post.id, newCategory);
+      if (res.success) {
+        showBanner('success', `Moved "${post.title}" to category "${newCategory}".`);
+      } else {
+        showBanner('error', res.error || 'Could not update article category.');
+      }
+    } finally {
+      setUpdatingPostCategoryId(null);
+    }
+  };
+
   // Filtered list for Dashboard
   const filteredPosts = posts.filter((post) => {
     const matchesSearch =
@@ -332,7 +532,12 @@ export const AdminBlogManager: React.FC = () => {
   const draftCount = posts.filter((p) => p.status === 'draft').length;
   const totalViews = posts.reduce((acc, p) => acc + (p.views || 0), 0);
 
-  const hasPhotoUploaded = isValidPersistentImageSrc(draft.thumbnailUrl);
+  const firstBodyImageSrc = extractFirstImageFromContent(draft.content);
+  const effectiveThumbnailUrl =
+    draft.thumbnailIsCustomOverride && isValidPersistentImageSrc(draft.thumbnailUrl)
+      ? draft.thumbnailUrl
+      : firstBodyImageSrc || (isValidPersistentImageSrc(draft.thumbnailUrl) ? draft.thumbnailUrl : '');
+  const hasPhotoUploaded = isValidPersistentImageSrc(effectiveThumbnailUrl);
 
   return (
     <div className="space-y-6">
@@ -364,258 +569,487 @@ export const AdminBlogManager: React.FC = () => {
       {mode === 'list' ? (
         <>
           {/* Dashboard Header & Primary CTA */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-                Blog Articles Dashboard
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Create, edit, preview, publish, unpublish, and manage articles stored in Cloud Firestore.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleStartNewArticle}
-              className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Write New Article</span>
-            </button>
-          </div>
-
-          {/* 4-Card KPI Strip (Tabular Numerals) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Total Articles
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+                  Blog Articles &amp; Categories Dashboard
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Manage Blog articles, publish or unpublish content, and organize public Blog categories in Cloud Firestore.
+                </p>
               </div>
-              <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
-                {posts.length}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {dashboardTab === 'categories' ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenAddCategory}
+                    className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Category</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartNewArticle}
+                    className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Write New Article</span>
+                  </button>
+                )}
               </div>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
-                Published Live
-              </div>
-              <div className="mt-1.5 text-2xl font-bold text-emerald-700 tabular-nums">
-                {publishedCount}
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
-                Drafts
-              </div>
-              <div className="mt-1.5 text-2xl font-bold text-amber-700 tabular-nums">
-                {draftCount}
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Total Reads
-              </div>
-              <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
-                {totalViews}
-              </div>
-            </div>
-          </div>
-
-          {/* Search & Filter Controls */}
-          <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search articles by title, content summary, or author..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <select
-                aria-label="Filter by category"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+            {/* Sub-Tabs: Articles vs Categories */}
+            <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setDashboardTab('articles')}
+                className={`inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  dashboardTab === 'articles'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                {BLOG_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                aria-label="Filter by publication status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'published' | 'draft')}
-                className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                <FileText className="w-3.5 h-3.5" />
+                <span>Articles ({posts.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardTab('categories')}
+                className={`inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  dashboardTab === 'categories'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                <option value="all">All Statuses</option>
-                <option value="published">Published Only</option>
-                <option value="draft">Drafts Only</option>
-              </select>
+                <FolderKanban className="w-3.5 h-3.5" />
+                <span>Categories ({categories.length})</span>
+              </button>
             </div>
           </div>
 
-          {/* Articles List */}
-          {isLoading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-2">
-              <Loader2 className="w-6 h-6 text-teal-700 animate-spin mx-auto" />
-              <p className="text-xs text-slate-500">Loading Blog articles from Firestore...</p>
-            </div>
-          ) : filteredPosts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                <FileText className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                {posts.length === 0 ? 'No articles created yet' : 'No matching articles'}
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                {posts.length === 0
-                  ? 'Start by uploading a photo from your device and writing your first article.'
-                  : 'Try adjusting your search keywords or category/status filters.'}
-              </p>
-              {posts.length === 0 && (
-                <button
-                  type="button"
-                  onClick={handleStartNewArticle}
-                  className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer"
+          {dashboardTab === 'categories' ? (
+            /* ================= BLOG CATEGORIES MANAGER ================= */
+            <div className="space-y-4">
+              {isCategoryFormOpen && (
+                <form
+                  onSubmit={handleSaveCategory}
+                  className="bg-white rounded-2xl border border-teal-200 p-5 sm:p-6 space-y-4 shadow-xs"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create First Article</span>
-                </button>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                        {editingCategory ? `Edit Category: ${editingCategory.name}` : 'Create New Blog Category'}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Categories appear immediately on the public Blog and in the article editor.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryFormOpen(false)}
+                      className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                      aria-label="Close category form"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Category Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={60}
+                        value={catName}
+                        onChange={(e) => setCatName(e.target.value)}
+                        placeholder="e.g., School News, STEM Education"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Category Description (optional)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={180}
+                        value={catDescription}
+                        onChange={(e) => setCatDescription(e.target.value)}
+                        placeholder="Short description shown when visitors filter by this category"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      />
+                    </div>
+                  </div>
+
+                  {editingCategory && catName.trim() !== editingCategory.name && (
+                    <div className="text-[11px] font-medium text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+                      {posts.filter((p) => p.category.toLowerCase() === editingCategory.name.toLowerCase()).length}{' '}
+                      existing article(s) tagged with "{editingCategory.name}" will automatically update to the new category name.
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryFormOpen(false)}
+                      disabled={isSavingCategory}
+                      className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingCategory}
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingCategory ? 'Saving...' : editingCategory ? 'Save Changes' : 'Create Category'}</span>
+                    </button>
+                  </div>
+                </form>
               )}
+
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    All Blog Categories ({categories.length})
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Includes all default categories &amp; custom categories
+                  </span>
+                </div>
+
+                {categories.length === 0 ? (
+                  <div className="p-10 text-center space-y-2">
+                    <Tag className="w-6 h-6 text-slate-400 mx-auto" />
+                    <p className="text-xs text-slate-500">No categories yet. Click "Add Category" to create one.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {categories.map((cat) => {
+                      const articleCount = posts.filter(
+                        (p) => (p.category || '').trim().toLowerCase() === cat.name.toLowerCase()
+                      ).length;
+
+                      return (
+                        <div
+                          key={cat.id}
+                          className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900">{cat.name}</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                  cat.isDefault
+                                    ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {cat.isDefault ? 'Default Category' : 'Custom Category'}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
+                                {articleCount} {articleCount === 1 ? 'article' : 'articles'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600">
+                              {cat.description || 'No description set.'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCategory(cat)}
+                              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-white cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-teal-700" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePromptDeleteCategory(cat)}
+                              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredPosts.map((post) => {
-                const thumbSrc = getSingleArticleThumbnailUrl(post);
-                const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+            <>
+              {/* 4-Card KPI Strip (Tabular Numerals) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Total Articles
+                  </div>
+                  <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
+                    {posts.length}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+                    Published Live
+                  </div>
+                  <div className="mt-1.5 text-2xl font-bold text-emerald-700 tabular-nums">
+                    {publishedCount}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
+                    Drafts
+                  </div>
+                  <div className="mt-1.5 text-2xl font-bold text-amber-700 tabular-nums">
+                    {draftCount}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Total Reads
+                  </div>
+                  <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
+                    {totalViews}
+                  </div>
+                </div>
+              </div>
 
-                return (
-                  <article
-                    key={post.id}
-                    className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-colors"
+              {/* Search & Filter Controls */}
+              <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search articles by title, content summary, or author..."
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <select
+                    aria-label="Filter by category"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
                   >
-                    <div className="flex items-start space-x-4 min-w-0 flex-1">
-                      {/* Article Thumbnail */}
-                      <div className="w-24 h-18 sm:w-32 sm:h-22 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
-                        {thumbSrc ? (
-                          <img
-                            src={thumbSrc}
-                            alt={post.thumbnailAlt || post.title}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <ImageIcon className="w-5 h-5 text-slate-400" />
-                        )}
-                      </div>
+                    <option value="All Categories">All Categories</option>
+                    {categoryNames.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                    {posts.some((p) => p.category === 'Uncategorized') && (
+                      <option value="Uncategorized">Uncategorized</option>
+                    )}
+                  </select>
 
-                      {/* Article Metadata */}
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
-                          <span
-                            className={`inline-flex items-center space-x-1 font-bold ${
-                              post.status === 'published' ? 'text-emerald-700' : 'text-amber-700'
+                  <select
+                    aria-label="Filter by publication status"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as 'all' | 'published' | 'draft')}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="published">Published Only</option>
+                    <option value="draft">Drafts Only</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Articles List */}
+              {isLoading ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-2">
+                  <Loader2 className="w-6 h-6 text-teal-700 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-500">Loading Blog articles from Firestore...</p>
+                </div>
+              ) : filteredPosts.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {posts.length === 0 ? 'No articles created yet' : 'No matching articles'}
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    {posts.length === 0
+                      ? 'Start by uploading a photo from your device and writing your first article.'
+                      : 'Try adjusting your search keywords or category/status filters.'}
+                  </p>
+                  {posts.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={handleStartNewArticle}
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Create First Article</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredPosts.map((post) => {
+                    const thumbSrc = getSingleArticleThumbnailUrl(post);
+                    const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+                    const rowCategories = categoryNames.includes(post.category)
+                      ? categoryNames
+                      : [post.category, ...categoryNames].filter(Boolean);
+
+                    return (
+                      <article
+                        key={post.id}
+                        className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:border-slate-300 transition-colors"
+                      >
+                        <div className="flex items-start space-x-4 min-w-0 flex-1">
+                          {/* Article Thumbnail */}
+                          <div className="w-28 aspect-[16/10] sm:w-36 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                            {thumbSrc ? (
+                              <img
+                                src={thumbSrc}
+                                alt={post.thumbnailAlt || post.title}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex flex-col items-center justify-center text-slate-400">
+                                <FileText className="w-5 h-5 opacity-60" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Article Metadata */}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
+                              <span
+                                className={`inline-flex items-center space-x-1 font-bold ${
+                                  post.status === 'published' ? 'text-emerald-700' : 'text-amber-700'
+                                }`}
+                              >
+                                {post.status === 'published' ? (
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Clock className="w-3.5 h-3.5" />
+                                )}
+                                <span>{post.status === 'published' ? 'Published' : 'Draft'}</span>
+                              </span>
+                              <span className="text-slate-300">·</span>
+                              <select
+                                aria-label={`Change category for ${post.title}`}
+                                value={post.category || 'Uncategorized'}
+                                disabled={updatingPostCategoryId === post.id}
+                                onChange={(e) => handleInlinePostCategoryChange(post, e.target.value)}
+                                className="text-[11px] font-semibold text-teal-800 bg-teal-50/70 border border-teal-200/80 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-teal-600 cursor-pointer"
+                              >
+                                {rowCategories.map((catNameOption) => (
+                                  <option key={catNameOption} value={catNameOption}>
+                                    {catNameOption}
+                                  </option>
+                                ))}
+                                {!rowCategories.includes('Uncategorized') && (
+                                  <option value="Uncategorized">Uncategorized</option>
+                                )}
+                              </select>
+                              {dateInfo && (
+                                <>
+                                  <span className="text-slate-300">·</span>
+                                  <span className="text-slate-500">{dateInfo.formattedDate}</span>
+                                </>
+                              )}
+                              <span className="text-slate-300">·</span>
+                              <span className="text-slate-500 tabular-nums">
+                                {post.views || 0} views
+                              </span>
+                            </div>
+
+                            <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                              {post.title}
+                            </h3>
+
+                            <p className="text-xs text-slate-600 line-clamp-2">
+                              {post.excerpt || extractPlainTextExcerpt(post.content, 140)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Article Row Actions */}
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPost(post)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                            title="Preview Article"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Preview</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEditArticle(post)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer"
+                            title="Edit Article"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-teal-700" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePublication(post)}
+                            className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border ${
+                              post.status === 'published'
+                                ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                             }`}
                           >
                             {post.status === 'published' ? (
-                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <>
+                                <Archive className="w-3.5 h-3.5" />
+                                <span>Unpublish</span>
+                              </>
                             ) : (
-                              <Clock className="w-3.5 h-3.5" />
+                              <>
+                                <Send className="w-3.5 h-3.5" />
+                                <span>Publish</span>
+                              </>
                             )}
-                            <span>{post.status === 'published' ? 'Published' : 'Draft'}</span>
-                          </span>
-                          <span className="text-slate-300">·</span>
-                          <span className="font-semibold text-teal-800">{post.category}</span>
-                          {dateInfo && (
-                            <>
-                              <span className="text-slate-300">·</span>
-                              <span className="text-slate-500">{dateInfo.formattedDate}</span>
-                            </>
-                          )}
-                          <span className="text-slate-300">·</span>
-                          <span className="text-slate-500 tabular-nums">
-                            {post.views || 0} views
-                          </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeletePost(post)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            title="Delete Article"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
                         </div>
-
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
-                          {post.title}
-                        </h3>
-
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {post.excerpt || extractPlainTextExcerpt(post.content, 140)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Article Row Actions */}
-                    <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPost(post)}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                        title="Preview Article"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Preview</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleEditArticle(post)}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer"
-                        title="Edit Article"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-teal-700" />
-                        <span>Edit</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePublication(post)}
-                        className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border ${
-                          post.status === 'published'
-                            ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                            : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                        }`}
-                      >
-                        {post.status === 'published' ? (
-                          <>
-                            <Archive className="w-3.5 h-3.5" />
-                            <span>Unpublish</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Publish</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeletePost(post)}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
-                        title="Delete Article"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </>
       ) : (
-        /* ================= ARTICLE EDITOR (STEP 1 PHOTO -> PREVIEW -> STEP 2 TITLE & CONTENT) ================= */
+        /* ================= ARTICLE EDITOR (AUTOMATIC FIRST-IMAGE THUMBNAIL + RESIZABLE BODY IMAGES) ================= */
         <div className="space-y-6">
           {/* Top Editor Bar */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -633,7 +1067,7 @@ export const AdminBlogManager: React.FC = () => {
                   {isEditingExisting ? 'Edit Article' : 'Write New Article'}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Step 1: Choose photo from your device · Step 2: Enter title & formatted content
+                  Insert and resize photos inside the article — the first image automatically becomes the article thumbnail.
                 </p>
               </div>
             </div>
@@ -642,7 +1076,7 @@ export const AdminBlogManager: React.FC = () => {
               <button
                 type="button"
                 onClick={handlePreviewDraft}
-                disabled={!hasPhotoUploaded && !draft.title.trim()}
+                disabled={!draft.title.trim() && !extractPlainTextExcerpt(draft.content, 50) && !hasPhotoUploaded}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -652,7 +1086,7 @@ export const AdminBlogManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleSaveArticle('draft')}
-                disabled={isSaving || !hasPhotoUploaded}
+                disabled={isSaving}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" />
@@ -662,7 +1096,7 @@ export const AdminBlogManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleSaveArticle('published')}
-                disabled={isSaving || !hasPhotoUploaded}
+                disabled={isSaving}
                 className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
@@ -671,48 +1105,150 @@ export const AdminBlogManager: React.FC = () => {
             </div>
           </div>
 
-          {/* STEP 1: DEVICE PHOTO UPLOAD & PREVIEW (NO IMAGE URL FIELD) */}
+          {/* ARTICLE TITLE, METADATA & FORMATTED CONTENT */}
+          <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-5">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800">
+                Article Title
+              </label>
+              <input
+                type="text"
+                value={draft.title}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                    slug: isEditingExisting ? prev.slug : generateSlug(e.target.value)
+                  }))
+                }
+                placeholder="Enter your article headline..."
+                className="w-full px-4 py-2.5 text-sm sm:text-base font-bold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Category
+                </label>
+                <select
+                  value={draft.category}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                >
+                  {(categoryNames.includes(draft.category)
+                    ? categoryNames
+                    : [draft.category, ...categoryNames].filter(Boolean)
+                  ).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                  {!categoryNames.includes('Uncategorized') && draft.category !== 'Uncategorized' && (
+                    <option value="Uncategorized">Uncategorized</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Author Name
+                </label>
+                <input
+                  type="text"
+                  value={draft.authorName}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, authorName: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Author Role
+                </label>
+                <input
+                  type="text"
+                  value={draft.authorRole}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, authorRole: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Short Summary / Excerpt (optional — auto-generated from content if left blank)
+              </label>
+              <textarea
+                rows={2}
+                value={draft.excerpt}
+                onChange={(e) => setDraft((prev) => ({ ...prev, excerpt: e.target.value }))}
+                placeholder="Brief 1–2 sentence overview displayed in the article list..."
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  Article Content &amp; Images
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Use the image button in the toolbar to upload photos, resize (Small, Medium, Large, Custom, or drag corner), and align Left / Center / Right.
+                </span>
+              </div>
+              <RichTextEditor
+                key={draft.id}
+                value={draft.content}
+                onChange={handleEditorContentChange}
+                hideImageUrlInput={true}
+                minHeight="420px"
+              />
+            </div>
+          </section>
+
+          {/* AUTOMATIC ARTICLE THUMBNAIL PREVIEW (DERIVED FROM FIRST IMAGE; NO DUPLICATE UPLOAD REQUIRED) */}
           <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800">
-                  Step 1 of 2
-                </div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Select Featured Photo from Your Device
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  Article Thumbnail Preview
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Choose a photo directly from your phone or computer. An instant preview appears below before saving.
+                  {draft.thumbnailIsCustomOverride && hasPhotoUploaded
+                    ? 'Using custom cover image uploaded for cards & previews.'
+                    : firstBodyImageSrc
+                    ? 'Automatically set from the first image inserted into your article (no need to upload twice).'
+                    : 'No image inserted yet — a clean default placeholder will display on article cards until you insert a photo.'}
                 </p>
               </div>
 
-              {hasPhotoUploaded && (
-                <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {draft.thumbnailIsCustomOverride && (
                   <button
                     type="button"
-                    onClick={() => thumbInputRef.current?.click()}
-                    disabled={isUploadingThumb}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    onClick={handleUseFirstArticleImage}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-teal-200 bg-teal-50 text-xs font-semibold text-teal-800 hover:bg-teal-100 cursor-pointer"
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Change Photo</span>
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>{firstBodyImageSrc ? 'Use First Article Image' : 'Reset to Placeholder'}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        thumbnailUrl: '',
-                        thumbnailStorageMode: undefined
-                      }))
-                    }
-                    className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Remove</span>
-                  </button>
-                </div>
-              )}
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => thumbInputRef.current?.click()}
+                  disabled={isUploadingThumb}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{draft.thumbnailIsCustomOverride ? 'Change Custom Cover' : 'Optional Custom Cover'}</span>
+                </button>
+              </div>
             </div>
 
             <input
@@ -724,8 +1260,8 @@ export const AdminBlogManager: React.FC = () => {
             />
 
             {isUploadingThumb ? (
-              <div className="p-8 rounded-xl border border-dashed border-teal-300 bg-teal-50/40 text-center space-y-3">
-                <Loader2 className="w-6 h-6 text-teal-700 animate-spin mx-auto" />
+              <div className="p-6 rounded-xl border border-dashed border-teal-300 bg-teal-50/40 text-center space-y-2.5">
+                <Loader2 className="w-5 h-5 text-teal-700 animate-spin mx-auto" />
                 <div className="text-xs font-semibold text-slate-800">{uploadStage}</div>
                 <div className="max-w-xs mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
@@ -734,182 +1270,56 @@ export const AdminBlogManager: React.FC = () => {
                   />
                 </div>
               </div>
-            ) : hasPhotoUploaded ? (
-              <div className="space-y-3">
-                <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 max-h-80 flex items-center justify-center">
-                  <img
-                    src={draft.thumbnailUrl}
-                    alt={draft.thumbnailAlt || draft.title || 'Selected featured photo preview'}
-                    className="w-full max-h-80 object-cover"
-                  />
-                </div>
-
-                {storageNotice && (
-                  <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    {storageNotice}
-                  </p>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Image Description / Alt Text (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.thumbnailAlt}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, thumbnailAlt: e.target.value }))}
-                    placeholder="Describe the photo for accessibility"
-                    className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                  />
-                </div>
-              </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => thumbInputRef.current?.click()}
-                className="w-full p-8 sm:p-10 rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-teal-50/20 transition-colors text-center space-y-3 cursor-pointer"
-              >
-                <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-700 mx-auto flex items-center justify-center">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-sm font-bold text-slate-900">
-                    Click to select a photo from your phone or computer
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Supports JPG, PNG, WebP, or GIF. No external image URLs needed.
-                  </p>
-                </div>
-              </button>
-            )}
-          </section>
-
-          {/* STEP 2: ARTICLE TITLE, DETAILS & FORMATTED CONTENT */}
-          <section
-            className={`bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-5 transition-opacity ${
-              !hasPhotoUploaded ? 'opacity-60' : 'opacity-100'
-            }`}
-          >
-            <div className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800">
-                  Step 2 of 2
-                </div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Article Title & Content
-                </h3>
-              </div>
-              {!hasPhotoUploaded && (
-                <span className="text-xs font-medium text-amber-700">
-                  Select a featured photo in Step 1 above first.
-                </span>
-              )}
-            </div>
-
-            {!hasPhotoUploaded ? (
-              <div className="py-6 text-center text-xs text-slate-500">
-                Upload a photo from your device in Step 1 to enter your article title and begin writing.
-              </div>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-800">
-                    Article Title
-                  </label>
-                  <input
-                    type="text"
-                    value={draft.title}
-                    onChange={(e) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        title: e.target.value,
-                        slug: isEditingExisting ? prev.slug : generateSlug(e.target.value)
-                      }))
-                    }
-                    placeholder="Enter your article headline..."
-                    className="w-full px-4 py-2.5 text-sm sm:text-base font-bold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
+                <div className="aspect-[16/10] w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                  {hasPhotoUploaded ? (
+                    <img
+                      src={effectiveThumbnailUrl}
+                      alt={draft.thumbnailAlt || draft.title || 'Article thumbnail preview'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex flex-col items-center justify-center text-slate-400 p-4 text-center space-y-1">
+                      <FileText className="w-6 h-6 opacity-60" />
+                      <span className="text-[11px] font-medium text-slate-500">Default Placeholder</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Category
-                    </label>
-                    <select
-                      value={draft.category}
-                      onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
-                    >
-                      {BLOG_WRITE_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="space-y-3">
+                  {storageNotice && (
+                    <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                      {storageNotice}
+                    </p>
+                  )}
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Author Name
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Thumbnail Description / Alt Text (optional)
                     </label>
                     <input
                       type="text"
-                      value={draft.authorName}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, authorName: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Author Role
-                    </label>
-                    <input
-                      type="text"
-                      value={draft.authorRole}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, authorRole: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      value={draft.thumbnailAlt}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, thumbnailAlt: e.target.value }))}
+                      placeholder="Describe the thumbnail image for accessibility"
+                      className="w-full px-3.5 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
                     />
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Short Summary / Excerpt (optional — auto-generated from content if left blank)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={draft.excerpt}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, excerpt: e.target.value }))}
-                    placeholder="Brief 1–2 sentence overview displayed in the article list..."
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-800">
-                    Article Content
-                  </label>
-                  <RichTextEditor
-                    value={draft.content}
-                    onChange={(html) => setDraft((prev) => ({ ...prev, content: html }))}
-                    hideImageUrlInput={true}
-                    minHeight="400px"
-                  />
-                </div>
-              </>
+              </div>
             )}
           </section>
         </div>
       )}
 
       {/* PREVIEW MODAL BEFORE PUBLISHING */}
-      {previewPost && (
+      {previewPost && (() => {
+        const previewThumb = getSingleArticleThumbnailUrl(previewPost);
+        const firstBodyImg = extractFirstImageFromContent(previewPost.content);
+        const showSeparateBanner = Boolean(previewThumb && (!firstBodyImg || previewThumb !== firstBodyImg));
+
+        return (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs overflow-y-auto p-4 sm:p-6">
           <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-6">
             <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
@@ -928,10 +1338,10 @@ export const AdminBlogManager: React.FC = () => {
             </div>
 
             <div className="p-6 sm:p-8 space-y-6">
-              {getSingleArticleThumbnailUrl(previewPost) && (
+              {showSeparateBanner && (
                 <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
                   <img
-                    src={getSingleArticleThumbnailUrl(previewPost)}
+                    src={previewThumb}
                     alt={previewPost.thumbnailAlt || previewPost.title}
                     className="w-full max-h-[420px] object-cover"
                     referrerPolicy="no-referrer"
@@ -984,9 +1394,81 @@ export const AdminBlogManager: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CATEGORY CONFIRMATION MODAL */}
+      {confirmDeleteCategory && (() => {
+        const affectedCount = posts.filter(
+          (p) => (p.category || '').trim().toLowerCase() === confirmDeleteCategory.name.toLowerCase()
+        ).length;
+        const alternativeCategories = categories.filter((c) => c.id !== confirmDeleteCategory.id);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-slate-900">Delete Category?</h3>
+                  <p className="text-xs text-slate-600">
+                    Are you sure you want to permanently delete the category{' '}
+                    <strong className="text-slate-900">"{confirmDeleteCategory.name}"</strong>?
+                  </p>
+                  {affectedCount > 0 && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2">
+                      {affectedCount} article{affectedCount === 1 ? '' : 's'} currently use this category. Select where to move {affectedCount === 1 ? 'it' : 'them'}:
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {affectedCount > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Reassign Affected Articles To
+                  </label>
+                  <select
+                    value={reassignCategoryTarget}
+                    onChange={(e) => setReassignCategoryTarget(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                  >
+                    {alternativeCategories.map((alt) => (
+                      <option key={alt.id} value={alt.name}>
+                        {alt.name}
+                      </option>
+                    ))}
+                    <option value="Uncategorized">Uncategorized</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteCategory(null)}
+                  disabled={isDeletingCategory}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteCategory}
+                  disabled={isDeletingCategory}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                >
+                  {isDeletingCategory ? 'Deleting...' : 'Delete Category Permanently'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* DELETE ARTICLE CONFIRMATION MODAL */}
       {confirmDeletePost && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
