@@ -1,6 +1,6 @@
 {
   "name": "ISEZERANO ONLINE – GS GITUMBA",
-  "description": "ISEZERANO ONLINE – GS GITUMBA: Official Rwanda Competence-Based Curriculum (CBC) pedagogical platform and nursery report card system.",
+  "description": "ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
