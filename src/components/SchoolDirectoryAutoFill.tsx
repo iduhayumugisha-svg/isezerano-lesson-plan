@@ -13,7 +13,7 @@ import {
   ChevronDown,
   Building2
 } from 'lucide-react';
-import { SchoolDirectoryEntry } from '../data/rwandaSchoolsData';
+import { SchoolDirectoryEntry } from '../data/rwandaEducationData';
 import { getAllSchools, syncSchoolDirectoryFromCloud } from '../services/schoolDirectoryService';
 import { SchoolDirectoryAdminModal } from './SchoolDirectoryAdminModal';
 

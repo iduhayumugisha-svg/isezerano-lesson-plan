@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { EditablePageId, WebsitePageContent } from '../types/websitePages';
+import { EditablePageId, WebsitePageContent } from '../types/platform';
 import { initFirestoreIfConfigured } from './storageService';
 
 const PAGE_STORAGE_PREFIX = 'isezerano_page_v1_';

@@ -26,7 +26,7 @@ import {
   Undo2,
   Check
 } from 'lucide-react';
-import { EditablePageId, WebsitePageContent, PageSection, ContactExtraData } from '../types/websitePages';
+import { EditablePageId, WebsitePageContent, PageSection, ContactExtraData } from '../types/platform';
 import { 
   getAllPagesContent, 
   getPageContent, 

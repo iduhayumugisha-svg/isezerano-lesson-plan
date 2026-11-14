@@ -16,7 +16,7 @@ import {
   CheckCircle2, 
   AlertCircle 
 } from 'lucide-react';
-import { SchoolDirectoryEntry } from '../data/rwandaSchoolsData';
+import { SchoolDirectoryEntry } from '../data/rwandaEducationData';
 import { saveSchoolEntry, deleteSchoolEntry } from '../services/schoolDirectoryService';
 import { SchoolLocationSelector } from './SchoolLocationSelector';
 

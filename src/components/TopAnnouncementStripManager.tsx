@@ -25,7 +25,6 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
-import { TopAnnouncementTicker } from './TopAnnouncementTicker';
 import { 
   AnnouncementStripSettings, 
   AnnouncementItem, 
@@ -260,10 +259,11 @@ export const TopAnnouncementStripManager: React.FC = () => {
             }`}
           >
             {announcements.enabled ? (
-              <TopAnnouncementTicker 
-                overrideSettings={announcements} 
-                isPreview={true} 
-              />
+              <div className="p-3 text-center bg-slate-900 text-teal-300 text-xs font-medium">
+                {announcements.messages?.find((m) => m.active !== false)?.text ||
+                  announcements.messages?.[0]?.text ||
+                  'Notifications appear in Header Notification Bell.'}
+              </div>
             ) : (
               <div className="p-4 text-center bg-slate-800 text-slate-400 text-xs italic">
                 Announcement strip is currently disabled. Toggle &quot;Enable Strip&quot; below to make it visible.

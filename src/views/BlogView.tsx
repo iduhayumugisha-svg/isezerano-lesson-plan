@@ -4,23 +4,25 @@ import {
   ArrowLeft,
   Calendar,
   User,
-  BookOpen,
-  Share2,
-  Check,
+  MessageSquare,
   FileText,
   Loader2,
   Eye
 } from 'lucide-react';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
-import { subscribeToBlogPosts, incrementPostViews } from '../services/blogService';
 import {
+  subscribeToBlogPosts,
+  incrementPostViews,
   subscribeToBlogCategories,
   mergeCategoriesForDisplay
-} from '../services/blogCategoryService';
+} from '../services/blogService';
+import { subscribeToApprovedCommentCounts } from '../services/commentService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { formatPublicationDate } from '../utils/dateUtils';
 import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
+import { ArticleShareButton } from '../components/ArticleShareButton';
+import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
 import {
   extractFirstImageFromContent,
   extractPlainTextExcerpt,
@@ -33,6 +35,9 @@ interface BlogViewProps {
   selectedCategory?: string;
   onSelectCategory?: (category: string) => void;
   onReturnHome?: () => void;
+  commentCounts?: Record<string, number>;
+  focusComments?: boolean;
+  onConsumeFocusComments?: () => void;
 }
 
 export const BlogView: React.FC<BlogViewProps> = ({
@@ -40,18 +45,27 @@ export const BlogView: React.FC<BlogViewProps> = ({
   onSelectPostSlug,
   selectedCategory: externalSelectedCategory,
   onSelectCategory,
-  onReturnHome
+  onReturnHome,
+  commentCounts: externalCommentCounts,
+  focusComments = false,
+  onConsumeFocusComments
 }) => {
   const { branding } = useWebsiteDesign();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
   const [categoriesInitialized, setCategoriesInitialized] = useState(false);
+  const [internalCommentCounts, setInternalCommentCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(initialSlug);
   const [searchQuery, setSearchQuery] = useState('');
   const [internalSelectedCategory, setInternalSelectedCategory] = useState<string>('All Categories');
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [autoFocusCommentsForm, setAutoFocusCommentsForm] = useState(false);
   const incrementedPostIdsRef = useRef<Set<string>>(new Set());
+
+  const usesExternalCommentCounts = externalCommentCounts !== undefined;
+  const resolvedCommentCounts = usesExternalCommentCounts
+    ? externalCommentCounts || {}
+    : internalCommentCounts;
 
   const selectedCategory =
     externalSelectedCategory !== undefined ? externalSelectedCategory : internalSelectedCategory;
@@ -79,11 +93,18 @@ export const BlogView: React.FC<BlogViewProps> = ({
       setCategoriesInitialized(initialized);
     });
 
+    const unsubComments = usesExternalCommentCounts
+      ? () => {}
+      : subscribeToApprovedCommentCounts((counts) => {
+          setInternalCommentCounts(counts);
+        });
+
     return () => {
       unsubPosts();
       unsubCategories();
+      unsubComments();
     };
-  }, []);
+  }, [usesExternalCommentCounts]);
 
   const categories = mergeCategoriesForDisplay(rawCategories, categoriesInitialized, posts);
   const categoryTabs = [
@@ -103,6 +124,15 @@ export const BlogView: React.FC<BlogViewProps> = ({
     ? posts.find((p) => p.slug === activeSlug || p.id === activeSlug) || null
     : null;
 
+  const scrollToCommentsSection = () => {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById('article-comments');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    setAutoFocusCommentsForm(true);
+  };
+
   // Update SEO metadata and increment views once when opening a published article
   useEffect(() => {
     if (activePost) {
@@ -116,13 +146,35 @@ export const BlogView: React.FC<BlogViewProps> = ({
     }
   }, [activePost?.id, branding]);
 
-  const openArticle = (post: BlogPost) => {
+  // Scroll cleanly to comments when navigated via a card Comment button or #article-comments hash
+  useEffect(() => {
+    if (!activePost) return;
+    const hashPointsToComments =
+      typeof window !== 'undefined' && window.location.hash === '#article-comments';
+    if (focusComments || hashPointsToComments) {
+      const timer = setTimeout(() => {
+        scrollToCommentsSection();
+        onConsumeFocusComments?.();
+      }, 180);
+      return () => clearTimeout(timer);
+    }
+  }, [activePost?.id, focusComments]);
+
+  const openArticle = (post: BlogPost, openAtComments = false) => {
+    setAutoFocusCommentsForm(openAtComments);
     setActiveSlug(post.slug);
     onSelectPostSlug?.(post.slug);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (openAtComments) {
+      setTimeout(() => {
+        scrollToCommentsSection();
+      }, 150);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const closeArticle = () => {
+    setAutoFocusCommentsForm(false);
     setActiveSlug(null);
     if (onReturnHome) {
       onReturnHome();
@@ -130,18 +182,6 @@ export const BlogView: React.FC<BlogViewProps> = ({
       onSelectPostSlug?.(null);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCopyShareLink = async () => {
-    if (!activePost || typeof window === 'undefined') return;
-    const shareUrl = `${window.location.origin}/blog/${activePost.slug}`;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
-    } catch {
-      // ignore clipboard errors in restricted iframes
-    }
   };
 
   const filteredPosts = posts.filter((post) => {
@@ -209,7 +249,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
     return (
       <article className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
-        {/* Top Back Navigation & Share */}
+        {/* Top Back Navigation, Comments Shortcut & Share */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
@@ -220,23 +260,20 @@ export const BlogView: React.FC<BlogViewProps> = ({
             <span>Back to News</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handleCopyShareLink}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            {copiedLink ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-emerald-700">Link Copied</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Copy Link</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={scrollToCommentsSection}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:text-teal-800 hover:border-teal-300 hover:bg-teal-50/40 transition-colors cursor-pointer"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Comments</span>
+              <span className="tabular-nums font-bold">
+                ({resolvedCommentCounts[activePost.id] || 0})
+              </span>
+            </button>
+            <ArticleShareButton post={activePost} variant="button" />
+          </div>
         </div>
 
         {/* Article Header */}
@@ -266,10 +303,17 @@ export const BlogView: React.FC<BlogViewProps> = ({
               </>
             )}
             <span className="text-slate-300">·</span>
-            <span className="inline-flex items-center space-x-1.5 tabular-nums">
-              <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-              <span>{activePost.readTimeMinutes || 1} min read</span>
-            </span>
+            <button
+              type="button"
+              onClick={scrollToCommentsSection}
+              className="inline-flex items-center space-x-1 text-slate-600 hover:text-teal-800 font-medium cursor-pointer tabular-nums"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                {resolvedCommentCounts[activePost.id] || 0}{' '}
+                {(resolvedCommentCounts[activePost.id] || 0) === 1 ? 'comment' : 'comments'}
+              </span>
+            </button>
             <span className="text-slate-300">·</span>
             <span className="inline-flex items-center space-x-1 tabular-nums">
               <Eye className="w-3.5 h-3.5 text-slate-400" />
@@ -297,6 +341,26 @@ export const BlogView: React.FC<BlogViewProps> = ({
         <div
           className="blog-article-body text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-6 [&_a]:text-teal-700 [&_a]:underline"
           dangerouslySetInnerHTML={{ __html: activePost.content }}
+        />
+
+        {/* Article Action Bar: Leave a Message & Share */}
+        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={scrollToCommentsSection}
+            className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-teal-50 border border-teal-200 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Write a Comment ({resolvedCommentCounts[activePost.id] || 0})</span>
+          </button>
+          <ArticleShareButton post={activePost} variant="button" />
+        </div>
+
+        {/* Reader Messages / Comments Section */}
+        <ArticleCommentsSection
+          postId={activePost.id}
+          postTitle={activePost.title}
+          autoFocusForm={autoFocusCommentsForm}
         />
 
         {/* Related Articles Section (each displays its own correct thumbnail) */}
@@ -338,9 +402,23 @@ export const BlogView: React.FC<BlogViewProps> = ({
                           {related.title}
                         </h3>
                       </div>
-                      <span className="text-[11px] font-medium text-slate-500 tabular-nums">
-                        {related.readTimeMinutes || 1} min read
-                      </span>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openArticle(related, true);
+                          }}
+                          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Comments"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span className="tabular-nums">
+                            {resolvedCommentCounts[related.id] || 0}
+                          </span>
+                        </button>
+                        <ArticleShareButton post={related} variant="compact" />
+                      </div>
                     </div>
                   </article>
                 );
@@ -495,13 +573,25 @@ export const BlogView: React.FC<BlogViewProps> = ({
                     </p>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
                     <span className="font-medium text-slate-700 truncate">
                       {post.author?.name || 'GS GITUMBA Editorial'}
                     </span>
-                    <span className="tabular-nums shrink-0">
-                      {post.readTimeMinutes || 1} min read
-                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openArticle(post, true);
+                        }}
+                        className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="View or write comments"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                      </button>
+                      <ArticleShareButton post={post} variant="compact" />
+                    </div>
                   </div>
                 </div>
               </article>

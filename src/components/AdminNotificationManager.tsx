@@ -27,7 +27,7 @@ import {
   sendLocalTestNotification,
   isPushNotificationSupported
 } from '../services/fcmService';
-import { PushAnnouncement, DeviceTokenInfo } from '../types/announcement';
+import { PushAnnouncement, DeviceTokenInfo } from '../types/platform';
 
 interface AdminNotificationManagerProps {
   onSelectAnnouncement?: (announcement: PushAnnouncement) => void;

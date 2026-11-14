@@ -4,8 +4,8 @@ import {
   LessonStage,
   AppSettings
 } from '../types/lessonPlan';
-import { RWANDA_TERMS } from '../data/rwandaCbcData';
-import { getAppSettings } from '../services/appSettingsService';
+import { RWANDA_TERMS } from '../data/rwandaEducationData';
+import { getAppSettings } from '../services/siteSettingsService';
 import { 
   Save, 
   Plus, 

@@ -20,7 +20,7 @@ import {
   Check,
   ChevronRight
 } from 'lucide-react';
-import { HeroSlide, PresetImage } from '../types/slider';
+import { HeroSlide, PresetImage } from '../types/platform';
 import { 
   getAllSlidesAdmin, 
   saveSlideAdmin, 
@@ -29,7 +29,7 @@ import {
   compressImageFile,
   PRESET_EDUCATION_IMAGES,
   DEFAULT_HERO_SLIDES
-} from '../services/sliderService';
+} from '../services/siteSettingsService';
 import { useAuth } from '../context/AuthContext';
 
 interface SliderManagerProps {

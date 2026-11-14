@@ -6,6 +6,7 @@
 
 import { doc, getDoc, setDoc, increment, onSnapshot } from 'firebase/firestore';
 import { getFirebaseConfig, initFirestoreIfConfigured } from './storageService';
+import { DEFAULT_WHATSAPP_NUMBER, formatWhatsAppDisplayNumber, toWaMeDigits } from '../utils/whatsappUtils';
 
 declare global {
   interface Window {
@@ -261,7 +262,9 @@ export const trackEvent = (eventName: string, params: Record<string, any> = {}):
     }
 
     const readableLabel = 
-      eventName === 'whatsapp_click' ? 'WhatsApp conversation opened (0782971258)' :
+      eventName === 'whatsapp_click'
+        ? `WhatsApp conversation opened (${params.display_number || formatWhatsAppDisplayNumber(params.phone_number || DEFAULT_WHATSAPP_NUMBER)})`
+        :
       eventName === 'lesson_plan_created' ? `New CBC Lesson Plan generated (${params.subject || 'CBC'})` :
       eventName === 'lesson_plan_export_pdf' ? `Exported A4 PDF Lesson Plan (${params.subject || ''})` :
       eventName === 'admin_login_success' ? 'Administrator signed in securely' :
@@ -285,12 +288,19 @@ export const trackEvent = (eventName: string, params: Record<string, any> = {}):
 };
 
 /**
- * Track WhatsApp button interaction
+ * Track WhatsApp button interaction using the configured phone number
  */
-export const trackWhatsAppClick = (sourcePage: string): void => {
+export const trackWhatsAppClick = (
+  sourcePage: string,
+  phoneNumber: string = DEFAULT_WHATSAPP_NUMBER,
+  channel: string = 'whatsapp_contact_button'
+): void => {
+  const waDigits = toWaMeDigits(phoneNumber) || toWaMeDigits(DEFAULT_WHATSAPP_NUMBER);
+  const displayNum = formatWhatsAppDisplayNumber(phoneNumber || DEFAULT_WHATSAPP_NUMBER);
   trackEvent('whatsapp_click', {
-    phone_number: '250782971258',
-    channel: 'floating_button',
+    phone_number: waDigits,
+    display_number: displayNum,
+    channel,
     page: sourcePage,
     timestamp: new Date().toISOString()
   });

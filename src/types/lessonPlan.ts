@@ -1,4 +1,6 @@
 export type EducationLevel = 'Primary' | 'Secondary';
+export type NavPage = 'dashboard' | 'students' | 'create' | 'saved' | 'settings';
+export type SaasNavPage = NavPage | 'admin';
 
 export interface SchoolInfo {
   schoolName: string;

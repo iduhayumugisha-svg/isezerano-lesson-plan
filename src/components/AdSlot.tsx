@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { AdPlacement, AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/ads';
-import { getAdsSettings, subscribeToAdsSettings } from '../services/adsService';
+import { AdPlacement, AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
+import { getAdsSettings, subscribeToAdsSettings } from '../services/siteSettingsService';
 import { ExternalLink, Sparkles } from 'lucide-react';
 
 interface AdSlotProps {

@@ -16,7 +16,8 @@ import {
   renderBlogArticleHtml,
   renderWebsiteDefaultHtml,
   resolvePostThumbnailSource,
-  safeFileSlug
+  safeFileSlug,
+  sniffImageMimeFromBuffer
 } from '../server/ogMeta.ts';
 
 export interface PrerenderStaticOptions {
@@ -39,7 +40,7 @@ export interface PrerenderStaticResult {
 
 async function downloadExternalImageToBuffer(
   imageUrl: string,
-  timeoutMs: number = 6000
+  timeoutMs: number = 12000
 ): Promise<{
   buffer: Buffer;
   mimeType: string;
@@ -58,20 +59,31 @@ async function downloadExternalImageToBuffer(
     if (!res.ok) return null;
 
     const rawMime = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (!rawMime.startsWith('image/') || rawMime === 'image/svg+xml') return null;
-
-    const mimeType = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
-    const ext =
-      mimeType === 'image/png'
-        ? 'png'
-        : mimeType === 'image/webp'
-        ? 'webp'
-        : mimeType === 'image/gif'
-        ? 'gif'
-        : 'jpg';
+    if (rawMime === 'image/svg+xml') return null;
 
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.length === 0) return null;
+
+    const sniffed = sniffImageMimeFromBuffer(buffer);
+    let mimeType = '';
+    let ext = 'jpg';
+
+    if (rawMime.startsWith('image/')) {
+      mimeType = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+      ext =
+        mimeType === 'image/png'
+          ? 'png'
+          : mimeType === 'image/webp'
+          ? 'webp'
+          : mimeType === 'image/gif'
+          ? 'gif'
+          : 'jpg';
+    } else if (sniffed) {
+      mimeType = sniffed.mimeType;
+      ext = sniffed.ext;
+    } else {
+      return null;
+    }
 
     const dims = readImageDimensionsFromBuffer(buffer, mimeType);
     return {
@@ -139,7 +151,9 @@ export async function prerenderStaticBlogDist(
   fs.writeFileSync(path.join(blogOutDir, 'index.html'), blogIndexHtml, 'utf-8');
   fs.writeFileSync(path.join(distDir, 'blog.html'), blogIndexHtml, 'utf-8');
 
-  const publishedPosts = posts.filter((p) => p && p.status === 'published');
+  const publishedPosts = posts.filter(
+    (p) => p && String(p.status || '').trim().toLowerCase() === 'published'
+  );
   if (publishedPosts.length === 0) {
     console.log('[prerenderBlogMeta] 0 published posts found; dist/index.html and dist/blog/index.html preserved cleanly.');
     return { prerenderedCount: 0, generatedFiles: [] };
@@ -190,6 +204,8 @@ export async function prerenderStaticBlogDist(
         imageHeight = undefined;
         imageMimeType = undefined;
       }
+    } else if (thumbSrc.startsWith('/') && !thumbSrc.startsWith('//') && !/\.svg(?:$|\?)/i.test(thumbSrc)) {
+      staticImageUrl = `${origin}${thumbSrc}`;
     }
 
     const articleHtml = renderBlogArticleHtml(templateHtml, post, origin, branding, {

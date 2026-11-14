@@ -74,6 +74,16 @@ export function isPublicHttpsImageUrl(url: string | null | undefined): boolean {
   return trimmed.startsWith('https://');
 }
 
+export function extractRawImageField(field: unknown): string {
+  if (typeof field === 'string') return field.trim();
+  if (field && typeof field === 'object') {
+    const obj = field as Record<string, unknown>;
+    const candidate = obj.url ?? obj.src ?? obj.secure_url ?? obj.href;
+    if (typeof candidate === 'string') return candidate.trim();
+  }
+  return '';
+}
+
 export function normalizePersistentImageSrc(rawSrc: string | null | undefined): string {
   if (!rawSrc || typeof rawSrc !== 'string') return '';
   const trimmed = rawSrc.trim();
@@ -83,12 +93,19 @@ export function normalizePersistentImageSrc(rawSrc: string | null | undefined): 
   if (trimmed.startsWith('data:image/')) {
     return trimmed.includes(';base64,') ? trimmed : '';
   }
+  if (trimmed.startsWith('//')) {
+    const upgraded = `https:${trimmed}`;
+    return upgraded.length >= 12 ? upgraded : '';
+  }
   if (trimmed.startsWith('http://')) {
     const upgraded = 'https://' + trimmed.slice(7);
     return upgraded.length >= 12 ? upgraded : '';
   }
   if (trimmed.startsWith('https://')) {
     return trimmed.length >= 12 ? trimmed : '';
+  }
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && trimmed.length > 1) {
+    return trimmed;
   }
   return '';
 }
@@ -98,6 +115,8 @@ function getServerHtmlAttr(tag: string, attrName: string): string {
   if (doubleMatch) return doubleMatch[1];
   const singleMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*'([^']*)'`, 'i'));
   if (singleMatch) return singleMatch[1];
+  const unquotedMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*([^\\s"'=<>` + '`]+)', 'i'));
+  if (unquotedMatch) return unquotedMatch[1];
   return '';
 }
 
@@ -170,9 +189,15 @@ export function extractFirstContentImage(htmlContent: string | null | undefined)
   let match: RegExpExecArray | null;
   while ((match = imgTagRegex.exec(htmlContent)) !== null) {
     const tag = match[0];
-    const srcVal = getServerHtmlAttr(tag, 'src');
-    if (srcVal) {
-      const normalized = normalizePersistentImageSrc(srcVal);
+    const candidates = [
+      getServerHtmlAttr(tag, 'src'),
+      getServerHtmlAttr(tag, 'data-src'),
+      getServerHtmlAttr(tag, 'data-lazy-src'),
+      getServerHtmlAttr(tag, 'data-original'),
+      getServerHtmlAttr(tag, 'srcset').split(',')[0]?.trim().split(/\s+/)[0] || ''
+    ];
+    for (const rawCandidate of candidates) {
+      const normalized = normalizePersistentImageSrc(rawCandidate);
       if (normalized && !isDecorativeOrIconImgTag(tag, normalized)) {
         return normalized;
       }
@@ -181,16 +206,33 @@ export function extractFirstContentImage(htmlContent: string | null | undefined)
   return '';
 }
 
+export function resolveExplicitPostCoverSource(post?: Partial<BlogPost> | null): string {
+  if (!post) return '';
+  const fields: unknown[] = [
+    post.thumbnailUrl,
+    post.featuredImage,
+    post.coverImage,
+    post.imageUrl,
+    post.bannerImage,
+    post.image
+  ];
+  for (const field of fields) {
+    const norm = normalizePersistentImageSrc(extractRawImageField(field));
+    if (norm) return norm;
+  }
+  return '';
+}
+
 /**
  * Resolves a single post's authoritative thumbnail source (identical to client `getSingleArticleThumbnailUrl`):
- * 1. Explicit custom cover ONLY when `post.thumbnailIsCustomOverride === true` and `thumbnailUrl` is valid.
+ * 1. Explicit custom cover ONLY when `post.thumbnailIsCustomOverride === true` and an explicit cover field is valid.
  * 2. Otherwise, always prefer the first actual non-decorative article image inside `post.content`.
- * 3. Otherwise, fall back to valid `post.thumbnailUrl` (standalone cover when body has no images).
+ * 3. Otherwise, fall back to valid `thumbnailUrl` / `featuredImage` / `coverImage` / `image`.
  * 4. Otherwise, return '' (omits article-specific social image metadata rather than substituting a default image).
  */
 export function resolvePostThumbnailSource(post?: Partial<BlogPost> | null): string {
   if (!post) return '';
-  const explicit = normalizePersistentImageSrc(post.thumbnailUrl);
+  const explicit = resolveExplicitPostCoverSource(post);
   if (post.thumbnailIsCustomOverride === true && explicit) {
     return explicit;
   }
@@ -202,7 +244,44 @@ export function resolvePostThumbnailSource(post?: Partial<BlogPost> | null): str
 }
 
 /**
- * Parses JPEG or PNG pixel dimensions cleanly from binary image headers.
+ * Sniffs binary image magic headers so downloads with `application/octet-stream` Content-Type still resolve accurately.
+ */
+export function sniffImageMimeFromBuffer(
+  buffer: Buffer
+): { mimeType: string; ext: string } | null {
+  if (!buffer || buffer.length < 12) return null;
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { mimeType: 'image/jpeg', ext: 'jpg' };
+  }
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return { mimeType: 'image/png', ext: 'png' };
+  }
+  // GIF: GIF87a / GIF89a
+  const hdr6 = buffer.subarray(0, 6).toString('ascii');
+  if (hdr6 === 'GIF87a' || hdr6 === 'GIF89a') {
+    return { mimeType: 'image/gif', ext: 'gif' };
+  }
+  // WebP: RIFF....WEBP
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return { mimeType: 'image/webp', ext: 'webp' };
+  }
+
+  return null;
+}
+
+/**
+ * Parses JPEG, PNG, GIF, or WebP pixel dimensions cleanly from binary image headers.
  */
 export function readImageDimensionsFromBuffer(
   buffer: Buffer,
@@ -222,6 +301,38 @@ export function readImageDimensionsFromBuffer(
       }
     }
 
+    if (mimeType === 'image/gif' && buffer.length >= 10) {
+      const hdr = buffer.subarray(0, 6).toString('ascii');
+      if (hdr === 'GIF87a' || hdr === 'GIF89a') {
+        const width = buffer.readUInt16LE(6);
+        const height = buffer.readUInt16LE(8);
+        if (width > 0 && height > 0) return { width, height };
+      }
+    }
+
+    if (
+      mimeType === 'image/webp' &&
+      buffer.length >= 30 &&
+      buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+    ) {
+      const chunk = buffer.subarray(12, 16).toString('ascii');
+      if (chunk === 'VP8X' && buffer.length >= 30) {
+        const width = 1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16));
+        const height = 1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16));
+        if (width > 0 && height > 0) return { width, height };
+      } else if (chunk === 'VP8 ' && buffer.length >= 30) {
+        const width = buffer.readUInt16LE(26) & 0x3fff;
+        const height = buffer.readUInt16LE(28) & 0x3fff;
+        if (width > 0 && height > 0) return { width, height };
+      } else if (chunk === 'VP8L' && buffer.length >= 25) {
+        const bits = buffer.readUInt32LE(21);
+        const width = (bits & 0x3fff) + 1;
+        const height = ((bits >> 14) & 0x3fff) + 1;
+        if (width > 0 && height > 0) return { width, height };
+      }
+    }
+
     if (
       (mimeType === 'image/jpeg' || mimeType === 'image/jpg') &&
       buffer.length >= 4 &&
@@ -235,7 +346,6 @@ export function readImageDimensionsFromBuffer(
           continue;
         }
         const marker = buffer[offset + 1];
-        // SOF0..SOF3, SOF5..SOF7, SOF9..SOF11, SOF13..SOF15
         if (
           (marker >= 0xc0 && marker <= 0xc3) ||
           (marker >= 0xc5 && marker <= 0xc7) ||
@@ -371,10 +481,11 @@ export function clearOgMetaCache(): void {
 
 /**
  * Fetches published Blog posts from public Cloud Firestore REST API (no secret credentials required).
+ * Uses compact page sizes (25) with per-page retries and 15s timeout so large embedded-image posts never time out or drop trailing pages.
  */
 export async function fetchPublishedBlogPostsFromFirestore(
   projectId: string = FIREBASE_PROJECT_ID,
-  timeoutMs: number = 4500
+  timeoutMs: number = 15000
 ): Promise<BlogPost[]> {
   if (postsCache && Date.now() - postsCache.fetchedAt < CACHE_TTL_MS) {
     return postsCache.data;
@@ -383,34 +494,60 @@ export async function fetchPublishedBlogPostsFromFirestore(
   const allPosts: BlogPost[] = [];
   let pageToken = '';
 
-  try {
-    do {
+  const fetchPageWithRetry = async (token: string): Promise<{
+    documents?: Array<{ name?: string; fields?: Record<string, any> }>;
+    nextPageToken?: string;
+  } | null> => {
+    const url = new URL(
+      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/posts`
+    );
+    url.searchParams.set('pageSize', '25');
+    if (token) {
+      url.searchParams.set('pageToken', token);
+    }
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const url = new URL(
-        `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/posts`
-      );
-      url.searchParams.set('pageSize', '200');
-      if (pageToken) {
-        url.searchParams.set('pageToken', pageToken);
+      try {
+        const res = await fetch(url.toString(), {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' }
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          console.warn(`[SEO/OG] Firestore REST page fetch HTTP ${res.status} (attempt ${attempt}).`);
+          if (attempt < 2 && res.status >= 500) {
+            await new Promise((r) => setTimeout(r, 400));
+            continue;
+          }
+          return null;
+        }
+        return (await res.json()) as {
+          documents?: Array<{ name?: string; fields?: Record<string, any> }>;
+          nextPageToken?: string;
+        };
+      } catch (err) {
+        clearTimeout(timer);
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        throw err;
       }
+    }
+    return null;
+  };
 
-      const res = await fetch(url.toString(), {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' }
-      });
-      clearTimeout(timer);
-
-      if (!res.ok) break;
-      const json = (await res.json()) as {
-        documents?: Array<{ name?: string; fields?: Record<string, any> }>;
-        nextPageToken?: string;
-      };
+  try {
+    do {
+      const json = await fetchPageWithRetry(pageToken);
+      if (!json) break;
 
       for (const docItem of json.documents || []) {
         const parsed = parseFirestoreDocument(docItem) as BlogPost;
-        if (parsed.status === 'published') {
-          allPosts.push(parsed);
+        if (String(parsed.status || '').trim().toLowerCase() === 'published') {
+          allPosts.push({ ...parsed, status: 'published' });
         }
       }
 
@@ -427,7 +564,7 @@ export async function fetchPublishedBlogPostsFromFirestore(
     return allPosts;
   } catch (err) {
     console.warn('[SEO/OG] Could not query Firestore posts via REST:', err);
-    return postsCache?.data || [];
+    return postsCache?.data || allPosts;
   }
 }
 
@@ -617,6 +754,8 @@ export function renderBlogArticleHtml(
       imageWidth = decodedData.width;
       imageHeight = decodedData.height;
       imageMime = decodedData.mimeType;
+    } else if (rawThumb.startsWith('/') && !rawThumb.startsWith('//') && !/\.svg(?:$|\?)/i.test(rawThumb)) {
+      imageUrl = `${cleanOrigin}${rawThumb}`;
     } else {
       imageUrl = '';
       imageWidth = undefined;
@@ -770,7 +909,7 @@ export function findPublishedPostBySlugOrId(
   return (
     posts.find(
       (p) =>
-        p.status === 'published' &&
+        String(p.status || '').trim().toLowerCase() === 'published' &&
         ((p.slug || '').trim().toLowerCase() === target ||
           (p.id || '').trim().toLowerCase() === target ||
           safeFileSlug(p.slug || p.id).toLowerCase() === target)
@@ -840,10 +979,16 @@ export async function handleBlogOgImageRequest(
       clearTimeout(timer);
 
       if (upstream.ok) {
-        const contentType = upstream.headers.get('content-type') || 'image/jpeg';
-        if (contentType.startsWith('image/')) {
-          const arrayBuf = await upstream.arrayBuffer();
-          const buf = Buffer.from(arrayBuf);
+        const rawType = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        const arrayBuf = await upstream.arrayBuffer();
+        const buf = Buffer.from(arrayBuf);
+        const sniffed = sniffImageMimeFromBuffer(buf);
+        const contentType = rawType.startsWith('image/') && rawType !== 'image/svg+xml'
+          ? rawType === 'image/jpg'
+            ? 'image/jpeg'
+            : rawType
+          : sniffed?.mimeType || '';
+        if (contentType && buf.length > 0) {
           res.status(200);
           res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Length', String(buf.length));

@@ -15,6 +15,7 @@ import {
   NavigationMenuItem,
   WebsiteDesignVersion
 } from '../types/websiteDesign';
+import { normalizeWhatsAppSettings } from '../utils/whatsappUtils';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -126,6 +127,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: ensureBlogNavItem(parsed.navigationMenus),
+        whatsappContact: normalizeWhatsAppSettings(parsed.whatsappContact),
         versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
@@ -150,6 +152,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
           navigationMenus: ensureBlogNavItem(data.navigationMenus),
+          whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
           versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
@@ -203,6 +206,7 @@ export const subscribeToWebsiteDesign = (
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
           navigationMenus: ensureBlogNavItem(data.navigationMenus),
+          whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
           versionHistory: data.versionHistory || [],
           updatedAt: data.updatedAt || new Date().toISOString(),
           updatedBy: data.updatedBy || 'admin'
@@ -262,6 +266,7 @@ export const saveWebsiteDesignSettings = async (
     ...(settings.announcements ? { announcements: { ...settings.announcements } } : {}),
     homepageSections: settings.homepageSections ? JSON.parse(JSON.stringify(settings.homepageSections)) : [],
     navigationMenus: settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : [],
+    whatsappContact: normalizeWhatsAppSettings(settings.whatsappContact),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
   };
@@ -365,6 +370,7 @@ export const restoreWebsiteDesignVersion = async (
     const currentSettings = await getWebsiteDesignSettings();
     const restored: WebsiteDesignSettings = {
       ...version.snapshot,
+      whatsappContact: normalizeWhatsAppSettings(version.snapshot.whatsappContact),
       versionHistory: currentSettings.versionHistory || [],
       updatedAt: new Date().toISOString(),
       updatedBy: adminUid

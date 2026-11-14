@@ -7,7 +7,7 @@ import {
   onSnapshot,
   updateDoc
 } from 'firebase/firestore';
-import { TeacherProfile } from '../types/teacherProfile';
+import { TeacherProfile } from '../types/platform';
 import {
   initFirestoreIfConfigured,
   getFirebaseAuth

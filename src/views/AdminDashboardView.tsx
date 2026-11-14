@@ -45,13 +45,12 @@ import {
   X,
   Bell
 } from 'lucide-react';
-import { UserProfile, AppSettings, LessonPlan } from '../types/lessonPlan';
-import { TeacherProfile } from '../types/teacherProfile';
-import { getAppSettings, saveAppSettings } from '../services/appSettingsService';
+import { UserProfile, AppSettings, LessonPlan, SaasNavPage } from '../types/lessonPlan';
+import { TeacherProfile } from '../types/platform';
+import { getAppSettings, saveAppSettings } from '../services/siteSettingsService';
 import { listUsers, setUserStatus, setUserRole } from '../services/authService';
 import { getAllTeacherProfiles } from '../services/teacherProfileService';
 import { useAuth } from '../context/AuthContext';
-import { SaasNavPage } from '../components/Sidebar';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
@@ -59,6 +58,9 @@ import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAn
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
 import { AdminSchoolDirectoryPanel } from '../components/AdminSchoolDirectoryPanel';
 import { AdminBlogManager } from '../components/AdminBlogManager';
+import { AdminWhatsAppSettings } from '../components/AdminWhatsAppSettings';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { formatWhatsAppDisplayNumber } from '../utils/whatsappUtils';
 import { 
   getAnalyticsSummary, 
   subscribeToSharedAnalytics, 
@@ -72,7 +74,7 @@ interface AdminDashboardViewProps {
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'blog' | 'design' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab = 'pages' | 'blog' | 'design' | 'whatsapp' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   lessonPlans,
@@ -80,6 +82,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onLogout
 }) => {
   const { user, isAdmin, signOutUser } = useAuth();
+  const { whatsappContact } = useWebsiteDesign();
   const [activeTab, setActiveTab] = useState<AdminTab>('pages');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
@@ -433,6 +436,21 @@ promoteToAdmin('admin@example.com');`;
         </button>
 
         <button
+          onClick={() => setActiveTab('whatsapp')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'whatsapp'
+              ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <MessageCircle className="w-4 h-4 text-emerald-400" />
+          <span>WhatsApp Contact Settings</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'whatsapp' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+            {whatsappContact.enabled ? 'Active' : 'Off'}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('schools')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'schools'
@@ -586,6 +604,11 @@ promoteToAdmin('admin@example.com');`;
         <WebsiteDesignManager />
       )}
 
+      {/* ================= TAB: WHATSAPP CONTACT SETTINGS ================= */}
+      {activeTab === 'whatsapp' && (
+        <AdminWhatsAppSettings />
+      )}
+
       {/* ================= TAB: RWANDA SCHOOL DIRECTORY MANAGEMENT ================= */}
       {activeTab === 'schools' && (
         <AdminSchoolDirectoryPanel adminUid={user?.uid} />
@@ -654,7 +677,9 @@ promoteToAdmin('admin@example.com');`;
               </div>
               <div className="flex items-center space-x-2 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800">
                 <span className="text-slate-400 font-medium">WhatsApp Conversion:</span>
-                <span className="text-amber-300 font-mono font-semibold">0782971258</span>
+                <span className="text-amber-300 font-mono font-semibold">
+                  {formatWhatsAppDisplayNumber(whatsappContact.phoneNumber)}
+                </span>
               </div>
             </div>
           </div>
@@ -694,7 +719,7 @@ promoteToAdmin('admin@example.com');`;
                 {analyticsData.totalWhatsAppClicks}
               </div>
               <p className="text-xs text-emerald-800/80 mt-1">
-                Clicks on floating 0782971258 button
+                Clicks on {formatWhatsAppDisplayNumber(whatsappContact.phoneNumber)} button
               </p>
             </div>
 

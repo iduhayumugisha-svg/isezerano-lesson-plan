@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { PushAnnouncement } from '../types/announcement';
+import { PushAnnouncement } from '../types/platform';
 import { 
   subscribeToAnnouncements, 
   getReadNoticeIds, 

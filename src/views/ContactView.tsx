@@ -15,7 +15,7 @@ import {
   Clock
 } from 'lucide-react';
 import { WebsitePage } from '../components/WebsiteHeader';
-import { WebsitePageContent } from '../types/websitePages';
+import { WebsitePageContent } from '../types/platform';
 import { getPageContent, subscribeToPageContent, DEFAULT_PAGES_CONTENT } from '../services/websitePagesService';
 
 interface ContactViewProps {

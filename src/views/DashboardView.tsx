@@ -17,11 +17,10 @@ import {
   Award,
   User
 } from 'lucide-react';
-import { LessonPlan } from '../types/lessonPlan';
-import { SaasNavPage } from '../components/Sidebar';
+import { LessonPlan, SaasNavPage } from '../types/lessonPlan';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { FEATURE_FLAGS } from '../config/features';
+import { FEATURE_FLAGS } from '../config/firebase';
 
 interface DashboardViewProps {
   lessonPlans: LessonPlan[];

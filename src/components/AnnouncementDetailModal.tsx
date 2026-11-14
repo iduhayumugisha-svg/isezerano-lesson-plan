@@ -10,7 +10,7 @@ import {
   LogIn, 
   ExternalLink 
 } from 'lucide-react';
-import { PushAnnouncement } from '../types/announcement';
+import { PushAnnouncement } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
 
 interface AnnouncementDetailModalProps {

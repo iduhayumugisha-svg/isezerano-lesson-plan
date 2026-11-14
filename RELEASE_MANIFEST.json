@@ -1,0 +1,496 @@
+{
+  "project": "ISEZERANO ONLINE",
+  "website": "https://isezerano.online",
+  "firebaseProjectId": "isezerano-news",
+  "releaseId": "isezerano-8eb3594b1079",
+  "generatedAt": "2026-11-14T09:35:16.571Z",
+  "packagedFileCountIncludingManifest": 98,
+  "sourceFileCount": 97,
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 724,
+      "sha256": "11acbacc7e1c0f1ba72f4e36281f9977ed75042e20faced7a2a59a52470055bb"
+    },
+    {
+      "path": ".firebaserc",
+      "bytes": 56,
+      "sha256": "6b5742c152646e483fdcf8898841f1797492bd7a9aefe9a64c076480f16719c9"
+    },
+    {
+      "path": ".github/workflows/firebase-hosting-merge.yml",
+      "bytes": 901,
+      "sha256": "4b812a6d96374f055cb6fe223262e893e6e2ed6c6ccc0ca510395240e59e4fb8"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 73,
+      "sha256": "db691f14fcf678985362a42c6aedb581e42cd6bb99962ce1b44aea460fb2a4df"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4221,
+      "sha256": "4820e35e4aebea75ecade9009e82b6dbeabd3fb35725b0ec85d04fa2bafe79c5"
+    },
+    {
+      "path": "bun.lock",
+      "bytes": 210502,
+      "sha256": "e0d28cc770ac2b012682f1a4280b7b99771e3fe0d727b6b2eca5df6dfaaf866d"
+    },
+    {
+      "path": "firebase.json",
+      "bytes": 696,
+      "sha256": "a4a4ed3be63ae8ee2307f08fbedd74700bc69ad922f063bbef2fc27f94186adf"
+    },
+    {
+      "path": "firestore.rules",
+      "bytes": 21523,
+      "sha256": "f6d3efdde1000f1280851d545014055f248e3ba005d61ff75d17b0767de5d357"
+    },
+    {
+      "path": "index.html",
+      "bytes": 4143,
+      "sha256": "5caf92401f00f8fbe93bc452bfb76013130441c7a369d5da1f75bb8d10b77b54"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 301,
+      "sha256": "6ed433d7c604bddb101fb9ba217263e3c0a8a3c073f1b131f37e9046e7769777"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 226495,
+      "sha256": "7af896bcedbc1456bdcdce30cccfe5b10babf8ef2be1745b9d743cf020b92a5e"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1219,
+      "sha256": "c10a65d3ef793b68974aa5b4b9755de1aec49b65b831f9c033a85277a3c99425"
+    },
+    {
+      "path": "public/assets/aistudio/Class_Reports_N1_Term_1_62cf6792.pdf",
+      "bytes": 895924,
+      "sha256": "62cf6792822ce83f8ba242840cb79017c70ab9d2d523e793ad19a38da73d302a"
+    },
+    {
+      "path": "public/firebase-messaging-sw.js",
+      "bytes": 4839,
+      "sha256": "a8734e026f407a68b881558e6caea1629e9c68c082dd58c14fe92b3707bda018"
+    },
+    {
+      "path": "scripts/prerenderBlogMeta.ts",
+      "bytes": 9355,
+      "sha256": "9aed06e88d1bebb66b2786fa2be95d07e7ecef5590e0a597c3627431c29c35a2"
+    },
+    {
+      "path": "scripts/setup-admin.js",
+      "bytes": 2038,
+      "sha256": "6974e7234a5d8e6ffb208fb2328eef01207ecb81eec0a88f1d9a0d178a4af479"
+    },
+    {
+      "path": "server.ts",
+      "bytes": 7389,
+      "sha256": "daf22a1fe0e8d8a2f5a236bc88c3f0468ef3e301a74a20135bfe543f233099fd"
+    },
+    {
+      "path": "server/ogMeta.ts",
+      "bytes": 35981,
+      "sha256": "ce85a7fe3ebe7357786a8f5a53b22100f8a77044082f39d20dbf7ed12749f31e"
+    },
+    {
+      "path": "src/App.tsx",
+      "bytes": 28585,
+      "sha256": "bdfdc4531a770984cc520fdcfe17cc43b91ffd6ec88a3d8baadf327b3c5fabae"
+    },
+    {
+      "path": "src/components/AdSlot.tsx",
+      "bytes": 5267,
+      "sha256": "b6e9fee5be3dfa5d174f213c4dba3b1337fd1eb44ff711a567f76d514221da39"
+    },
+    {
+      "path": "src/components/AdminBlogManager.tsx",
+      "bytes": 83802,
+      "sha256": "ff40b9a9bb4ab0e7c4473807b3d2254dbb4ddef73fa16fbac9643c18ee670ec9"
+    },
+    {
+      "path": "src/components/AdminNotificationManager.tsx",
+      "bytes": 27928,
+      "sha256": "d800a558255c96c5ee6ba7a13e445f8d32ff70fcfc1cfd0d3a6a3b75d89ee604"
+    },
+    {
+      "path": "src/components/AdminSchoolDirectoryPanel.tsx",
+      "bytes": 16890,
+      "sha256": "9f9b081ae4f8e633c29335d877d3d0592ff43398790d62d273551ef2029960b5"
+    },
+    {
+      "path": "src/components/AdminWhatsAppSettings.tsx",
+      "bytes": 33675,
+      "sha256": "0e6cae9ffcce0f2b90618999826cbd32f0e9e919b94e4f7943971bf6738e1ce4"
+    },
+    {
+      "path": "src/components/AdsManager.tsx",
+      "bytes": 15724,
+      "sha256": "49307fb43fae8186a3ec7027c9a01bf14c40f603d375272bb474c3d1c04ad087"
+    },
+    {
+      "path": "src/components/AnnouncementDetailModal.tsx",
+      "bytes": 6682,
+      "sha256": "14f902cc0fbcfffd4f93d11302a1b2d8285bcf47381be5a50e8b1ba96c444c76"
+    },
+    {
+      "path": "src/components/ArticleCommentsSection.tsx",
+      "bytes": 10799,
+      "sha256": "07573ef20163628da5982551c95f4817e3ef3c590e4dd000ede6b19313eb8eb5"
+    },
+    {
+      "path": "src/components/ArticleShareButton.tsx",
+      "bytes": 9369,
+      "sha256": "31031af348c4b344de5ba6ce0e6a6b1ed3017bcf301b5fc7edcd55055ab031f1"
+    },
+    {
+      "path": "src/components/ArticleThumbnailImage.tsx",
+      "bytes": 1265,
+      "sha256": "2fac6403d713ff653a68fb26110760d648270cf6e8a0d746bbc1387ddcaa2513"
+    },
+    {
+      "path": "src/components/AuthModal.tsx",
+      "bytes": 16387,
+      "sha256": "bb86a90aa4058c739b40a6fa8dfe9c67230f2705f7a8cad277597c8235538dc1"
+    },
+    {
+      "path": "src/components/HeroSlider.tsx",
+      "bytes": 10147,
+      "sha256": "d35a7abfb62a6abacd56292f32a1912e58850f2cc4db1964f99d092958e24ce7"
+    },
+    {
+      "path": "src/components/LessonPlanAuthGate.tsx",
+      "bytes": 6111,
+      "sha256": "1df1f74c2eca74857927d32f2ca2919a8b67c0004a2bd47db9b2cb8fe69d0175"
+    },
+    {
+      "path": "src/components/NotificationBell.tsx",
+      "bytes": 12458,
+      "sha256": "a2e403499888802f3cc42b5ae18c2ca6262c0b608090b03a2ea7405214b121a7"
+    },
+    {
+      "path": "src/components/NurseryReportCardDocument.tsx",
+      "bytes": 29672,
+      "sha256": "039b520155d1ad972f23d246dd12f8f9d32751a3345de4aca74108f930d382f8"
+    },
+    {
+      "path": "src/components/NurserySubjectsAndColorsManager.tsx",
+      "bytes": 87770,
+      "sha256": "bba5c14fed5814eec134644262607dbac4b440dcc025ffa874cf92ec13b89ab1"
+    },
+    {
+      "path": "src/components/PrintLessonPlanModal.tsx",
+      "bytes": 43688,
+      "sha256": "bd84ffda407703a2b0b7e4ac07a2f3d4f67d373edbc3145c1e5ed1c295a73787"
+    },
+    {
+      "path": "src/components/RichTextEditor.tsx",
+      "bytes": 63905,
+      "sha256": "5d8ae42f4acb275a37103c77e43ec91975eb55c0e94f18dccbda39e3340c83f2"
+    },
+    {
+      "path": "src/components/SchoolDirectoryAdminModal.tsx",
+      "bytes": 15084,
+      "sha256": "74eb8336e1bfda6f475b56dbc0d3e692b7056b26381238fd3299d1558dde783f"
+    },
+    {
+      "path": "src/components/SchoolDirectoryAutoFill.tsx",
+      "bytes": 7022,
+      "sha256": "9efb2059667bfab7ae1b4f991360b942ac6db1d19adae45ac9c223d3b040bbbf"
+    },
+    {
+      "path": "src/components/SchoolLocationSelector.tsx",
+      "bytes": 14240,
+      "sha256": "bd37c4990bc9a45d7680c31774aebf8f2aa278d2a2cfc26351348f059d2686e6"
+    },
+    {
+      "path": "src/components/SliderManager.tsx",
+      "bytes": 34965,
+      "sha256": "d85ad2110a7691b1eed7985219bb950566508bce6dbcf3c46e8ea9619aec38c2"
+    },
+    {
+      "path": "src/components/TopAnnouncementStripManager.tsx",
+      "bytes": 38894,
+      "sha256": "d7b51e0ad81a6a68862cbe3e0b080c19ad8045fefff4c8b5bcb814ec8775fc7a"
+    },
+    {
+      "path": "src/components/WebsiteDesignManager.tsx",
+      "bytes": 168953,
+      "sha256": "e71833a7f213622af34b9d3e64ca9884b1fe5654f81413fd09d63730842d605d"
+    },
+    {
+      "path": "src/components/WebsiteFooter.tsx",
+      "bytes": 11410,
+      "sha256": "a22a91574990d85d3ca23ba7fa19136eee7fbe628771b35094ad6b71ee296e58"
+    },
+    {
+      "path": "src/components/WebsiteHeader.tsx",
+      "bytes": 20923,
+      "sha256": "bb68897d3bf1da05cfca231b7ead5e52a250c8d328c71721b8d3abc073cddd15"
+    },
+    {
+      "path": "src/components/WebsitePagesManager.tsx",
+      "bytes": 41617,
+      "sha256": "960e4755d375e57f1e14c70c34e20bed285ff151dd31faa48499aceb5ba0a0ef"
+    },
+    {
+      "path": "src/components/WhatsAppFloatingButton.tsx",
+      "bytes": 5819,
+      "sha256": "66aa8241790ff2328ff12c6a90e5b1baf0057c6bda8c73e5e9895c39cfd096ec"
+    },
+    {
+      "path": "src/config/firebase.ts",
+      "bytes": 424,
+      "sha256": "24be1ddefd2ef580b276b04c99e43dcd7de4fb999ed2f10f41d9285e8d4c72c8"
+    },
+    {
+      "path": "src/context/AuthContext.tsx",
+      "bytes": 3786,
+      "sha256": "3679f6603da5b9bacdafb3fc449f803184098cbed912e62559607ee2deda2be3"
+    },
+    {
+      "path": "src/context/WebsiteDesignContext.tsx",
+      "bytes": 32380,
+      "sha256": "23c2c6ce5a9f140a33b0984e6e41718614094b4535c1c3858c12f1fa323154c8"
+    },
+    {
+      "path": "src/data/rwandaAdministrativeData.ts",
+      "bytes": 39472,
+      "sha256": "a9ca414c25f57efdaa01cfd221589ccd80545869d14508a14745800b3557e5a2"
+    },
+    {
+      "path": "src/data/rwandaEducationData.ts",
+      "bytes": 8104,
+      "sha256": "be806cd7c3e854cb66f89bf4bd222ae0aa8b5862fcffcb1da8ae03533b73e400"
+    },
+    {
+      "path": "src/i18n/LanguageContext.tsx",
+      "bytes": 1394,
+      "sha256": "d3267a2e39fcea21e602aa95e8a1ccd8024a5360962deeceaa2fe5f9d35706aa"
+    },
+    {
+      "path": "src/i18n/translations.ts",
+      "bytes": 44220,
+      "sha256": "657b66de3cc38e1b00c5c1578485c52ae218fa7e6780d75059d10bd55c8c2c16"
+    },
+    {
+      "path": "src/index.css",
+      "bytes": 5703,
+      "sha256": "7698d0538300b057a32a7a7bbc366348c7d465ba640f4797686178b44a0d2c20"
+    },
+    {
+      "path": "src/main.tsx",
+      "bytes": 159,
+      "sha256": "30d02ee59cb6576973dea4368093b2dcae692a40668f288fdbc66a114873fcd3"
+    },
+    {
+      "path": "src/services/analyticsService.ts",
+      "bytes": 11163,
+      "sha256": "0619a7acfb9379c05089f7710207d3379b5571f80e91a63ef79d8edcdc1dedb7"
+    },
+    {
+      "path": "src/services/authService.ts",
+      "bytes": 19951,
+      "sha256": "9dc38499d58649ec7cda08ef2456e144c90c6bc050b5a7f3466373251bdb6296"
+    },
+    {
+      "path": "src/services/blogService.ts",
+      "bytes": 41222,
+      "sha256": "123be10e27800955b62137414bc393dc36e2f2d82ba03f2b30de00c3c11e7abf"
+    },
+    {
+      "path": "src/services/cbcGeneratorService.ts",
+      "bytes": 13813,
+      "sha256": "764bb879433d0e0d1dc21edbb3e8ad7b41a6d91d6fa91dfbeba96d57a6346e28"
+    },
+    {
+      "path": "src/services/commentService.ts",
+      "bytes": 15515,
+      "sha256": "9450a294856a3419716c94ad2fa0e13759b1a2bc1c8f585c927c6763cf9dc745"
+    },
+    {
+      "path": "src/services/fcmService.ts",
+      "bytes": 23261,
+      "sha256": "2383d2e3144f48350a87fe84dce572a82ad6dde57e034062e09f821908aad8f1"
+    },
+    {
+      "path": "src/services/lessonPlanExportService.ts",
+      "bytes": 20238,
+      "sha256": "a0072e974870354dbf8d476dc238a6db972a343a636419b1720ca5278be1e989"
+    },
+    {
+      "path": "src/services/nurseryStorageService.ts",
+      "bytes": 19947,
+      "sha256": "658cfc52a427ab6dcc3647fb386c639f34c0e973bb80270531079d597c2d4c02"
+    },
+    {
+      "path": "src/services/schoolDirectoryService.ts",
+      "bytes": 5236,
+      "sha256": "ac195e48a79aec0dbf0bad10b3175b76f4d58c0e5c635addb55b19dae78cc9ab"
+    },
+    {
+      "path": "src/services/seoService.ts",
+      "bytes": 8213,
+      "sha256": "7a1f6e7cad31c15c0082740aa4cf1208ff386f66be40fbe4e84742ef6f318ace"
+    },
+    {
+      "path": "src/services/siteSettingsService.ts",
+      "bytes": 19149,
+      "sha256": "6d418f1bff919318a1360052a8128299bad3d56698d1c94a4f847775fe827751"
+    },
+    {
+      "path": "src/services/storageService.ts",
+      "bytes": 19799,
+      "sha256": "87c321e3d08904e7b41e4aed7c0373a642bce247130abea4a6adae4616127437"
+    },
+    {
+      "path": "src/services/teacherProfileService.ts",
+      "bytes": 10019,
+      "sha256": "5c470e3a37b54a494a958f7ece708e7e5fa16344e2a525d4992db35dfde27b7f"
+    },
+    {
+      "path": "src/services/websiteDesignService.ts",
+      "bytes": 32502,
+      "sha256": "893ccb08f17b60e499b19fef59d00bc6993263190787e3bb53402d69863b6c3f"
+    },
+    {
+      "path": "src/services/websitePagesService.ts",
+      "bytes": 17971,
+      "sha256": "6a9e2d774c129f26ac38e7a7930bacb83f56a2b46463f62b9c60d735947d28d9"
+    },
+    {
+      "path": "src/types/blog.ts",
+      "bytes": 3447,
+      "sha256": "ecb08763273f208974f6bfce601670977a2d1b1da301127e79692bfdb4e2227e"
+    },
+    {
+      "path": "src/types/lessonPlan.ts",
+      "bytes": 4391,
+      "sha256": "b1b0df45d10765b514e11f754d918456588f4cd0e495761b947b49f280108e78"
+    },
+    {
+      "path": "src/types/nurseryReport.ts",
+      "bytes": 8308,
+      "sha256": "32d116a47117a141205c4a2d58c12a68fcbe54b8653ed79cb1b446db4a98beaa"
+    },
+    {
+      "path": "src/types/platform.ts",
+      "bytes": 4640,
+      "sha256": "fe1c166b9d6394d1fd383064d3bc6f9994ce769a5c3ff6364100dac74d7a8ff4"
+    },
+    {
+      "path": "src/types/websiteDesign.ts",
+      "bytes": 18024,
+      "sha256": "1611c7b8ef9dad68ac32c97189f546acce35c8c8dded9672ae46ad1d31c3bec8"
+    },
+    {
+      "path": "src/utils/dateUtils.ts",
+      "bytes": 3006,
+      "sha256": "37ef6fb20117690c331943bf4344663f31ee8dde29b2a70c77881dcc53e97390"
+    },
+    {
+      "path": "src/utils/thumbnailUtils.ts",
+      "bytes": 12595,
+      "sha256": "a9d219fa9f226d1ff4bca7ce286e95322dcf596ac1ffd290a8da9402295b2cda"
+    },
+    {
+      "path": "src/utils/whatsappUtils.ts",
+      "bytes": 6400,
+      "sha256": "b83cf8ee6af51e2f104b177407dd869ca632628f752fa8a18f7d567995de717a"
+    },
+    {
+      "path": "src/views/AdminDashboardView.tsx",
+      "bytes": 74364,
+      "sha256": "26d563d1cda3bca09c57ecd482885113f97df8118a657b44ef24714c7596dcfa"
+    },
+    {
+      "path": "src/views/AdminPortalGateway.tsx",
+      "bytes": 20921,
+      "sha256": "7a73af796b281558376789dcd45574d6bbb4669b3637b464eb2903ba3687c6b8"
+    },
+    {
+      "path": "src/views/BlogView.tsx",
+      "bytes": 26334,
+      "sha256": "ecf942bef6aafc659a11af9652271885931bd285b60a872c17785dc0cb131561"
+    },
+    {
+      "path": "src/views/ContactView.tsx",
+      "bytes": 19385,
+      "sha256": "6ca00648d11d6a70e7cb0a8572e8d00078b71bca591f0dd82e55da0dbc6580d1"
+    },
+    {
+      "path": "src/views/CreateLessonPlanView.tsx",
+      "bytes": 44029,
+      "sha256": "e95eeb8165e97901eaa5590ba843a124bb8c0029d983d47efbf1fe1c43c9037a"
+    },
+    {
+      "path": "src/views/DashboardView.tsx",
+      "bytes": 25210,
+      "sha256": "9d6b6baeb46ec112760727eede4cb77059ccc9b3a9c371a13c23fe0100223bf7"
+    },
+    {
+      "path": "src/views/HomeView.tsx",
+      "bytes": 40645,
+      "sha256": "f1aefd0127832d90f8ef8179b88ee843e7961ccff5f438675059dc79817793f1"
+    },
+    {
+      "path": "src/views/InfoPagesView.tsx",
+      "bytes": 14121,
+      "sha256": "0867e8a609c63cb4a596798d8517b2dbca7c5d2470fc2ec1d27e7095f4df906c"
+    },
+    {
+      "path": "src/views/NurseryReportsView.tsx",
+      "bytes": 96730,
+      "sha256": "45dedbc214115f4d5222c25d4a097383f99b41c7728e1f5523b8f27ddcfffe5e"
+    },
+    {
+      "path": "src/views/SavedLessonPlansView.tsx",
+      "bytes": 16646,
+      "sha256": "7fd52575d0ad53e1eb3aa2639155ec60bb0c7ee8a7596bdb88571bcb8c7f5f88"
+    },
+    {
+      "path": "src/views/SettingsView.tsx",
+      "bytes": 28314,
+      "sha256": "e70772dc0ea899e854d670a613888db778146d3cd166c70df733ecc46cff1ee3"
+    },
+    {
+      "path": "src/views/TeacherProfileView.tsx",
+      "bytes": 31116,
+      "sha256": "007d3a893a264c65641ff408916aa32740bc00ad84aceb6482455b766708d1e5"
+    },
+    {
+      "path": "storage.rules",
+      "bytes": 1992,
+      "sha256": "f0519c3b6643f55073dd4ae98ff6d3192226c4a5bd140ebc59cc0b0cbb1d9447"
+    },
+    {
+      "path": "test/blogAndMediaSuite.test.ts",
+      "bytes": 63350,
+      "sha256": "84b1b74bc5378a671bb2736408b0d08eba1500c356e653950ef8a49e3a065241"
+    },
+    {
+      "path": "test/platformModulesSuite.test.ts",
+      "bytes": 19161,
+      "sha256": "952bba33a70e43f96e293d2367c46aad26c80dabd6a8e2acae17d822093991af"
+    },
+    {
+      "path": "test/securityRulesAudit.test.ts",
+      "bytes": 51937,
+      "sha256": "4f31bf6e35364aae15f11e53ecfd7dd64408c932e9136c1cf5e0a2f3a3b2170b"
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 546,
+      "sha256": "440e191013bbe680f18664affa544b87605df1eefa54eaa032b27fcab646c923"
+    },
+    {
+      "path": "vite.config.ts",
+      "bytes": 8287,
+      "sha256": "ed4b5402448c08a82d38967ddc0e0416ab8ac7a70c0a62251b6fa8fc15e6b0fe"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import {
   SectionCustomContent,
   NavigationMenuItem,
   WebsiteDesignVersion,
+  WhatsAppContactSettings,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
@@ -18,8 +19,10 @@ import {
   DEFAULT_WEBSITE_BRANDING,
   DEFAULT_ANNOUNCEMENT_STRIP,
   DEFAULT_HOMEPAGE_SECTIONS,
-  DEFAULT_NAVIGATION_MENUS
+  DEFAULT_NAVIGATION_MENUS,
+  DEFAULT_WHATSAPP_CONTACT
 } from '../types/websiteDesign';
+import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
 import { 
   getWebsiteDesignSettings, 
   saveWebsiteDesignSettings, 
@@ -74,8 +77,15 @@ interface WebsiteDesignContextType {
   toggleNavigationMenuItem: (id: string, enabled?: boolean) => void;
   resetNavigationMenusToDefault: () => void;
 
+  // WhatsApp Contact Settings Actions
+  updateDraftWhatsAppContact: (whatsapp: Partial<WhatsAppContactSettings>) => void;
+  saveWhatsAppContactSettings: (
+    nextSettings: WhatsAppContactSettings,
+    summaryNote?: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
   // Reset & Undo Actions
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'all') => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
   resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
@@ -91,6 +101,7 @@ interface WebsiteDesignContextType {
   announcements: AnnouncementStripSettings;
   homepageSections: HomepageSectionConfig[];
   navigationMenus: NavigationMenuItem[];
+  whatsappContact: WhatsAppContactSettings;
   versionHistory: WebsiteDesignVersion[];
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
@@ -618,7 +629,74 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'all') => {
+  const updateDraftWhatsAppContact = (partialWhatsApp: Partial<WhatsAppContactSettings>) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      whatsappContact: {
+        ...(prev.whatsappContact || DEFAULT_WHATSAPP_CONTACT),
+        ...partialWhatsApp
+      }
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const saveWhatsAppContactSettings = async (
+    nextSettings: WhatsAppContactSettings,
+    summaryNote?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const phoneCheck = validateAndNormalizeWhatsAppNumber(nextSettings.phoneNumber);
+    if (!phoneCheck.valid) {
+      return { success: false, error: phoneCheck.error || 'Invalid WhatsApp phone number.' };
+    }
+
+    const normalized = normalizeWhatsAppSettings({
+      ...nextSettings,
+      phoneNumber: phoneCheck.normalized
+    });
+
+    setIsPublishing(true);
+    try {
+      const adminUid = user?.uid || user?.email || 'admin';
+      const updatedTimestamp = new Date().toISOString();
+      const nextPublished: WebsiteDesignSettings = {
+        ...publishedSettings,
+        whatsappContact: normalized,
+        updatedAt: updatedTimestamp,
+        updatedBy: adminUid
+      };
+
+      const result = await saveWebsiteDesignSettings(
+        nextPublished,
+        adminUid,
+        summaryNote || `Updated WhatsApp contact settings (${normalized.phoneNumber})`
+      );
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to save WhatsApp settings to Cloud Firestore.'
+        };
+      }
+
+      setPublishedSettings(nextPublished);
+      setDraftSettings(prev => ({
+        ...prev,
+        whatsappContact: normalized,
+        updatedAt: updatedTimestamp,
+        updatedBy: adminUid
+      }));
+
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save error';
+      return { success: false, error: message };
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -641,6 +719,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (section === 'menus' || section === 'all') {
         updated.navigationMenus = [...DEFAULT_NAVIGATION_MENUS];
+      }
+      if (section === 'whatsapp' || section === 'all') {
+        updated.whatsappContact = { ...DEFAULT_WHATSAPP_CONTACT };
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -827,6 +908,8 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         reorderNavigationMenuItem,
         toggleNavigationMenuItem,
         resetNavigationMenusToDefault,
+        updateDraftWhatsAppContact,
+        saveWhatsAppContactSettings,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
@@ -841,6 +924,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,
         homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: activeSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS,
+        whatsappContact: normalizeWhatsAppSettings(publishedSettings.whatsappContact),
         versionHistory: activeSettings.versionHistory || [],
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,

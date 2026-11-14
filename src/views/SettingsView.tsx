@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FirebaseConnectionConfig, 
-  SchoolInfo 
+  SchoolInfo,
+  SaasNavPage
 } from '../types/lessonPlan';
 import { 
   getFirebaseConfig, 
@@ -37,11 +38,10 @@ import {
   Lock,
   Save
 } from 'lucide-react';
-import { SaasNavPage } from '../components/Sidebar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
-import { FEATURE_FLAGS } from '../config/features';
+import { FEATURE_FLAGS } from '../config/firebase';
 
 interface SettingsViewProps {
   totalPlansCount: number;

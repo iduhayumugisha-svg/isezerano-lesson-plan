@@ -2,6 +2,7 @@ import { BlogPost } from '../types/blog';
 import { WebsiteBrandingSettings } from '../types/websiteDesign';
 import {
   computeImageDataUriHash8,
+  extractPlainTextExcerpt,
   getSingleArticleThumbnailUrl,
   isValidHttpsImageUrl
 } from '../utils/thumbnailUtils';
@@ -147,8 +148,13 @@ export const updateBlogPostSeo = (
     ? `${BASE_URL}/og-blog/${encodeURIComponent(
         `${rawSlug}-${computeImageDataUriHash8(thumb)}.${dataUriExt}`
       )}`
+    : thumb.startsWith('/') && !thumb.startsWith('//') && !/\.svg(?:$|\?)/i.test(thumb)
+    ? `${BASE_URL}${thumb}`
     : '';
-  const description = post.excerpt || post.title;
+  const description =
+    (post.excerpt || '').trim() ||
+    extractPlainTextExcerpt(post.content || '', 160) ||
+    post.title;
 
   document.title = pageTitle;
   setMetaTag('name', 'description', description);

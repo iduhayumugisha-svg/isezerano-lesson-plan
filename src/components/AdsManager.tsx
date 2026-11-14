@@ -15,8 +15,8 @@ import {
   ExternalLink,
   Layers
 } from 'lucide-react';
-import { AdsSettings, DEFAULT_ADS_SETTINGS, AdSlotConfig } from '../types/ads';
-import { getAdsSettings, saveAdsSettings } from '../services/adsService';
+import { AdsSettings, DEFAULT_ADS_SETTINGS, AdSlotConfig } from '../types/platform';
+import { getAdsSettings, saveAdsSettings } from '../services/siteSettingsService';
 import { useAuth } from '../context/AuthContext';
 
 export const AdsManager: React.FC = () => {

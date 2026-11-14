@@ -29,7 +29,7 @@ import {
   RWANDA_CBC_SUBJECTS,
   RWANDA_EDUCATION_CLASSES,
   TEACHING_QUALIFICATIONS
-} from '../types/teacherProfile';
+} from '../types/platform';
 import {
   getTeacherProfile,
   saveTeacherProfile

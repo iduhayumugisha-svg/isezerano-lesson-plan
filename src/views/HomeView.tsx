@@ -5,7 +5,7 @@ import {
   ArrowRight,
   ArrowLeft,
   Calendar,
-  BookOpen,
+  MessageSquare,
   User,
   FileText,
   Loader2,
@@ -13,12 +13,14 @@ import {
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
-import { subscribeToBlogPosts } from '../services/blogService';
 import {
+  subscribeToBlogPosts,
   subscribeToBlogCategories,
   mergeCategoriesForDisplay
-} from '../services/blogCategoryService';
+} from '../services/blogService';
+import { subscribeToApprovedCommentCounts } from '../services/commentService';
 import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
+import { ArticleShareButton } from '../components/ArticleShareButton';
 import { formatPublicationDate } from '../utils/dateUtils';
 import {
   getSingleArticleThumbnailUrl,
@@ -30,10 +32,12 @@ interface HomeViewProps {
   savedPlansCount?: number;
   posts?: BlogPost[];
   categories?: BlogCategory[];
+  commentCounts?: Record<string, number>;
   isNewsLoading?: boolean;
   selectedCategory?: string;
   onSelectCategory?: (category: string) => void;
   onOpenArticle?: (post: BlogPost) => void;
+  onOpenArticleComments?: (post: BlogPost) => void;
 }
 
 const getPostTimestamp = (post: BlogPost): number =>
@@ -43,10 +47,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onNavigate,
   posts: externalPosts,
   categories: externalCategories,
+  commentCounts: externalCommentCounts,
   isNewsLoading: externalLoading,
   selectedCategory: externalSelectedCategory,
   onSelectCategory,
-  onOpenArticle
+  onOpenArticle,
+  onOpenArticleComments
 }) => {
   const { colors, branding } = useWebsiteDesign();
 
@@ -56,15 +62,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
     DEFAULT_AI_BLOG_CATEGORIES
   );
   const [internalCategoriesInitialized, setInternalCategoriesInitialized] = useState(false);
+  const [internalCommentCounts, setInternalCommentCounts] = useState<Record<string, number>>({});
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalSelectedCategory, setInternalSelectedCategory] = useState('All Categories');
   const [searchQuery, setSearchQuery] = useState('');
 
   const usesExternalPosts = externalPosts !== undefined;
   const usesExternalCategories = externalCategories !== undefined;
+  const usesExternalCommentCounts = externalCommentCounts !== undefined;
 
   useEffect(() => {
-    if (usesExternalPosts && usesExternalCategories) return;
+    if (usesExternalPosts && usesExternalCategories && usesExternalCommentCounts) return;
 
     const unsubPosts = usesExternalPosts
       ? () => {}
@@ -80,11 +88,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
           setInternalCategoriesInitialized(initialized);
         });
 
+    const unsubComments = usesExternalCommentCounts
+      ? () => {}
+      : subscribeToApprovedCommentCounts((counts) => {
+          setInternalCommentCounts(counts);
+        });
+
     return () => {
       unsubPosts();
       unsubCats();
+      unsubComments();
     };
-  }, [usesExternalPosts, usesExternalCategories]);
+  }, [usesExternalPosts, usesExternalCategories, usesExternalCommentCounts]);
 
   const resolvedPosts = useMemo(() => {
     const list = usesExternalPosts ? externalPosts || [] : internalPosts;
@@ -106,6 +121,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
     resolvedPosts
   ]);
 
+  const resolvedCommentCounts = usesExternalCommentCounts
+    ? externalCommentCounts || {}
+    : internalCommentCounts;
+
   const isLoading = externalLoading !== undefined ? externalLoading : internalLoading;
   const activeCategory =
     externalSelectedCategory !== undefined ? externalSelectedCategory : internalSelectedCategory;
@@ -120,6 +139,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   const handleOpenPost = (post: BlogPost) => {
+    if (onOpenArticle) {
+      onOpenArticle(post);
+      return;
+    }
+    onNavigate('blog');
+  };
+
+  const handleOpenComments = (e: React.MouseEvent, post: BlogPost) => {
+    e.stopPropagation();
+    if (onOpenArticleComments) {
+      onOpenArticleComments(post);
+      return;
+    }
     if (onOpenArticle) {
       onOpenArticle(post);
       return;
@@ -356,14 +388,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           {topStory.excerpt || extractPlainTextExcerpt(topStory.content, 220)}
                         </p>
                       </div>
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                         <span className="font-medium text-slate-700">
                           {topStory.author?.name || 'ISEZERANO Newsroom'}
                         </span>
-                        <span className="inline-flex items-center space-x-1 font-bold text-teal-800">
-                          <span>Read story</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenComments(e, topStory)}
+                            className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Comments"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span className="tabular-nums">{resolvedCommentCounts[topStory.id] || 0}</span>
+                          </button>
+                          <ArticleShareButton post={topStory} variant="compact" />
+                          <span className="inline-flex items-center space-x-1 font-bold text-teal-800 ml-1">
+                            <span>Read</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </article>
@@ -408,13 +452,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
                             </p>
                           </div>
-                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
                             <span className="font-medium text-slate-700 truncate">
                               {post.author?.name || 'ISEZERANO Newsroom'}
                             </span>
-                            <span className="tabular-nums shrink-0">
-                              {post.readTimeMinutes || 1} min read
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenComments(e, post)}
+                                className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                                title="View or write comments"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                              </button>
+                              <ArticleShareButton post={post} variant="compact" />
+                            </div>
                           </div>
                         </div>
                       </article>
@@ -468,11 +521,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </>
                         ) : null;
                       })()}
-                      <span className="text-slate-300">·</span>
-                      <span className="inline-flex items-center space-x-1 tabular-nums">
-                        <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{leadPost.readTimeMinutes || 1} min read</span>
-                      </span>
                     </div>
 
                     <h1
@@ -487,15 +535,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     </p>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                     <span className="inline-flex items-center space-x-1.5 font-medium text-slate-700">
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       <span>{leadPost.author?.name || 'ISEZERANO Newsroom'}</span>
                     </span>
-                    <span className="inline-flex items-center space-x-1.5 font-bold text-teal-800 group-hover:translate-x-0.5 transition-transform">
-                      <span>Read full story</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenComments(e, leadPost)}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Comments"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Comment</span>
+                        <span className="tabular-nums font-semibold">
+                          ({resolvedCommentCounts[leadPost.id] || 0})
+                        </span>
+                      </button>
+                      <ArticleShareButton post={leadPost} variant="compact" />
+                      <span className="inline-flex items-center space-x-1 font-bold text-teal-800 group-hover:translate-x-0.5 transition-transform ml-1">
+                        <span>Read story</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
                   </div>
                 </div>
               </article>
@@ -549,10 +612,25 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               <h3 className="font-serif text-sm sm:text-base font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
                                 {post.title}
                               </h3>
-                              <p className="text-xs text-slate-500 line-clamp-1">
-                                {post.author?.name || 'ISEZERANO Newsroom'} ·{' '}
-                                {post.readTimeMinutes || 1} min read
-                              </p>
+                              <div className="flex items-center justify-between gap-2 pt-0.5 text-xs text-slate-500">
+                                <span className="truncate">
+                                  {post.author?.name || 'ISEZERANO Newsroom'}
+                                </span>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenComments(e, post)}
+                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    title="Comments"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    <span className="tabular-nums">
+                                      {resolvedCommentCounts[post.id] || 0}
+                                    </span>
+                                  </button>
+                                  <ArticleShareButton post={post} variant="compact" />
+                                </div>
+                              </div>
                             </div>
                           </article>
                         );
@@ -615,13 +693,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             {post.excerpt || extractPlainTextExcerpt(post.content, 145)}
                           </p>
                         </div>
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
                           <span className="font-medium text-slate-700 truncate">
                             {post.author?.name || 'ISEZERANO Newsroom'}
                           </span>
-                          <span className="tabular-nums shrink-0">
-                            {post.readTimeMinutes || 1} min read
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenComments(e, post)}
+                              className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="View or write comments"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                            </button>
+                            <ArticleShareButton post={post} variant="compact" />
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -695,13 +782,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             {post.excerpt || extractPlainTextExcerpt(post.content, 130)}
                           </p>
                         </div>
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
                           <span className="font-medium text-slate-700 truncate">
                             {post.author?.name || 'ISEZERANO Newsroom'}
                           </span>
-                          <span className="tabular-nums shrink-0">
-                            {post.readTimeMinutes || 1} min read
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenComments(e, post)}
+                              className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="View or write comments"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                            </button>
+                            <ArticleShareButton post={post} variant="compact" />
+                          </div>
                         </div>
                       </div>
                     </article>

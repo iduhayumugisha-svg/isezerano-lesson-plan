@@ -3,7 +3,7 @@ import {
   CBC_GENERIC_COMPETENCES, 
   CBC_CROSS_CUTTING_ISSUES, 
   CBC_RECOMMENDED_STAGES 
-} from '../data/rwandaCbcData';
+} from '../data/rwandaEducationData';
 
 interface GenerateOptions {
   subject: string;

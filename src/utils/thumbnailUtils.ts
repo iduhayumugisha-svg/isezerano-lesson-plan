@@ -1,7 +1,20 @@
 import { BlogPost } from '../types/blog';
 
 /**
- * Checks whether a string is a valid, persistent image source (HTTPS URL or embedded Data URI).
+ * Extracts a string URL/Data URI from either a direct string or an object map like `{ url }`.
+ */
+export function extractRawImageFieldValue(field: unknown): string {
+  if (typeof field === 'string') return field.trim();
+  if (field && typeof field === 'object') {
+    const obj = field as Record<string, unknown>;
+    const candidate = obj.url ?? obj.src ?? obj.secure_url ?? obj.href;
+    if (typeof candidate === 'string') return candidate.trim();
+  }
+  return '';
+}
+
+/**
+ * Checks whether a string is a valid, persistent image source (HTTPS URL, relative asset path, or embedded Data URI).
  * Strictly rejects temporary blob: URLs, file: URLs, and localhost URLs.
  */
 export function isValidPersistentImageSrc(src: string | null | undefined): boolean {
@@ -22,6 +35,10 @@ export function isValidPersistentImageSrc(src: string | null | undefined): boole
 
   if (trimmed.startsWith('https://')) {
     return trimmed.length >= 12;
+  }
+
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && trimmed.length > 1) {
+    return true;
   }
 
   return false;
@@ -50,7 +67,7 @@ export function isValidHttpsImageUrl(url: string | null | undefined): boolean {
 
 /**
  * Normalizes a persistent image source without substituting any external stock URLs.
- * Rejects temporary blob: URLs and preserves Data URIs and HTTPS Storage URLs verbatim.
+ * Rejects temporary blob: URLs and preserves Data URIs, relative paths, and HTTPS Storage URLs cleanly.
  */
 export function normalizeThumbnailSrc(rawSrc: string | null | undefined): string {
   if (!rawSrc || typeof rawSrc !== 'string') return '';
@@ -65,12 +82,21 @@ export function normalizeThumbnailSrc(rawSrc: string | null | undefined): string
     return isValidPersistentImageSrc(trimmed) ? trimmed : '';
   }
 
+  if (trimmed.startsWith('//')) {
+    const upgraded = `https:${trimmed}`;
+    return isValidPersistentImageSrc(upgraded) ? upgraded : '';
+  }
+
   if (trimmed.startsWith('http://')) {
     const upgraded = 'https://' + trimmed.slice(7);
     return isValidPersistentImageSrc(upgraded) ? upgraded : '';
   }
 
   if (trimmed.startsWith('https://')) {
+    return isValidPersistentImageSrc(trimmed) ? trimmed : '';
+  }
+
+  if (trimmed.startsWith('/')) {
     return isValidPersistentImageSrc(trimmed) ? trimmed : '';
   }
 
@@ -82,6 +108,8 @@ function getHtmlAttr(tag: string, attrName: string): string {
   if (doubleMatch) return doubleMatch[1];
   const singleMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*'([^']*)'`, 'i'));
   if (singleMatch) return singleMatch[1];
+  const unquotedMatch = tag.match(new RegExp(`\\b${attrName}\\s*=\\s*([^\\s"'=<>` + '`]+)', 'i'));
+  if (unquotedMatch) return unquotedMatch[1];
   return '';
 }
 
@@ -100,7 +128,6 @@ function parseExplicitPixelDim(raw: string): number | null {
  */
 export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): boolean {
   const lowerSrc = normalizedSrc.toLowerCase();
-  // SVG vector icons / inline SVG logos are not raster article thumbnails
   if (lowerSrc.startsWith('data:image/svg+xml') || /\.svg(?:$|\?)/i.test(lowerSrc)) {
     return true;
   }
@@ -130,7 +157,6 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
     }
   }
 
-  // Only inspect class/id/url heuristics when NOT explicitly inserted as a blog content figure
   const isBlogEditorImage = /\bdata-(?:size-preset|width|height|align)\s*=/i.test(tag);
   if (!isBlogEditorImage) {
     const classAttr = getHtmlAttr(tag, 'class');
@@ -144,6 +170,26 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
   }
 
   return false;
+}
+
+function getImgCandidateSrc(tag: string): string {
+  const candidates = [
+    getHtmlAttr(tag, 'src'),
+    getHtmlAttr(tag, 'data-src'),
+    getHtmlAttr(tag, 'data-lazy-src'),
+    getHtmlAttr(tag, 'data-original')
+  ];
+  for (const cand of candidates) {
+    const norm = normalizeThumbnailSrc(cand);
+    if (norm) return norm;
+  }
+  const srcset = getHtmlAttr(tag, 'srcset');
+  if (srcset) {
+    const firstUrl = srcset.split(',')[0]?.trim().split(/\s+/)[0] || '';
+    const norm = normalizeThumbnailSrc(firstUrl);
+    if (norm) return norm;
+  }
+  return '';
 }
 
 /**
@@ -160,15 +206,12 @@ export function extractFirstImageMetaFromContent(
 
   while ((tagMatch = imgTagRegex.exec(htmlContent)) !== null) {
     const tag = tagMatch[0];
-    const srcVal = getHtmlAttr(tag, 'src');
-    if (srcVal) {
-      const normalized = normalizeThumbnailSrc(srcVal);
-      if (normalized && !isDecorativeOrIconImgTag(tag, normalized)) {
-        return {
-          src: normalized,
-          alt: getHtmlAttr(tag, 'alt').trim()
-        };
-      }
+    const normalized = getImgCandidateSrc(tag);
+    if (normalized && !isDecorativeOrIconImgTag(tag, normalized)) {
+      return {
+        src: normalized,
+        alt: getHtmlAttr(tag, 'alt').trim()
+      };
     }
   }
 
@@ -183,24 +226,44 @@ export function extractFirstImageFromContent(htmlContent: string | null | undefi
 }
 
 /**
+ * Resolves the first explicit cover field on a BlogPost across canonical and legacy field names
+ * (`thumbnailUrl`, `featuredImage`, `coverImage`, `imageUrl`, `bannerImage`, `image`).
+ */
+export function resolveExplicitPostCoverField(
+  post?: Partial<BlogPost> | null
+): string {
+  if (!post) return '';
+  const fields: unknown[] = [
+    post.thumbnailUrl,
+    post.featuredImage,
+    post.coverImage,
+    post.imageUrl,
+    post.bannerImage,
+    post.image
+  ];
+  for (const f of fields) {
+    const raw = extractRawImageFieldValue(f);
+    const norm = normalizeThumbnailSrc(raw);
+    if (norm) return norm;
+  }
+  return '';
+}
+
+/**
  * Single authoritative thumbnail resolution rule shared across Blog cards, Preview,
  * client SEO tags, SSR HTML tags, and static `dist/og-blog/` builds:
  *
- * 1. If `post.thumbnailIsCustomOverride === true` and `post.thumbnailUrl` is valid -> custom cover.
+ * 1. If `post.thumbnailIsCustomOverride === true` and an explicit cover field is valid -> custom cover.
  * 2. Otherwise, always use the first actual article image inside `post.content`
- *    (so an older/stale `thumbnailUrl` never overrides the article's real first image).
- * 3. Otherwise, fall back to valid `post.thumbnailUrl` (standalone cover when body has no images).
+ *    (so an older/stale cover field never overrides the article's real first image).
+ * 3. Otherwise, fall back to valid `thumbnailUrl` / `featuredImage` / `coverImage` / `image`.
  * 4. Otherwise -> '' (Blog listing shows default placeholder; social meta omits article image metadata).
  */
 export function getSingleArticleThumbnailUrl(
-  post?: {
-    thumbnailUrl?: string | null;
-    content?: string | null;
-    thumbnailIsCustomOverride?: boolean | null;
-  } | null
+  post?: Partial<BlogPost> | null
 ): string {
   if (!post) return '';
-  const explicit = normalizeThumbnailSrc(post.thumbnailUrl);
+  const explicit = resolveExplicitPostCoverField(post);
   if (post.thumbnailIsCustomOverride === true && explicit) {
     return explicit;
   }
@@ -280,12 +343,12 @@ export function extractPlainTextExcerpt(htmlContent: string, maxLength: number =
 
 /**
  * Automatically derives and preserves the article's thumbnail before saving:
- * - If `thumbnailIsCustomOverride` is true and `thumbnailUrl` is valid, keep the custom cover.
+ * - If `thumbnailIsCustomOverride` is true and an explicit cover exists, keep the custom cover.
  * - Otherwise, automatically use the first actual image inside `post.content` if one exists,
- *   or keep `thumbnailUrl` if provided, or cleanly persist '' (for default placeholder).
+ *   or keep the fallback cover field if provided, or cleanly persist '' (for default placeholder).
  */
 export function sanitizePostThumbnail(post: BlogPost): BlogPost {
-  const explicitThumb = normalizeThumbnailSrc(post.thumbnailUrl);
+  const explicitThumb = resolveExplicitPostCoverField(post);
   const firstContentImg = extractFirstImageMetaFromContent(post.content);
 
   let resolvedThumb = '';

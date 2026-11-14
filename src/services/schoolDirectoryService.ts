@@ -4,7 +4,7 @@
  * add, edit, and manage school directory records with Cloud Firestore sync & local persistence.
  */
 import { doc, getDocs, setDoc, deleteDoc, collection } from 'firebase/firestore';
-import { SchoolDirectoryEntry, VERIFIED_RWANDA_SCHOOLS } from '../data/rwandaSchoolsData';
+import { SchoolDirectoryEntry, VERIFIED_RWANDA_SCHOOLS } from '../data/rwandaEducationData';
 import { initFirestoreIfConfigured } from './storageService';
 
 const STORAGE_CUSTOM_SCHOOLS = 'rw_school_directory_custom_v1';

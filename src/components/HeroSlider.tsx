@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ArrowRight, LayoutDashboard, PlusCircle, BookOpen, Sparkles } from 'lucide-react';
-import { HeroSlide } from '../types/slider';
-import { getPublishedSlides, subscribeToPublishedSlides, DEFAULT_HERO_SLIDES } from '../services/sliderService';
+import { HeroSlide } from '../types/platform';
+import { getPublishedSlides, subscribeToPublishedSlides, DEFAULT_HERO_SLIDES } from '../services/siteSettingsService';
 import { WebsitePage } from './WebsiteHeader';
 
 interface HeroSliderProps {

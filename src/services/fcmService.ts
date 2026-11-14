@@ -20,7 +20,7 @@ import {
   limit
 } from 'firebase/firestore';
 import { getFirebaseApp, initFirestoreIfConfigured, getFirebaseAuth } from './storageService';
-import { PushAnnouncement, DeviceTokenInfo, FcmConfigSettings } from '../types/announcement';
+import { PushAnnouncement, DeviceTokenInfo, FcmConfigSettings } from '../types/platform';
 
 const LOCAL_STORAGE_FCM_TOKEN_KEY = 'isezerano_fcm_device_token';
 const LOCAL_STORAGE_FCM_READ_NOTICES = 'isezerano_read_notices_cache';

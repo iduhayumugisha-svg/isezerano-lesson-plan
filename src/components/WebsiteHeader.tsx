@@ -15,12 +15,12 @@ import { Language } from '../i18n/translations';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { NotificationBell } from './NotificationBell';
-import { PushAnnouncement } from '../types/announcement';
+import { PushAnnouncement } from '../types/platform';
 import { BlogCategory, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
 import {
   subscribeToBlogCategories,
   mergeCategoriesForDisplay
-} from '../services/blogCategoryService';
+} from '../services/blogService';
 
 export type WebsitePage =
   | 'home'

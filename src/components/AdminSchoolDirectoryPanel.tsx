@@ -18,7 +18,7 @@ import {
   Phone,
   User
 } from 'lucide-react';
-import { SchoolDirectoryEntry } from '../data/rwandaSchoolsData';
+import { SchoolDirectoryEntry } from '../data/rwandaEducationData';
 import { 
   getAllSchools, 
   saveSchoolEntry, 

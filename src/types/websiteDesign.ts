@@ -1,3 +1,21 @@
+import {
+  WhatsAppButtonPosition,
+  WhatsAppButtonSize,
+  WhatsAppButtonShape,
+  WhatsAppButtonDisplayMode,
+  WhatsAppContactSettings,
+  DEFAULT_WHATSAPP_CONTACT
+} from '../utils/whatsappUtils';
+
+export type {
+  WhatsAppButtonPosition,
+  WhatsAppButtonSize,
+  WhatsAppButtonShape,
+  WhatsAppButtonDisplayMode,
+  WhatsAppContactSettings
+};
+export { DEFAULT_WHATSAPP_CONTACT };
+
 export interface WebsiteColorSettings {
   // Header and Navigation Bar
   headerBg: string;           // Header background color
@@ -215,6 +233,7 @@ export interface WebsiteDesignSettings {
   announcements?: AnnouncementStripSettings;
   homepageSections?: HomepageSectionConfig[];
   navigationMenus?: NavigationMenuItem[];
+  whatsappContact?: WhatsAppContactSettings;
   versionHistory?: WebsiteDesignVersion[];
   updatedAt: string;
   updatedBy: string;
@@ -511,6 +530,7 @@ export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   announcements: DEFAULT_ANNOUNCEMENT_STRIP,
   homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
   navigationMenus: DEFAULT_NAVIGATION_MENUS,
+  whatsappContact: DEFAULT_WHATSAPP_CONTACT,
   versionHistory: [],
   updatedAt: '2026-01-01T00:00:00.000Z',
   updatedBy: 'system'

@@ -19,6 +19,11 @@ export interface BlogPost {
   thumbnailAlt?: string;
   thumbnailStorageMode?: BlogImageStorageMode;
   thumbnailIsCustomOverride?: boolean; // True only if admin explicitly picked a cover separate from article images
+  featuredImage?: string | { url?: string | null } | null;
+  coverImage?: string | { url?: string | null } | null;
+  image?: string | { url?: string | null } | null;
+  imageUrl?: string | null;
+  bannerImage?: string | null;
   category: string;
   author: BlogAuthor;
   publishedAt: string; // ISO 8601 date string (empty when draft never published)

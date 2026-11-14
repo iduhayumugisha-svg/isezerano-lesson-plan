@@ -25,10 +25,8 @@ import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
 import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { BlogView } from './views/BlogView';
-import { AboutView } from './views/AboutView';
+import { AboutView, PrivacyPolicyView, TermsConditionsView } from './views/InfoPagesView';
 import { ContactView } from './views/ContactView';
-import { PrivacyPolicyView } from './views/PrivacyPolicyView';
-import { TermsConditionsView } from './views/TermsConditionsView';
 import { AdSlot } from './components/AdSlot';
 
 // Central Protected Education Application Views
@@ -46,22 +44,23 @@ import { LessonPlanAuthGate } from './components/LessonPlanAuthGate';
 import { AdminDashboardView } from './views/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { AnnouncementDetailModal } from './components/AnnouncementDetailModal';
-import { PushAnnouncement } from './types/announcement';
+import { PushAnnouncement } from './types/platform';
 import { getAnnouncementById } from './services/fcmService';
 
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
-import { FEATURE_FLAGS } from './config/features';
+import { FEATURE_FLAGS } from './config/firebase';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
 import { updateWebsiteBrandingSeo } from './services/seoService';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from './types/blog';
-import { subscribeToBlogPosts } from './services/blogService';
 import {
+  subscribeToBlogPosts,
   subscribeToBlogCategories,
   mergeCategoriesForDisplay
-} from './services/blogCategoryService';
+} from './services/blogService';
+import { subscribeToApprovedCommentCounts } from './services/commentService';
 
 export type AppPage = WebsitePage | 'admin';
 
@@ -140,6 +139,8 @@ function AppContent() {
   const [newsCategoriesInitialized, setNewsCategoriesInitialized] = useState<boolean>(false);
   const [isNewsLoading, setIsNewsLoading] = useState<boolean>(true);
   const [selectedNewsCategory, setSelectedNewsCategory] = useState<string>('All Categories');
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [focusArticleComments, setFocusArticleComments] = useState<boolean>(false);
 
   // Education state: Saved CBC Lesson Plans
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -175,9 +176,14 @@ function AppContent() {
       setNewsCategoriesInitialized(initialized);
     });
 
+    const unsubComments = subscribeToApprovedCommentCounts((counts) => {
+      setCommentCounts(counts);
+    });
+
     return () => {
       unsubPosts();
       unsubCategories();
+      unsubComments();
     };
   }, []);
 
@@ -361,10 +367,13 @@ function AppContent() {
     }
   };
 
-  const handleOpenNewspaperArticle = (post: BlogPost) => {
+  const handleOpenNewspaperArticle = (post: BlogPost, openComments = false) => {
+    setFocusArticleComments(openComments);
     setActiveBlogSlug(post.slug);
     setCurrentPage('blog');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!openComments) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     if (typeof window !== 'undefined') {
       try {
         const targetPath = `/blog/${encodeURIComponent(post.slug)}`;
@@ -414,10 +423,12 @@ function AppContent() {
             savedPlansCount={lessonPlans.length}
             posts={publishedPosts}
             categories={newsCategories}
+            commentCounts={commentCounts}
             isNewsLoading={isNewsLoading}
             selectedCategory={selectedNewsCategory}
             onSelectCategory={setSelectedNewsCategory}
-            onOpenArticle={handleOpenNewspaperArticle}
+            onOpenArticle={(post) => handleOpenNewspaperArticle(post, false)}
+            onOpenArticleComments={(post) => handleOpenNewspaperArticle(post, true)}
           />
         )}
 
@@ -429,6 +440,9 @@ function AppContent() {
             selectedCategory={selectedNewsCategory}
             onSelectCategory={setSelectedNewsCategory}
             onReturnHome={() => handleNavigate('home')}
+            commentCounts={commentCounts}
+            focusComments={focusArticleComments}
+            onConsumeFocusComments={() => setFocusArticleComments(false)}
           />
         )}
 
@@ -713,7 +727,7 @@ function AppContent() {
         onClose={() => setIsAuthModalOpen(false)}
       />
 
-      {/* 6. Persistent WhatsApp Floating Action Button (Rwanda: 0782971258 / https://wa.me/250782971258) */}
+      {/* 6. Dynamic Configurable WhatsApp Contact Button */}
       <WhatsAppFloatingButton currentPage={currentPage} />
 
       {/* 7. Push Announcement Detail & Auth Gate Modal (FCM) */}
