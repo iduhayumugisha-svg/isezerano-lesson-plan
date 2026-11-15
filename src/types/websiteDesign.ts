@@ -65,6 +65,11 @@ export interface WebsiteTypographySettings {
   fontFamily: string;         // Body font family (e.g., Times New Roman, Georgia, Inter, etc.)
   headingFontFamily: string;  // Headings font family
 
+  // Website Name Dedicated Typography Controls
+  websiteNameFontFamily: string; // Dedicated font family for public Website Name display
+  websiteNameSize: number;       // Base desktop font size in px for Website Name (scales responsively on mobile)
+  websiteNameColor: string;      // Dedicated font color hex for Website Name
+
   // Font Sizes (in px, with strict responsive scaling)
   websiteTitleSize: number;   // Header platform title (16px - 32px)
   websiteSubtitleSize: number;// Header subtitle (10px - 18px)
@@ -299,6 +304,9 @@ export const DEFAULT_WEBSITE_COLORS: WebsiteColorSettings = {
 export const DEFAULT_WEBSITE_TYPOGRAPHY: WebsiteTypographySettings = {
   fontFamily: "'Times New Roman', Times, Baskerville, Georgia, serif",
   headingFontFamily: "'Times New Roman', Times, Baskerville, Georgia, serif",
+  websiteNameFontFamily: "'Times New Roman', Times, Baskerville, Georgia, serif",
+  websiteNameSize: 26,
+  websiteNameColor: '#0f172a',
   websiteTitleSize: 20,
   websiteSubtitleSize: 12,
   navMenuSize: 14,

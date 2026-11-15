@@ -2,7 +2,8 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { EditablePageId, WebsitePageContent } from '../types/platform';
 import { initFirestoreIfConfigured } from './storageService';
 
-const PAGE_STORAGE_PREFIX = 'isezerano_page_v1_';
+const PAGE_STORAGE_PREFIX = 'isezerano_page_v2_';
+const LEGACY_PAGE_STORAGE_PREFIX = 'isezerano_page_v1_';
 
 export const DEFAULT_PAGES_CONTENT: Record<EditablePageId, WebsitePageContent> = {
   home: {
@@ -51,168 +52,194 @@ export const DEFAULT_PAGES_CONTENT: Record<EditablePageId, WebsitePageContent> =
   about: {
     id: 'about',
     pageName: 'About Us',
-    badge: 'About ISEZERANO ONLINE',
-    title: 'Supporting Rwandan Educators in Standardized Lesson Planning',
-    subtitle: 'ISEZERANO ONLINE is a specialized educational web platform built to help primary and secondary school teachers in Rwanda prepare thorough, pedagogical, and officially aligned Competence-Based Curriculum (CBC) lesson plans.',
+    badge: '',
+    title: '',
+    subtitle: '',
+    bodyHtml: '',
     highlightBox: {
-      enabled: true,
-      badge: 'Built by a Rwandan Teacher',
-      title: 'From the Classroom of GS GITUMBA to Rwandan Educators Everywhere',
-      content: 'This platform was developed by a Rwandan teacher serving at GS GITUMBA, a school located in Buyoga Sector, Rulindo District, Northern Province, Rwanda. It was created to support fellow educators in preparing well-structured lesson plans aligned with Rwanda’s Competence-Based Curriculum (CBC) and to make lesson preparation easier, more organized, and more efficient.'
+      enabled: false,
+      badge: '',
+      title: '',
+      content: ''
     },
-    sections: [
-      {
-        id: 'purpose',
-        title: 'Our Purpose & Rwandan CBC Alignment',
-        content: "In Rwanda, the introduction of the Competence-Based Curriculum (CBC) by the Ministry of Education (MINEDUC) and the Rwanda Basic Education Board (REB) represented a transformative shift from rote memorization toward learner-centered competence development.\n\nHowever, drafting detailed 8-column lesson plans by hand or in generic text editors requires extensive repetitive formatting each week. Teachers must balance instructional objectives across Bloom's Taxonomy, integrate generic competences and cross-cutting issues, and detail concrete teacher activities and learner tasks.\n\nISEZERANO ONLINE eliminates this mechanical friction by providing a structured, guided digital workspace tailored specifically to the official Rwandan CBC format.",
-        bullets: [
-          'Full adherence to the official MINEDUC / REB 8-column lesson planning layout',
-          "Guided Bloom's Taxonomy operational verb selection across Cognitive, Affective, and Psychomotor domains",
-          'Integration of 24 official Rwandan CBC Cross-Cutting Issues and Generic Competences',
-          'Instant selectable A4 PDF generation formatted for official inspection and school administrative archiving'
-        ]
-      },
-      {
-        id: 'principles',
-        title: 'Guiding Principles',
-        content: 'Built with genuine respect for teachers’ time, privacy, and pedagogical autonomy, the platform follows three strict commitments:',
-        bullets: [
-          'REB Standards Fidelity: We adhere strictly to national guidelines without modifying the mandated 8-column structure or introducing non-standard requirements.',
-          'Zero-Barrier Access: Teachers can start drafting immediately. There is no forced sign-in wall, mandatory personal data collection, or paywall to use the core lesson plan generator.',
-          'Offline-First Local Storage: All drafted lesson plans remain safely preserved on the educator’s device even during network disconnections.'
-        ]
-      }
-    ],
-    isPublished: true,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: 'system'
+    sections: [],
+    isPublished: false,
+    lastUpdated: '',
+    updatedBy: ''
   },
 
   contact: {
     id: 'contact',
     pageName: 'Contact Us',
-    badge: 'Teacher Inquiries & Support',
-    title: 'Contact Us & Share Feedback',
-    subtitle: 'Have questions about lesson planning, suggestions for curriculum templates, or school collaboration inquiries? Reach out directly to our team at GS GITUMBA.',
+    badge: '',
+    title: '',
+    subtitle: '',
+    bodyHtml: '',
+    showContactForm: false,
     highlightBox: {
-      enabled: true,
-      badge: 'Direct School Engagement',
-      title: 'Serving the Education Community in Northern Province and Beyond',
-      content: 'We welcome inquiries from fellow teachers, headteachers, Director of Studies (DOS), and sector education officers seeking guidance or proposing enhancements to our CBC lesson planning suite.'
+      enabled: false,
+      badge: '',
+      title: '',
+      content: ''
     },
     contactData: {
-      schoolName: 'GS GITUMBA',
-      address: 'Buyoga Sector, Rulindo District, Northern Province, Rwanda',
-      email: 'twizerefelix90@gmail.com',
-      phone: '0782971258',
-      whatsapp: '250782971258',
-      workingHours: 'Monday – Friday: 7:30 AM – 5:00 PM CAT'
+      schoolName: '',
+      address: '',
+      email: '',
+      phone: '',
+      whatsapp: '',
+      workingHours: ''
     },
-    sections: [
-      {
-        id: 'faq',
-        title: 'Frequently Asked Questions & Support',
-        content: 'Find rapid answers to the most common questions regarding the platform, offline capabilities, and lesson plan printing:',
-        bullets: [
-          'Do I need an account to prepare lesson plans? No. The generator is immediately accessible to all educators without any registration or login requirement.',
-          'Can I print directly to A4 paper? Yes. The system includes an official A4 portrait layout with standard borders compatible with all standard school printers.',
-          'Is my drafted data safe if my internet disconnects? Yes. Every modification is auto-saved locally in your browser storage so your work is never lost.'
-        ]
-      }
-    ],
-    isPublished: true,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: 'system'
+    sections: [],
+    isPublished: false,
+    lastUpdated: '',
+    updatedBy: ''
   },
 
   privacy: {
     id: 'privacy',
     pageName: 'Privacy Policy',
-    badge: 'Transparency & Data Security',
-    title: 'Privacy Policy & Data Protection',
-    subtitle: 'Transparent documentation on how educator data, lesson records, and local storage are handled at ISEZERANO ONLINE.',
+    badge: '',
+    title: '',
+    subtitle: '',
+    bodyHtml: '',
     highlightBox: {
-      enabled: true,
-      badge: 'Notice for School Leaders & Educators',
-      title: 'Our Strict Privacy Commitment',
-      content: 'ISEZERANO ONLINE does not sell, monetize, or track sensitive personal student information. Our tools are built strictly for pedagogical preparation and teacher productivity.'
+      enabled: false,
+      badge: '',
+      title: '',
+      content: ''
     },
-    sections: [
-      {
-        id: 'storage',
-        title: '1. Where and How Your Data Is Stored',
-        content: 'The application operates with an offline-first local architecture complemented by optional cloud database synchronization:\n\n• Local Browser Storage: Lesson plans and school preferences are automatically saved in your personal device’s browser storage (localStorage). This ensures immediate access, zero-login drafting, and full functionality even without an internet connection.\n\n• Cloud Database (Firebase Firestore): When cloud synchronization is active, records are securely transmitted and isolated with strict owner-based Firestore security rules.',
-        bullets: [
-          'Lesson plans drafted locally never leave your device unless explicitly saved to cloud sync.',
-          'No telemetry or tracking scripts harvest your lesson text for advertising.',
-          'You retain full rights to delete or export your pedagogical data at any time.'
-        ]
-      },
-      {
-        id: 'auth',
-        title: '2. Administrator & Teacher Authentication',
-        content: 'When administrator access or optional teacher accounts are configured, authentication tokens and emails are processed securely via Firebase Authentication with industry-standard TLS encryption. Administrator access is restricted exclusively to the authorized platform administrator.',
-        bullets: [
-          'Strict Firebase Security Rules enforce role-based access control.',
-          'Public visitors cannot access internal administrative dashboards or confidential user lists.',
-          'Passwords and credentials are never stored in plain text or client-side JavaScript.'
-        ]
-      }
-    ],
-    isPublished: true,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: 'system'
+    sections: [],
+    isPublished: false,
+    lastUpdated: '',
+    updatedBy: ''
   },
 
   terms: {
     id: 'terms',
     pageName: 'Terms & Conditions',
-    badge: 'Educational Service Agreement',
-    title: 'Terms and Conditions of Service',
-    subtitle: 'Terms governing the access and pedagogical use of the ISEZERANO ONLINE – GS GITUMBA platform.',
+    badge: '',
+    title: '',
+    subtitle: '',
+    bodyHtml: '',
     highlightBox: {
-      enabled: true,
-      badge: 'Pedagogical Guidelines',
-      title: 'Commitment to High-Quality Rwandan Education',
-      content: 'By accessing ISEZERANO ONLINE, educators agree to use the platform in support of high-quality, standardized teaching aligned with the Rwanda Basic Education Board (REB) Competence-Based Curriculum.'
+      enabled: false,
+      badge: '',
+      title: '',
+      content: ''
     },
-    sections: [
-      {
-        id: 'acceptance',
-        title: '1. Acceptance of Terms',
-        content: 'By accessing or using ISEZERANO ONLINE – GS GITUMBA, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions. These terms apply to all teachers, school leaders, visitors, and administrators.',
-        bullets: [
-          'You agree to use the platform in compliance with all relevant Rwandan educational guidelines and laws.',
-          'You acknowledge that lesson plans generated are intended for instructional preparation and classroom execution.',
-          'If you disagree with any portion of these terms, you may cease using the platform at any time.'
-        ]
-      },
-      {
-        id: 'license',
-        title: '2. Permitted Use & Teacher Intellectual Property',
-        content: 'Educators maintain full ownership and pedagogical copyright over the lesson plans, instructional objectives, notes, and teaching materials they author on the platform.',
-        bullets: [
-          'You are granted a free, non-exclusive license to generate, export, print, and distribute your lesson plans.',
-          'You may freely utilize exported PDFs for inspection by Headteachers, Deans of Studies (DOS), and Education Inspectors.',
-          'You may not reverse-engineer, attempt unauthorized security breaches, or disrupt platform infrastructure.'
-        ]
-      },
-      {
-        id: 'guarantee',
-        title: '3. Zero-Cost Access Guarantee for Teachers',
-        content: 'The core CBC 8-column lesson planning tools and public educational information of ISEZERANO ONLINE are provided free of charge to Rwandan educators as a community initiative from GS GITUMBA.'
-      }
-    ],
-    isPublished: true,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: 'system'
+    sections: [],
+    isPublished: false,
+    lastUpdated: '',
+    updatedBy: ''
   }
 };
+
+export function sanitizeStaticPageHtml(html: string): string {
+  if (!html || typeof html !== 'string') return '';
+  let clean = html
+    .replace(/<\s*(script|iframe|object|embed|style|link|meta|base|form)[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|iframe|object|embed|style|link|meta|base|form)[^>]*\/?\s*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript|data:text\/html)[^"']*\2/gi, '$1="#"');
+  return clean.trim();
+}
+
+export function isRichHtmlEmpty(html?: string): boolean {
+  if (!html || typeof html !== 'string') return true;
+  if (/<img\b/i.test(html)) return false;
+  const textOnly = html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u200B/g, '')
+    .trim();
+  return textOnly.length === 0;
+}
+
+export function hasStaticPageContent(content: WebsitePageContent): boolean {
+  const hasHighlight =
+    Boolean(content.highlightBox?.enabled) &&
+    Boolean(
+      content.highlightBox?.badge?.trim() ||
+        content.highlightBox?.title?.trim() ||
+        content.highlightBox?.content?.trim()
+    );
+  const hasSections = (content.sections || []).some(
+    (s) =>
+      Boolean(s.title?.trim()) ||
+      Boolean(s.content?.trim()) ||
+      (Array.isArray(s.bullets) && s.bullets.some((b) => Boolean(b?.trim())))
+  );
+  const hasContactDetails =
+    content.id === 'contact' &&
+    Boolean(
+      content.showContactForm ||
+        content.contactData?.schoolName?.trim() ||
+        content.contactData?.address?.trim() ||
+        content.contactData?.phone?.trim() ||
+        content.contactData?.whatsapp?.trim() ||
+        content.contactData?.email?.trim() ||
+        content.contactData?.workingHours?.trim()
+    );
+
+  return (
+    Boolean(content.badge?.trim()) ||
+    Boolean(content.title?.trim()) ||
+    Boolean(content.subtitle?.trim()) ||
+    !isRichHtmlEmpty(content.bodyHtml) ||
+    hasHighlight ||
+    hasSections ||
+    hasContactDetails
+  );
+}
+
+function isLegacySystemStaticRecord(pageId: EditablePageId, remote: Partial<WebsitePageContent>): boolean {
+  if (pageId === 'home') return false;
+  if (remote.updatedBy === 'system') return true;
+  return false;
+}
+
+function normalizeLoadedPage(pageId: EditablePageId, remote: Partial<WebsitePageContent>): WebsitePageContent {
+  if (isLegacySystemStaticRecord(pageId, remote)) {
+    return { ...DEFAULT_PAGES_CONTENT[pageId] };
+  }
+  const merged: WebsitePageContent = {
+    ...DEFAULT_PAGES_CONTENT[pageId],
+    ...remote,
+    id: pageId,
+    bodyHtml: sanitizeStaticPageHtml(remote.bodyHtml || '')
+  };
+  return merged;
+}
+
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (val !== undefined) {
+        cleaned[key] = stripUndefinedDeep(val);
+      }
+    }
+    return cleaned as T;
+  }
+  return value;
+}
 
 /**
  * Fetch published content for a given page with localStorage cache and fallback to defaults
  */
 export const getPageContent = async (pageId: EditablePageId): Promise<WebsitePageContent> => {
+  try {
+    localStorage.removeItem(`${LEGACY_PAGE_STORAGE_PREFIX}${pageId}`);
+  } catch {
+    // ignore
+  }
+
   const db = initFirestoreIfConfigured();
   if (db) {
     try {
@@ -220,17 +247,13 @@ export const getPageContent = async (pageId: EditablePageId): Promise<WebsitePag
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const remote = snap.data() as WebsitePageContent;
-        const merged: WebsitePageContent = {
-          ...DEFAULT_PAGES_CONTENT[pageId],
-          ...remote,
-          id: pageId
-        };
+        const normalized = normalizeLoadedPage(pageId, remote);
         try {
-          localStorage.setItem(`${PAGE_STORAGE_PREFIX}${pageId}`, JSON.stringify(merged));
+          localStorage.setItem(`${PAGE_STORAGE_PREFIX}${pageId}`, JSON.stringify(normalized));
         } catch {
           // ignore cache error
         }
-        return merged;
+        return normalized;
       }
     } catch (err) {
       console.warn(`Could not fetch page "${pageId}" from Firestore, using cache:`, err);
@@ -241,12 +264,8 @@ export const getPageContent = async (pageId: EditablePageId): Promise<WebsitePag
   try {
     const cached = localStorage.getItem(`${PAGE_STORAGE_PREFIX}${pageId}`);
     if (cached) {
-      const parsed = JSON.parse(cached);
-      return {
-        ...DEFAULT_PAGES_CONTENT[pageId],
-        ...parsed,
-        id: pageId
-      };
+      const parsed = JSON.parse(cached) as Partial<WebsitePageContent>;
+      return normalizeLoadedPage(pageId, parsed);
     }
   } catch {
     // ignore
@@ -289,17 +308,13 @@ export const subscribeToPageContent = (
       (snap) => {
         if (snap.exists()) {
           const remote = snap.data() as WebsitePageContent;
-          const merged: WebsitePageContent = {
-            ...DEFAULT_PAGES_CONTENT[pageId],
-            ...remote,
-            id: pageId
-          };
+          const normalized = normalizeLoadedPage(pageId, remote);
           try {
-            localStorage.setItem(`${PAGE_STORAGE_PREFIX}${pageId}`, JSON.stringify(merged));
+            localStorage.setItem(`${PAGE_STORAGE_PREFIX}${pageId}`, JSON.stringify(normalized));
           } catch {
             // ignore
           }
-          onUpdate(merged);
+          onUpdate(normalized);
         }
       },
       (error) => {
@@ -321,12 +336,14 @@ export const savePageContent = async (
   adminUid: string,
   publish: boolean = true
 ): Promise<{ success: boolean; error?: string; isLocalOnly?: boolean; warning?: string }> => {
-  const updatedPage: WebsitePageContent = {
+  const cleanHtml = sanitizeStaticPageHtml(page.bodyHtml || '');
+  const updatedPage = stripUndefinedDeep<WebsitePageContent>({
     ...page,
+    bodyHtml: isRichHtmlEmpty(cleanHtml) ? '' : cleanHtml,
     isPublished: publish,
     lastUpdated: new Date().toISOString(),
     updatedBy: adminUid
-  };
+  });
 
   // Always update local storage first so user edits are NEVER lost
   try {
@@ -375,7 +392,7 @@ export const savePageContent = async (
 };
 
 /**
- * Restore a page to its original default content
+ * Reset a page to its default state (empty for static info pages, preset for homepage)
  */
 export const restorePageDefaults = async (
   pageId: EditablePageId,
@@ -386,5 +403,5 @@ export const restorePageDefaults = async (
     lastUpdated: new Date().toISOString(),
     updatedBy: adminUid
   };
-  return savePageContent(original, adminUid, true);
+  return savePageContent(original, adminUid, pageId === 'home');
 };

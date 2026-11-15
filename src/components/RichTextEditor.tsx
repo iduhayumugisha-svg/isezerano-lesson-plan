@@ -1146,7 +1146,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             onClick={handleEditorClick}
             onKeyUp={saveCurrentSelection}
             onMouseUp={saveCurrentSelection}
-            className="blog-rich-editor-surface p-5 sm:p-6 focus:outline-none text-slate-900 leading-relaxed text-base max-w-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3 [&_blockquote]:border-y [&_blockquote]:border-slate-200 [&_blockquote]:py-3 [&_blockquote]:px-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-4 [&_img]:cursor-pointer"
+            className="blog-rich-editor-surface p-5 sm:p-6 focus:outline-none text-slate-900 leading-relaxed text-base max-w-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3 [&_blockquote]:border-y [&_blockquote]:border-slate-200 [&_blockquote]:py-3 [&_blockquote]:px-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-4 [&_a]:text-teal-700 [&_a]:underline [&_img]:cursor-pointer"
             style={{ minHeight }}
             data-placeholder={placeholder}
           />

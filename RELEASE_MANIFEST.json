@@ -2,8 +2,8 @@
   "project": "ISEZERANO ONLINE",
   "website": "https://isezerano.online",
   "firebaseProjectId": "isezerano-news",
-  "releaseId": "isezerano-8eb3594b1079",
-  "generatedAt": "2026-11-14T09:35:16.571Z",
+  "releaseId": "isezerano-f7c84f50346d",
+  "generatedAt": "2026-11-15T10:33:06.224Z",
   "packagedFileCountIncludingManifest": 98,
   "sourceFileCount": 97,
   "files": [
@@ -18,19 +18,14 @@
       "sha256": "6b5742c152646e483fdcf8898841f1797492bd7a9aefe9a64c076480f16719c9"
     },
     {
-      "path": ".github/workflows/firebase-hosting-merge.yml",
-      "bytes": 901,
-      "sha256": "4b812a6d96374f055cb6fe223262e893e6e2ed6c6ccc0ca510395240e59e4fb8"
+      "path": ".github/workflows/main.yml",
+      "bytes": 1364,
+      "sha256": "d5658deced60731b15dbfe394cd018c44f515d3975e41800779d1cea1ec6f93e"
     },
     {
       "path": ".gitignore",
-      "bytes": 73,
-      "sha256": "db691f14fcf678985362a42c6aedb581e42cd6bb99962ce1b44aea460fb2a4df"
-    },
-    {
-      "path": "README.md",
-      "bytes": 4221,
-      "sha256": "4820e35e4aebea75ecade9009e82b6dbeabd3fb35725b0ec85d04fa2bafe79c5"
+      "bytes": 109,
+      "sha256": "1b2efe53255372848b70a6f30a3f92aa66bd6c1dd843102c82843aafbf34aa20"
     },
     {
       "path": "bun.lock",
@@ -39,8 +34,8 @@
     },
     {
       "path": "firebase.json",
-      "bytes": 696,
-      "sha256": "a4a4ed3be63ae8ee2307f08fbedd74700bc69ad922f063bbef2fc27f94186adf"
+      "bytes": 1692,
+      "sha256": "9180162992daf2194466cecd1bc883af8b69029bf68dd522d8a7c88924df4944"
     },
     {
       "path": "firestore.rules",
@@ -78,6 +73,11 @@
       "sha256": "a8734e026f407a68b881558e6caea1629e9c68c082dd58c14fe92b3707bda018"
     },
     {
+      "path": "README.md",
+      "bytes": 4221,
+      "sha256": "4820e35e4aebea75ecade9009e82b6dbeabd3fb35725b0ec85d04fa2bafe79c5"
+    },
+    {
       "path": "scripts/prerenderBlogMeta.ts",
       "bytes": 9355,
       "sha256": "9aed06e88d1bebb66b2786fa2be95d07e7ecef5590e0a597c3627431c29c35a2"
@@ -88,24 +88,19 @@
       "sha256": "6974e7234a5d8e6ffb208fb2328eef01207ecb81eec0a88f1d9a0d178a4af479"
     },
     {
-      "path": "server.ts",
-      "bytes": 7389,
-      "sha256": "daf22a1fe0e8d8a2f5a236bc88c3f0468ef3e301a74a20135bfe543f233099fd"
-    },
-    {
       "path": "server/ogMeta.ts",
       "bytes": 35981,
       "sha256": "ce85a7fe3ebe7357786a8f5a53b22100f8a77044082f39d20dbf7ed12749f31e"
     },
     {
+      "path": "server.ts",
+      "bytes": 7389,
+      "sha256": "daf22a1fe0e8d8a2f5a236bc88c3f0468ef3e301a74a20135bfe543f233099fd"
+    },
+    {
       "path": "src/App.tsx",
       "bytes": 28585,
       "sha256": "bdfdc4531a770984cc520fdcfe17cc43b91ffd6ec88a3d8baadf327b3c5fabae"
-    },
-    {
-      "path": "src/components/AdSlot.tsx",
-      "bytes": 5267,
-      "sha256": "b6e9fee5be3dfa5d174f213c4dba3b1337fd1eb44ff711a567f76d514221da39"
     },
     {
       "path": "src/components/AdminBlogManager.tsx",
@@ -126,6 +121,11 @@
       "path": "src/components/AdminWhatsAppSettings.tsx",
       "bytes": 33675,
       "sha256": "0e6cae9ffcce0f2b90618999826cbd32f0e9e919b94e4f7943971bf6738e1ce4"
+    },
+    {
+      "path": "src/components/AdSlot.tsx",
+      "bytes": 9744,
+      "sha256": "f7dd2e8154a3bbdba893bfaeaf8cb3a6f6586d84ad63324e0ba4cfa538074d3b"
     },
     {
       "path": "src/components/AdsManager.tsx",
@@ -189,8 +189,8 @@
     },
     {
       "path": "src/components/RichTextEditor.tsx",
-      "bytes": 63905,
-      "sha256": "5d8ae42f4acb275a37103c77e43ec91975eb55c0e94f18dccbda39e3340c83f2"
+      "bytes": 63941,
+      "sha256": "fcaab423c7257a81b05209b57fb2acabb9d6ce86a485a78964d996722bf6a45b"
     },
     {
       "path": "src/components/SchoolDirectoryAdminModal.tsx",
@@ -219,23 +219,23 @@
     },
     {
       "path": "src/components/WebsiteDesignManager.tsx",
-      "bytes": 168953,
-      "sha256": "e71833a7f213622af34b9d3e64ca9884b1fe5654f81413fd09d63730842d605d"
+      "bytes": 180009,
+      "sha256": "87dc69d520b48a919bf6c849d94b2502b664d357c2d1e26471f1ecca14887ba4"
     },
     {
       "path": "src/components/WebsiteFooter.tsx",
-      "bytes": 11410,
-      "sha256": "a22a91574990d85d3ca23ba7fa19136eee7fbe628771b35094ad6b71ee296e58"
+      "bytes": 11622,
+      "sha256": "81185e008743c71417b305b726137235807380d12eb113fd26082cbe93c61951"
     },
     {
       "path": "src/components/WebsiteHeader.tsx",
-      "bytes": 20923,
-      "sha256": "bb68897d3bf1da05cfca231b7ead5e52a250c8d328c71721b8d3abc073cddd15"
+      "bytes": 23045,
+      "sha256": "8f006b439d988101440d92f0b266cb0c74501a715f70c8f711aa28a540965fba"
     },
     {
       "path": "src/components/WebsitePagesManager.tsx",
-      "bytes": 41617,
-      "sha256": "960e4755d375e57f1e14c70c34e20bed285ff151dd31faa48499aceb5ba0a0ef"
+      "bytes": 50401,
+      "sha256": "301df02161a86093454515421ba0f35cf1330273fa1edc45f331ea914ea18cdc"
     },
     {
       "path": "src/components/WhatsAppFloatingButton.tsx",
@@ -279,8 +279,8 @@
     },
     {
       "path": "src/index.css",
-      "bytes": 5703,
-      "sha256": "7698d0538300b057a32a7a7bbc366348c7d465ba640f4797686178b44a0d2c20"
+      "bytes": 6233,
+      "sha256": "8261f2d6959ec67f26fb7c28c85cd40c52627ac3318c157e5278a1eb0b6e7e45"
     },
     {
       "path": "src/main.tsx",
@@ -354,13 +354,13 @@
     },
     {
       "path": "src/services/websiteDesignService.ts",
-      "bytes": 32502,
-      "sha256": "893ccb08f17b60e499b19fef59d00bc6993263190787e3bb53402d69863b6c3f"
+      "bytes": 33900,
+      "sha256": "44dea33999a934d8d4350b7d6ac23650392a3b7dce9e30464e2ae82c8a5e792c"
     },
     {
       "path": "src/services/websitePagesService.ts",
-      "bytes": 17971,
-      "sha256": "6a9e2d774c129f26ac38e7a7930bacb83f56a2b46463f62b9c60d735947d28d9"
+      "bytes": 12781,
+      "sha256": "cd121535b888dd998960d780e5345a8a1f027b082b7a3ccd815436871233c801"
     },
     {
       "path": "src/types/blog.ts",
@@ -379,13 +379,13 @@
     },
     {
       "path": "src/types/platform.ts",
-      "bytes": 4640,
-      "sha256": "fe1c166b9d6394d1fd383064d3bc6f9994ce769a5c3ff6364100dac74d7a8ff4"
+      "bytes": 4690,
+      "sha256": "f01006effa47256b133fbd05c7b256cd0a4b5242ebc8b3224ac138e124ce9cf4"
     },
     {
       "path": "src/types/websiteDesign.ts",
-      "bytes": 18024,
-      "sha256": "1611c7b8ef9dad68ac32c97189f546acce35c8c8dded9672ae46ad1d31c3bec8"
+      "bytes": 18491,
+      "sha256": "4c7157e73b2adf5bc372146bb47c8a6701337f0fc6db003fe6d271e60f8d10a7"
     },
     {
       "path": "src/utils/dateUtils.ts",
@@ -409,8 +409,8 @@
     },
     {
       "path": "src/views/AdminPortalGateway.tsx",
-      "bytes": 20921,
-      "sha256": "7a73af796b281558376789dcd45574d6bbb4669b3637b464eb2903ba3687c6b8"
+      "bytes": 21171,
+      "sha256": "af94307a0d5385e30657d8921cc718ac458b5f0dddd5d3120c4417febaec6342"
     },
     {
       "path": "src/views/BlogView.tsx",
@@ -419,8 +419,8 @@
     },
     {
       "path": "src/views/ContactView.tsx",
-      "bytes": 19385,
-      "sha256": "6ca00648d11d6a70e7cb0a8572e8d00078b71bca591f0dd82e55da0dbc6580d1"
+      "bytes": 17680,
+      "sha256": "ad8363e50992dddce41e677a6653a159875fbefc3208e23f230725c88b0d43dd"
     },
     {
       "path": "src/views/CreateLessonPlanView.tsx",
@@ -434,13 +434,13 @@
     },
     {
       "path": "src/views/HomeView.tsx",
-      "bytes": 40645,
-      "sha256": "f1aefd0127832d90f8ef8179b88ee843e7961ccff5f438675059dc79817793f1"
+      "bytes": 41233,
+      "sha256": "3b3cbf3098fbc21cd677ed58c7956263eae8112543ae74ceb2529ee730e98485"
     },
     {
       "path": "src/views/InfoPagesView.tsx",
-      "bytes": 14121,
-      "sha256": "0867e8a609c63cb4a596798d8517b2dbca7c5d2470fc2ec1d27e7095f4df906c"
+      "bytes": 15001,
+      "sha256": "2cbf9a8f9918185cafc5d7a611a95c97902cf91c843644d1e25215eec5d521ee"
     },
     {
       "path": "src/views/NurseryReportsView.tsx",
@@ -474,8 +474,8 @@
     },
     {
       "path": "test/platformModulesSuite.test.ts",
-      "bytes": 19161,
-      "sha256": "952bba33a70e43f96e293d2367c46aad26c80dabd6a8e2acae17d822093991af"
+      "bytes": 29388,
+      "sha256": "6c06559bc1b8c131833175382256382348e242b1dcda3ff1d28cd122ca14a679"
     },
     {
       "path": "test/securityRulesAudit.test.ts",

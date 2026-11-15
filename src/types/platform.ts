@@ -196,6 +196,8 @@ export interface WebsitePageContent {
   badge: string;
   title: string;
   subtitle: string;
+  bodyHtml?: string;
+  showContactForm?: boolean;
   highlightBox?: PageHighlightBox;
   sections: PageSection[];
   contactData?: ContactExtraData;

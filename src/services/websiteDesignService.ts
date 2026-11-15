@@ -15,7 +15,7 @@ import {
   NavigationMenuItem,
   WebsiteDesignVersion
 } from '../types/websiteDesign';
-import { normalizeWhatsAppSettings } from '../utils/whatsappUtils';
+import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -41,6 +41,33 @@ const stripUndefinedDeep = <T,>(value: T): T => {
     return out as T;
   }
   return value;
+};
+
+const mergeTypographyWithDefaults = (
+  rawTypography?: Partial<WebsiteDesignSettings['typography']>,
+  rawColors?: Partial<WebsiteDesignSettings['colors']>
+): WebsiteDesignSettings['typography'] => {
+  const merged = {
+    ...DEFAULT_WEBSITE_DESIGN.typography,
+    ...(rawTypography || {})
+  };
+  const fallbackColor = sanitizeHexColor(
+    rawColors?.headerText,
+    DEFAULT_WEBSITE_DESIGN.typography.websiteNameColor
+  );
+  const parsedSize = Number(rawTypography?.websiteNameSize);
+  return {
+    ...merged,
+    websiteNameFontFamily:
+      typeof rawTypography?.websiteNameFontFamily === 'string' && rawTypography.websiteNameFontFamily.trim()
+        ? rawTypography.websiteNameFontFamily.trim()
+        : DEFAULT_WEBSITE_DESIGN.typography.websiteNameFontFamily,
+    websiteNameSize:
+      Number.isFinite(parsedSize) && parsedSize >= 14 && parsedSize <= 48
+        ? Math.round(parsedSize)
+        : DEFAULT_WEBSITE_DESIGN.typography.websiteNameSize,
+    websiteNameColor: sanitizeHexColor(rawTypography?.websiteNameColor, fallbackColor)
+  };
 };
 
 const ensureBlogNavItem = (menus?: NavigationMenuItem[]): NavigationMenuItem[] => {
@@ -122,7 +149,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
       localData = {
         branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(parsed.branding || {}) },
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
-        typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(parsed.typography || {}) },
+        typography: mergeTypographyWithDefaults(parsed.typography, parsed.colors),
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
@@ -147,7 +174,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
         const remoteMerged: WebsiteDesignSettings = {
           branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
-          typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
+          typography: mergeTypographyWithDefaults(data.typography, data.colors),
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
@@ -201,7 +228,7 @@ export const subscribeToWebsiteDesign = (
         const merged: WebsiteDesignSettings = {
           branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
           colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
-          typography: { ...DEFAULT_WEBSITE_DESIGN.typography, ...(data.typography || {}) },
+          typography: mergeTypographyWithDefaults(data.typography, data.colors),
           logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
           announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
           homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
@@ -872,6 +899,9 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
       /* Typography */
       --app-font-family: ${typography.fontFamily};
       --app-heading-font-family: ${typography.headingFontFamily};
+      --app-website-name-font: ${typography.websiteNameFontFamily || DEFAULT_WEBSITE_DESIGN.typography.websiteNameFontFamily};
+      --app-website-name-size: ${typography.websiteNameSize || DEFAULT_WEBSITE_DESIGN.typography.websiteNameSize}px;
+      --app-website-name-color: ${sanitizeHexColor(typography.websiteNameColor, colors.headerText || '#0f172a')};
 
       --app-font-size-title: ${typography.websiteTitleSize}px;
       --app-font-size-subtitle: ${typography.websiteSubtitleSize}px;

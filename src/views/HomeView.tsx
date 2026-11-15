@@ -54,7 +54,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenArticle,
   onOpenArticleComments
 }) => {
-  const { colors, branding } = useWebsiteDesign();
+  const { colors, branding, typography } = useWebsiteDesign();
 
   // Fallback self-subscriptions if HomeView is mounted standalone
   const [internalPosts, setInternalPosts] = useState<BlogPost[]>([]);
@@ -813,7 +813,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <footer className="text-center pt-6 border-t border-slate-200 text-xs text-slate-500">
         {branding?.showWebsiteName !== false && (
           <p className="font-semibold text-slate-700">
-            {branding?.platformTitle || 'ISEZERANO ONLINE'}
+            <span
+              className="font-extrabold"
+              style={{
+                fontFamily:
+                  typography?.websiteNameFontFamily ||
+                  "'Times New Roman', Times, Baskerville, Georgia, serif",
+                color: typography?.websiteNameColor || colors.headerText || '#0f172a',
+                fontSize: `clamp(13px, 3vw, ${Math.min(
+                  Math.max(14, Math.round((Number(typography?.websiteNameSize) || 26) * 0.65)),
+                  24
+                )}px)`
+              }}
+            >
+              {branding?.platformTitle || 'ISEZERANO ONLINE'}
+            </span>
             {branding?.platformSubtitle ? ` • ${branding.platformSubtitle}` : ''}
           </p>
         )}

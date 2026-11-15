@@ -32,7 +32,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
   onNavigate 
 }) => {
   const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
-  const { logoUrl, logoSettings, branding } = useWebsiteDesign();
+  const { logoUrl, logoSettings, branding, typography } = useWebsiteDesign();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -222,7 +222,14 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
               </div>
             )}
             <div>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">
+              <h1
+                className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight"
+                style={{
+                  fontFamily:
+                    typography?.websiteNameFontFamily ||
+                    "'Times New Roman', Times, Baskerville, Georgia, serif"
+                }}
+              >
                 {branding?.platformTitle || 'ISEZERANO ONLINE'}
               </h1>
               <span className="text-xs font-semibold text-teal-400 tracking-wider uppercase">

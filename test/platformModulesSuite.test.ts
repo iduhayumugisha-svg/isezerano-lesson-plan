@@ -457,12 +457,205 @@ function testWhatsAppContactSettings() {
   console.log('✓ 4. WhatsApp contact settings, sanitization & admin controls verified');
 }
 
+// =========================================================================
+// PART 5: TASK 1 - MOBILE AD DISPLAY & RESPONSIVE EMBED CONTAINMENT
+// =========================================================================
+
+function testMobileAdDisplay() {
+  const adSlotSrc = fs.readFileSync(path.resolve('src/components/AdSlot.tsx'), 'utf8');
+  assert.match(adSlotSrc, /ad-slot-wrapper/);
+  assert.match(adSlotSrc, /ad-slot-content/);
+  assert.match(adSlotSrc, /syncResponsiveEmbedLayout/);
+  assert.match(adSlotSrc, /new ResizeObserver/);
+  assert.match(adSlotSrc, /new MutationObserver/);
+  assert.match(adSlotSrc, /newScript\.async\s*=\s*oldScript\.hasAttribute\('async'\)/);
+  assert.match(adSlotSrc, /object-contain/);
+  assert.doesNotMatch(
+    adSlotSrc,
+    /ref=\{codeContainerRef\}[^>]*className="[^"]*\bflex\b/,
+    'Script embed container must not be a flex container so injected empty divs never collapse to 0px on mobile'
+  );
+
+  const cssSrc = fs.readFileSync(path.resolve('src/index.css'), 'utf8');
+  assert.match(cssSrc, /\.ad-slot-wrapper\s*\{/);
+  assert.match(cssSrc, /\.ad-slot-content\s*\{/);
+  assert.match(cssSrc, /\.ad-slot-content\s+iframe/);
+
+  console.log('✓ 5. Mobile AdSlot layout containment, script preservation & CSS verified');
+}
+
+// =========================================================================
+// PART 6: TASK 2 - LANGUAGE SWITCHER INSIDE THREE-DOT OVERFLOW MENU
+// =========================================================================
+
+function testHeaderLanguageMovedToMenu() {
+  const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
+  const tier2Index = headerSrc.indexOf('TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR');
+  assert.ok(tier2Index > 0);
+  const tier1Src = headerSrc.slice(0, tier2Index);
+  const menuOpenIndex = tier1Src.indexOf('{isMenuOpen && (');
+  assert.ok(menuOpenIndex > 0);
+
+  const visibleUtilityBar = tier1Src.slice(0, menuOpenIndex);
+  const overflowDropdown = tier1Src.slice(menuOpenIndex);
+
+  assert.doesNotMatch(
+    visibleUtilityBar,
+    /<select/,
+    'Visible top utility bar must not render a <select> language dropdown'
+  );
+  assert.match(overflowDropdown, /role="menuitemradio"/);
+  assert.match(overflowDropdown, /setLanguage\(langOpt\.code\)/);
+  assert.match(overflowDropdown, /languageOptions\.map/);
+  assert.match(headerSrc, /code:\s*'en',\s*short:\s*'EN',\s*label:\s*'English'/);
+  assert.match(headerSrc, /code:\s*'rw',\s*short:\s*'RW',\s*label:\s*'Kinyarwanda'/);
+  assert.match(headerSrc, /code:\s*'fr',\s*short:\s*'FR',\s*label:\s*'Français'/);
+
+  console.log('✓ 6. Language translation controls moved cleanly into three-dot menu');
+}
+
+// =========================================================================
+// PART 7: TASK 3 - ADMIN CONTROLS FOR WEBSITE NAME TYPOGRAPHY
+// =========================================================================
+
+async function testWebsiteNameTypographyControls() {
+  const { DEFAULT_WEBSITE_TYPOGRAPHY } = await import('../src/types/websiteDesign');
+  assert.equal(typeof DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameFontFamily, 'string');
+  assert.ok(DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameFontFamily.length > 0);
+  assert.equal(DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameSize, 26);
+  assert.equal(DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameColor, '#0f172a');
+
+  const designServiceSrc = fs.readFileSync(path.resolve('src/services/websiteDesignService.ts'), 'utf8');
+  assert.match(designServiceSrc, /mergeTypographyWithDefaults/);
+  assert.match(designServiceSrc, /--app-website-name-font/);
+  assert.match(designServiceSrc, /--app-website-name-size/);
+  assert.match(designServiceSrc, /--app-website-name-color/);
+
+  const managerSrc = fs.readFileSync(path.resolve('src/components/WebsiteDesignManager.tsx'), 'utf8');
+  assert.match(managerSrc, /Website Name Typography \(Font Family, Size (?:&|&amp;) Color\)/);
+  assert.match(managerSrc, /websiteNameFontFamily/);
+  assert.match(managerSrc, /websiteNameSize/);
+  assert.match(managerSrc, /websiteNameColor/);
+  assert.match(managerSrc, /Save Website Name Settings/);
+  assert.match(managerSrc, /if \(!isAdmin\)/);
+
+  const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
+  assert.match(headerSrc, /typography\?\.websiteNameFontFamily/);
+  assert.match(headerSrc, /typography\?\.websiteNameColor/);
+  assert.match(headerSrc, /clamp\(/);
+
+  const footerSrc = fs.readFileSync(path.resolve('src/components/WebsiteFooter.tsx'), 'utf8');
+  assert.match(footerSrc, /typography\?\.websiteNameFontFamily/);
+  assert.match(footerSrc, /typography\?\.websiteNameSize/);
+
+  const homeSrc = fs.readFileSync(path.resolve('src/views/HomeView.tsx'), 'utf8');
+  assert.match(homeSrc, /typography\?\.websiteNameFontFamily/);
+  assert.match(homeSrc, /typography\?\.websiteNameColor/);
+
+  console.log('✓ 7. Admin website name font, size & color controls and public application verified');
+}
+
+// =========================================================================
+// PART 8: TASK 4 - NO AI TEXT ON STATIC PAGES + ADMIN RICH TEXT CMS
+// =========================================================================
+
+async function testStaticInfoPagesCleanAndAdminGated() {
+  const {
+    DEFAULT_PAGES_CONTENT,
+    sanitizeStaticPageHtml,
+    isRichHtmlEmpty,
+    hasStaticPageContent
+  } = await import('../src/services/websitePagesService');
+  const {
+    AboutView,
+    PrivacyPolicyView,
+    TermsConditionsView,
+    StaticPageRichBody
+  } = await import('../src/views/InfoPagesView');
+  const { ContactView } = await import('../src/views/ContactView');
+
+  for (const id of ['about', 'contact', 'privacy', 'terms'] as const) {
+    const page = DEFAULT_PAGES_CONTENT[id];
+    assert.equal(page.badge, '', `${id} default badge must be empty`);
+    assert.equal(page.title, '', `${id} default title must be empty`);
+    assert.equal(page.subtitle, '', `${id} default subtitle must be empty`);
+    assert.equal(page.bodyHtml, '', `${id} default bodyHtml must be empty`);
+    assert.equal(page.sections.length, 0, `${id} default sections must be empty`);
+    assert.equal(page.highlightBox?.enabled, false, `${id} highlightBox must default to disabled`);
+    assert.equal(hasStaticPageContent(page), false, `${id} default content check must be false`);
+  }
+  assert.equal(DEFAULT_PAGES_CONTENT.contact.showContactForm, false);
+
+  // Homepage defaults remain intact
+  assert.ok(DEFAULT_PAGES_CONTENT.home.title.length > 0);
+  assert.ok(DEFAULT_PAGES_CONTENT.home.sections.length > 0);
+
+  // Public views render neutral empty states when unconfigured, with zero fabricated copy or forced forms
+  const aboutHtml = renderToString(React.createElement(AboutView, {}));
+  assert.match(aboutHtml, /About Us/);
+  assert.match(aboutHtml, /No content has been published for this page yet/);
+  assert.doesNotMatch(aboutHtml, /GS GITUMBA|MINEDUC|Curriculum Standards Supported|REB/);
+
+  const privacyHtml = renderToString(React.createElement(PrivacyPolicyView, {}));
+  assert.match(privacyHtml, /Privacy Policy/);
+  assert.match(privacyHtml, /No content has been published for this page yet/);
+  assert.doesNotMatch(privacyHtml, /GS GITUMBA|Contact the GS GITUMBA Team/);
+
+  const termsHtml = renderToString(React.createElement(TermsConditionsView, {}));
+  assert.match(termsHtml, /Terms &amp; Conditions/);
+  assert.match(termsHtml, /No content has been published for this page yet/);
+  assert.doesNotMatch(termsHtml, /GS GITUMBA|Open Lesson Plan Hub|CBC Lesson Plan/);
+
+  const contactHtml = renderToString(React.createElement(ContactView, {}));
+  assert.match(contactHtml, /Contact Us/);
+  assert.match(contactHtml, /No content has been published for this page yet/);
+  assert.doesNotMatch(contactHtml, /<form|GS GITUMBA|0782971258|twizerefelix90@gmail\.com|Curriculum Alignment/);
+
+  // HTML sanitization & rich body rendering preserve headings, paragraphs, lists, and links while stripping unsafe tags
+  const unsafeInput =
+    '<h2>Our Mission</h2><p>Independent newsroom coverage.</p><ul><li>Verified facts</li></ul><p><a href="https://isezerano.online/contact">Contact link</a></p><script>alert(1)</script><p onclick="steal()">Safe text</p><a href="javascript:alert(2)">Bad link</a>';
+  const cleanHtml = sanitizeStaticPageHtml(unsafeInput);
+  assert.match(cleanHtml, /<h2>Our Mission<\/h2>/);
+  assert.match(cleanHtml, /<ul><li>Verified facts<\/li><\/ul>/);
+  assert.match(cleanHtml, /href="https:\/\/isezerano\.online\/contact"/);
+  assert.doesNotMatch(cleanHtml, /<script|onclick=|javascript:/i);
+  assert.equal(isRichHtmlEmpty('<p><br></p>'), true);
+  assert.equal(isRichHtmlEmpty(cleanHtml), false);
+
+  const renderedRichBody = renderToString(React.createElement(StaticPageRichBody, { html: cleanHtml }));
+  assert.match(renderedRichBody, /<h2>Our Mission<\/h2>/);
+  assert.match(renderedRichBody, /Verified facts/);
+  assert.match(renderedRichBody, /https:\/\/isezerano\.online\/contact/);
+
+  // Check Firestore rules keep website_pages write restricted to isAdmin()
+  const rulesSrc = fs.readFileSync(path.resolve('firestore.rules'), 'utf8');
+  assert.match(rulesSrc, /match \/website_pages\/\{pageId\}[\s\S]*allow read:\s*if true;[\s\S]*allow write:\s*if isAdmin\(\);/);
+
+  // Check WebsitePagesManager has the 4 editing sections, RichTextEditor, Preview, Save/Update & admin guard
+  const pagesMgrSrc = fs.readFileSync(path.resolve('src/components/WebsitePagesManager.tsx'), 'utf8');
+  assert.match(pagesMgrSrc, /if \(!isAdmin\)/);
+  assert.match(pagesMgrSrc, /Edit About Us/);
+  assert.match(pagesMgrSrc, /Edit Contact Us/);
+  assert.match(pagesMgrSrc, /Edit Privacy Policy/);
+  assert.match(pagesMgrSrc, /Edit Terms & Conditions/);
+  assert.match(pagesMgrSrc, /<RichTextEditor/);
+  assert.match(pagesMgrSrc, /Save \/ Update/);
+  assert.match(pagesMgrSrc, /Preview/);
+  assert.doesNotMatch(pagesMgrSrc, /New Content Section|New bullet point item|standard GS GITUMBA content/);
+
+  console.log('✓ 8. Static info pages empty defaults, rich text CMS, four admin sections & rules verified');
+}
+
 async function runSuite(): Promise<void> {
   testFcmPushSystemAudit();
   testNurseryReportCardLayout();
   await testRwandaLocationDirectoryAndAuth();
   testWhatsAppContactSettings();
-  console.log('\nALL PLATFORM MODULES (FCM, NURSERY, RWANDA SCHOOLS, WHATSAPP) TESTS PASSED!');
+  testMobileAdDisplay();
+  testHeaderLanguageMovedToMenu();
+  await testWebsiteNameTypographyControls();
+  await testStaticInfoPagesCleanAndAdminGated();
+  console.log('\nALL PLATFORM MODULES (FCM, NURSERY, RWANDA SCHOOLS, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES) TESTS PASSED!');
 }
 
 runSuite().catch((err) => {

@@ -142,6 +142,18 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
   const isNewsFeedPage = currentPage === 'home' || currentPage === 'blog';
 
+  const websiteNameFont =
+    typography?.websiteNameFontFamily || "'Times New Roman', Times, Baskerville, Georgia, serif";
+  const websiteNameBaseSize = Math.min(Math.max(Number(typography?.websiteNameSize) || 26, 14), 48);
+  const websiteNameResponsiveSize = `clamp(${Math.min(18, websiteNameBaseSize)}px, 4.5vw, ${websiteNameBaseSize}px)`;
+  const websiteNameColor = typography?.websiteNameColor || colors.headerText || '#0f172a';
+
+  const languageOptions: { code: Language; short: string; label: string }[] = [
+    { code: 'en', short: 'EN', label: 'English' },
+    { code: 'rw', short: 'RW', label: 'Kinyarwanda' },
+    { code: 'fr', short: 'FR', label: 'Français' }
+  ];
+
   return (
     <header
       className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
@@ -182,8 +194,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               {branding?.showWebsiteName !== false && (
                 <>
                   <span
-                    className="font-serif font-extrabold tracking-tight transition-colors leading-tight text-lg sm:text-2xl md:text-[26px] truncate"
-                    style={{ color: colors.headerText }}
+                    className="font-extrabold tracking-tight transition-colors leading-tight truncate"
+                    style={{
+                      fontFamily: websiteNameFont,
+                      fontSize: websiteNameResponsiveSize,
+                      color: websiteNameColor
+                    }}
                   >
                     {branding?.platformTitle || 'ISEZERANO ONLINE'}
                   </span>
@@ -210,27 +226,11 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             </div>
           </div>
 
-          {/* Upper-Right Utilities: Notification Bell, Language Switcher, Three-Dot Overflow Menu (⋮) */}
+          {/* Upper-Right Utilities: Notification Bell & Three-Dot Overflow Menu (⋮) */}
           <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
             <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
 
-            {/* Language Selector */}
-            <div className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/80 p-1 rounded-lg border border-slate-200 transition-colors">
-              <Globe className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as Language)}
-                className="bg-transparent text-xs font-semibold text-slate-800 py-1 pr-2 pl-1 rounded focus:outline-none cursor-pointer"
-                title="Select Language"
-                aria-label="Select Language"
-              >
-                <option value="en">EN</option>
-                <option value="rw">RW</option>
-                <option value="fr">FR</option>
-              </select>
-            </div>
-
-            {/* Three-Dot Overflow Menu (⋮): Lesson Preparation, CBC Report Cards N1-N3, Admin Portal */}
+            {/* Three-Dot Overflow Menu (⋮): Language, Lesson Preparation, CBC Report Cards N1-N3, Admin Portal */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -371,6 +371,43 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
+                  </div>
+
+                  {/* Language / Translation Switcher inside Three-Dot Menu */}
+                  <div className="my-1.5 border-t border-slate-100" />
+                  <div className="px-3.5 py-2 space-y-2" role="group" aria-label="Language selection">
+                    <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      <Globe className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                      <span>Language / Ururimi</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {languageOptions.map((langOpt) => {
+                        const isSelectedLang = language === langOpt.code;
+                        return (
+                          <button
+                            key={langOpt.code}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isSelectedLang}
+                            aria-label={`Switch language to ${langOpt.label}`}
+                            onClick={() => {
+                              setLanguage(langOpt.code);
+                              setIsMenuOpen(false);
+                            }}
+                            className={`min-h-[36px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight ${
+                              isSelectedLang
+                                ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            <span>{langOpt.short}</span>
+                            <span className={`text-[9px] font-medium ${isSelectedLang ? 'text-teal-100' : 'text-slate-400'}`}>
+                              {langOpt.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Administrator Portal */}

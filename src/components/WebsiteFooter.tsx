@@ -71,10 +71,13 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
 
               {branding?.showWebsiteName !== false && (
                 <div className="flex flex-col justify-center">
-                  <span 
-                    className="font-serif font-extrabold tracking-tight leading-tight"
+                  <span
+                    className="font-extrabold tracking-tight leading-tight"
                     style={{
-                      fontSize: `${typography.websiteTitleSize - 2}px`,
+                      fontFamily:
+                        typography?.websiteNameFontFamily ||
+                        "'Times New Roman', Times, Baskerville, Georgia, serif",
+                      fontSize: `clamp(16px, 4vw, ${Math.max(16, (Number(typography?.websiteNameSize) || 26) - 2)}px)`,
                       color: colors.footerHeadingText
                     }}
                   >

@@ -38,6 +38,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   DEFAULT_WEBSITE_COLORS, 
   DEFAULT_WEBSITE_TYPOGRAPHY, 
@@ -268,6 +269,7 @@ const FONT_PRESETS = [
 ];
 
 export const WebsiteDesignManager: React.FC = () => {
+  const { isAdmin } = useAuth();
   const {
     draftSettings,
     publishedSettings,
@@ -486,6 +488,27 @@ export const WebsiteDesignManager: React.FC = () => {
     setConfirmResetAll(false);
     showStatus('success', 'All website appearance, typography & logo settings reset to defaults in draft.');
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="bg-white p-8 rounded-2xl border border-rose-200 text-center space-y-2">
+        <ShieldCheck className="w-8 h-8 text-rose-600 mx-auto" />
+        <h3 className="text-base font-bold text-slate-900">Administrator Authorization Required</h3>
+        <p className="text-xs text-slate-600">
+          Only the authorized administrator can modify website name typography and design settings.
+        </p>
+      </div>
+    );
+  }
+
+  const draftNameFont =
+    draftSettings.typography?.websiteNameFontFamily || DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameFontFamily;
+  const draftNameSize =
+    Number(draftSettings.typography?.websiteNameSize) || DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameSize;
+  const draftNameColor =
+    draftSettings.typography?.websiteNameColor ||
+    draftSettings.colors?.headerText ||
+    DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameColor;
 
   return (
     <div className="space-y-6">
@@ -945,7 +968,14 @@ export const WebsiteDesignManager: React.FC = () => {
                   <div className="min-w-0">
                     {draftSettings.branding?.showWebsiteName !== false ? (
                       <>
-                        <div className="font-serif font-extrabold text-sm sm:text-base text-slate-900 truncate">
+                        <div
+                          className="font-extrabold truncate leading-tight"
+                          style={{
+                            fontFamily: draftNameFont,
+                            fontSize: `clamp(${Math.min(18, draftNameSize)}px, 4vw, ${draftNameSize}px)`,
+                            color: draftNameColor
+                          }}
+                        >
                           {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'}
                         </div>
                         {draftSettings.branding?.platformSubtitle && (
@@ -1004,6 +1034,194 @@ export const WebsiteDesignManager: React.FC = () => {
                   <span>Logo Sizing</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Dedicated Website Name Typography Controls (Font Family, Size & Color) */}
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div>
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 flex items-center space-x-2">
+                  <Type className="w-4 h-4 text-teal-700" />
+                  <span>Website Name Typography (Font Family, Size &amp; Color)</span>
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Customize the typography of the public website name without affecting unrelated typography or layout. Automatically scales proportionally on mobile screens.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  updateDraftTypography({
+                    websiteNameFontFamily: DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameFontFamily,
+                    websiteNameSize: DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameSize,
+                    websiteNameColor: DEFAULT_WEBSITE_TYPOGRAPHY.websiteNameColor
+                  })
+                }
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Reset to Default</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. Website Name Font Family */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <label
+                  htmlFor="website-name-font-select"
+                  className="block text-xs font-bold text-slate-800"
+                >
+                  Font Family
+                </label>
+                <select
+                  id="website-name-font-select"
+                  value={draftNameFont}
+                  onChange={(e) => updateDraftTypography({ websiteNameFontFamily: e.target.value })}
+                  className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-xl bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-teal-500 cursor-pointer"
+                >
+                  {FONT_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.value}>
+                      {preset.label} ({preset.category})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500">
+                  Applies to the website name in the header, footer, and colophon.
+                </p>
+              </div>
+
+              {/* 2. Website Name Font Size */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="website-name-size-range"
+                    className="block text-xs font-bold text-slate-800"
+                  >
+                    Font Size
+                  </label>
+                  <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
+                    {draftNameSize}px
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    aria-label="Decrease website name font size"
+                    onClick={() =>
+                      updateDraftTypography({ websiteNameSize: Math.max(16, draftNameSize - 1) })
+                    }
+                    className="w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-sm cursor-pointer"
+                  >
+                    -
+                  </button>
+                  <input
+                    id="website-name-size-range"
+                    type="range"
+                    min={16}
+                    max={44}
+                    step={1}
+                    value={Math.min(44, Math.max(16, draftNameSize))}
+                    onChange={(e) => updateDraftTypography({ websiteNameSize: Number(e.target.value) })}
+                    className="flex-1 accent-teal-600 cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Increase website name font size"
+                    onClick={() =>
+                      updateDraftTypography({ websiteNameSize: Math.min(44, draftNameSize + 1) })
+                    }
+                    className="w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-sm cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                  <span>16px</span>
+                  <span>26px (Default)</span>
+                  <span>44px</span>
+                </div>
+              </div>
+
+              {/* 3. Website Name Font Color */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <label
+                  htmlFor="website-name-color-hex"
+                  className="block text-xs font-bold text-slate-800"
+                >
+                  Font Color
+                </label>
+                <div className="flex items-center space-x-2.5">
+                  <label
+                    className="relative w-10 h-10 rounded-xl border border-slate-300 shadow-2xs overflow-hidden cursor-pointer shrink-0 block"
+                    title="Pick Website Name Font Color"
+                  >
+                    <input
+                      type="color"
+                      aria-label="Website name color picker"
+                      value={normalizeHexForPicker(draftNameColor)}
+                      onChange={(e) => updateDraftTypography({ websiteNameColor: e.target.value })}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                    />
+                    <span
+                      className="block w-full h-full"
+                      style={{ backgroundColor: draftNameColor }}
+                    />
+                  </label>
+                  <input
+                    id="website-name-color-hex"
+                    type="text"
+                    value={draftNameColor}
+                    onChange={(e) => {
+                      let val = e.target.value.trim();
+                      if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,6}$/.test(val)) {
+                        val = `#${val}`;
+                      }
+                      updateDraftTypography({ websiteNameColor: val });
+                    }}
+                    placeholder="#0f172a"
+                    className="flex-1 px-3 py-2 text-xs font-mono font-bold uppercase border border-slate-300 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Color applied to the website name on light backgrounds.
+                </p>
+              </div>
+            </div>
+
+            {/* Live Preview + Save Row */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 flex items-center space-x-1">
+                  <Eye className="w-3 h-3" />
+                  <span>Live Website Name Preview (Before Saving)</span>
+                </span>
+                <div
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 overflow-hidden"
+                  style={{ backgroundColor: draftSettings.colors.headerBg }}
+                >
+                  <div
+                    className="font-extrabold tracking-tight leading-tight truncate"
+                    style={{
+                      fontFamily: draftNameFont,
+                      fontSize: `clamp(${Math.min(18, draftNameSize)}px, 4.5vw, ${draftNameSize}px)`,
+                      color: draftNameColor
+                    }}
+                  >
+                    {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={isPublishing}
+                className="inline-flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-600 text-white shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isPublishing ? 'Saving...' : 'Save Website Name Settings'}</span>
+              </button>
             </div>
           </div>
 
@@ -3159,9 +3377,16 @@ export const WebsiteDesignManager: React.FC = () => {
                   <div className="min-w-0">
                     {draftSettings.branding?.showWebsiteName !== false && (
                       <>
-                        <h5 
-                          className="font-bold leading-tight truncate"
-                          style={{ fontSize: `${draftSettings.typography.websiteTitleSize}px` }}
+                        <h5
+                          className="font-extrabold leading-tight truncate"
+                          style={{
+                            fontFamily: draftNameFont,
+                            fontSize:
+                              previewDevice === 'mobile'
+                                ? `${Math.min(20, draftNameSize)}px`
+                                : `${draftNameSize}px`,
+                            color: draftNameColor
+                          }}
                         >
                           {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'}
                         </h5>

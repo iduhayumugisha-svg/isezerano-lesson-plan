@@ -51,6 +51,38 @@
   }
 }
 
+/* Responsive Ad Slot Container Rules (prevents mobile 0px collapse & horizontal page overflow) */
+.ad-slot-wrapper {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+}
+
+.ad-slot-content {
+  display: block;
+  width: 100%;
+}
+
+.ad-slot-content > div,
+.ad-slot-content > ins {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ad-slot-content iframe {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ad-slot-content img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Screen mode: strictly hide print portal from UI */
 @media screen {
   #rwanda-cbc-print-portal {
