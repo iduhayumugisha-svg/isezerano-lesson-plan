@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserProfile } from '../types/lessonPlan';
-import { 
-  signIn as apiSignIn, 
-  signUp as apiSignUp, 
-  signOut as apiSignOut, 
-  subscribeToAuth, 
+import { UserProfile } from '../types/platform';
+import {
+  signIn as apiSignIn,
+  signOut as apiSignOut,
+  subscribeToAuth,
   getUserProfile,
   sendPasswordReset as apiSendPasswordReset,
   signInWithGoogle as apiSignInWithGoogle,
@@ -15,11 +14,9 @@ import {
 interface AuthContextType {
   user: UserProfile | null;
   isAdmin: boolean;
-  isTeacher: boolean;
   isLoading: boolean;
   signIn: (email: string, pass: string) => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string; code?: string }>;
-  signUp: (email: string, pass: string, name: string, school?: string) => Promise<{ success: boolean; error?: string }>;
   signOutUser: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   refreshProfile: () => Promise<void>;
@@ -62,16 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result;
   };
 
-  const signUp = async (email: string, pass: string, name: string, school?: string) => {
-    setIsLoading(true);
-    const result = await apiSignUp(email, pass, name, school);
-    if (result.success && result.user) {
-      setUser(result.user);
-    }
-    setIsLoading(false);
-    return result;
-  };
-
   const signOutUser = async () => {
     setIsLoading(true);
     await apiSignOut();
@@ -96,15 +83,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasActiveFirebaseAuth = Boolean(auth?.currentUser && user && auth.currentUser.uid === user.uid);
 
   const isAdmin = Boolean(
-    hasActiveFirebaseAuth && 
-    user && 
-    (user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && 
-    user.status === 'active'
-  );
-  const isTeacher = Boolean(
-    user && 
-    (user.role === 'teacher' || user.role === 'admin' || isAuthorizedAdminEmail(user.email)) && 
-    user.status === 'active'
+    hasActiveFirebaseAuth &&
+      user &&
+      user.role === 'admin' &&
+      isAuthorizedAdminEmail(user.email) &&
+      user.status === 'active'
   );
 
   return (
@@ -112,11 +95,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isAdmin,
-        isTeacher,
         isLoading,
         signIn,
         signInWithGoogle,
-        signUp,
         signOutUser,
         sendResetEmail,
         refreshProfile

@@ -8,7 +8,6 @@ import {
   MessageSquare,
   User,
   FileText,
-  Loader2,
   Newspaper
 } from 'lucide-react';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
@@ -29,7 +28,6 @@ import {
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
-  savedPlansCount?: number;
   posts?: BlogPost[];
   categories?: BlogCategory[];
   commentCounts?: Record<string, number>;
@@ -217,8 +215,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-8 sm:space-y-10">
       {/* Newsroom Edition Bar & Search */}
-      <section className="border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
+      <section className="border-b border-slate-200 pb-4 min-h-[108px] md:min-h-[54px] flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center content-start gap-x-2.5 gap-y-1 text-xs text-slate-600 min-h-[36px] md:min-h-0">
           <span className="inline-flex items-center space-x-1.5 font-bold uppercase tracking-widest text-teal-800">
             <Newspaper className="w-3.5 h-3.5" />
             <span>
@@ -279,12 +277,38 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* Main Newspaper Feed */}
       {isLoading && resolvedPosts.length === 0 ? (
-        <div className="py-20 text-center space-y-3">
-          <Loader2 className="w-7 h-7 text-teal-700 animate-spin mx-auto" />
-          <p className="text-sm text-slate-500">Loading latest news articles...</p>
+        <div
+          key="home-loading-skeleton"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading latest news articles"
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 animate-pulse"
+        >
+          <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="aspect-[16/9] w-full bg-slate-200/80" />
+            <div className="p-5 sm:p-7 space-y-4">
+              <div className="h-3.5 w-36 bg-slate-200 rounded" />
+              <div className="h-8 w-11/12 bg-slate-200 rounded" />
+              <div className="h-4 w-full bg-slate-100 rounded" />
+              <div className="h-4 w-4/5 bg-slate-100 rounded" />
+            </div>
+          </div>
+          <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4">
+            <div className="h-4 w-32 bg-slate-200 rounded" />
+            {[0, 1, 2, 3].map((idx) => (
+              <div key={idx} className="flex items-start gap-3.5 pt-3 border-t border-slate-100">
+                <div className="w-24 h-[72px] sm:w-28 sm:h-20 shrink-0 rounded-lg bg-slate-200/80" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-24 bg-slate-200 rounded" />
+                  <div className="h-4 w-full bg-slate-200 rounded" />
+                  <div className="h-3 w-2/3 bg-slate-100 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : resolvedPosts.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+        <div key="home-empty" className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
           <FileText className="w-10 h-10 text-slate-400 mx-auto" />
           <h1 className="font-serif text-2xl font-bold text-slate-900">
             No News Articles Published Yet
@@ -295,7 +319,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       ) : isFiltering ? (
         /* ==================== CATEGORY / SEARCH RESULTS VIEW ==================== */
-        <section className="space-y-7">
+        <section key="home-filtered" className="space-y-7">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-5">
             <div className="space-y-1.5">
               <button
@@ -365,6 +389,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <ArticleThumbnailImage
                         src={topThumb}
                         alt={topStory.thumbnailAlt || topStory.title}
+                        priority={true}
                         className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                       />
                     </div>
@@ -480,7 +505,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       ) : (
         /* ==================== FRONT PAGE NEWSPAPER EDITION ==================== */
-        <div className="space-y-10 sm:space-y-12">
+        <div key="home-frontpage-feed" className="space-y-10 sm:space-y-12">
           {/* TIER 1: LEAD FEATURED STORY + LATEST HEADLINES WIRE */}
           {leadPost && (
             <section aria-label="Featured news" className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
@@ -495,6 +520,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <ArticleThumbnailImage
                     src={getSingleArticleThumbnailUrl(leadPost)}
                     alt={leadPost.thumbnailAlt || leadPost.title}
+                    priority={true}
                     className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                   />
                 </div>
@@ -720,7 +746,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           {/* TIER 3: CATEGORY-BASED NEWS SECTIONS */}
           {categorySections.map(({ category, articles }) => (
-            <section key={category.id || category.name} className="space-y-5">
+            <section key={category.id || category.name} className="space-y-5 offscreen-section">
               <div className="border-t-2 border-slate-900 pt-3.5 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
                 <div>
                   <h2
@@ -837,7 +863,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </p>
         )}
         <p className="text-[11px] text-slate-400 mt-0.5">
-          {branding?.schoolLocation || 'Buyoga Sector, Rulindo District, Northern Province, Rwanda'}
+          {branding?.footerTagline || 'Independent Digital News & Information Portal'}
         </p>
       </footer>
     </div>

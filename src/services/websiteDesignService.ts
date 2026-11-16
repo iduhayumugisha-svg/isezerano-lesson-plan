@@ -1,10 +1,4 @@
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { 
-  getStorage, 
-  ref, 
-  uploadBytes, 
-  getDownloadURL 
-} from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 import { 
   WebsiteDesignSettings, 
@@ -16,7 +10,7 @@ import {
   WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
-import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from './storageService';
+import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
 const DESIGN_STORAGE_KEY = 'isezerano_website_design';
@@ -137,16 +131,15 @@ export const validateLogoFile = (file: File): { valid: boolean; error?: string }
 };
 
 /**
- * Fetch published website appearance, typography, menus & layout settings.
- * Checks local cache and Cloud Firestore, keeping whichever revision is newer.
+ * Synchronously reads cached website design settings from localStorage for instant first-paint hydration.
  */
-export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
-  let localData: WebsiteDesignSettings | null = null;
+export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
+  if (typeof localStorage === 'undefined') return DEFAULT_WEBSITE_DESIGN;
   try {
     const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      localData = {
+      return {
         branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(parsed.branding || {}) },
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
         typography: mergeTypographyWithDefaults(parsed.typography, parsed.colors),
@@ -161,6 +154,120 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
       };
     }
   } catch {
+    // ignore storage errors
+  }
+  return DEFAULT_WEBSITE_DESIGN;
+};
+
+const parseDesignRestValue = (val: any): any => {
+  if (!val || typeof val !== 'object') return undefined;
+  if ('stringValue' in val) return val.stringValue;
+  if ('booleanValue' in val) return Boolean(val.booleanValue);
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('nullValue' in val) return null;
+  if ('arrayValue' in val) {
+    return (val.arrayValue?.values || []).map(parseDesignRestValue);
+  }
+  if ('mapValue' in val) {
+    const out: Record<string, any> = {};
+    const fields = val.mapValue?.fields || {};
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = parseDesignRestValue(v);
+    }
+    return out;
+  }
+  return undefined;
+};
+
+const DESIGN_PUBLIC_REST_URL =
+  'https://firestore.googleapis.com/v1/projects/isezerano-news/databases/(default)/documents/appSettings/website_design' +
+  '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=typography' +
+  '&mask.fieldPaths=logo&mask.fieldPaths=announcements&mask.fieldPaths=homepageSections' +
+  '&mask.fieldPaths=navigationMenus&mask.fieldPaths=whatsappContact' +
+  '&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
+
+const normalizeWebsiteDesignPayload = (
+  data: Partial<WebsiteDesignSettings>,
+  fallbackHistory: WebsiteDesignVersion[] = []
+): WebsiteDesignSettings => ({
+  branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
+  colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
+  typography: mergeTypographyWithDefaults(data.typography, data.colors),
+  logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
+  announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
+  homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
+  navigationMenus: ensureBlogNavItem(data.navigationMenus),
+  whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
+  versionHistory: data.versionHistory || fallbackHistory,
+  updatedAt: data.updatedAt || new Date().toISOString(),
+  updatedBy: data.updatedBy || 'admin'
+});
+
+/**
+ * Lightweight public fetch excluding 640KB+ admin versionHistory so first-time visitors
+ * only download ~16KB instead of ~846KB.
+ */
+export const getPublicWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
+  let localData: WebsiteDesignSettings | null = null;
+  try {
+    const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
+    if (cached) {
+      localData = getCachedWebsiteDesignSettingsSync();
+    }
+  } catch {
+    // fallback
+  }
+
+  if (typeof fetch === 'function') {
+    try {
+      const res = await fetch(DESIGN_PUBLIC_REST_URL, { method: 'GET' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.fields) {
+          const parsed: Record<string, any> = {};
+          for (const [k, v] of Object.entries(json.fields)) {
+            parsed[k] = parseDesignRestValue(v);
+          }
+          const remoteMerged = normalizeWebsiteDesignPayload(
+            parsed as Partial<WebsiteDesignSettings>,
+            localData?.versionHistory || []
+          );
+          if (localData?.updatedAt && remoteMerged.updatedAt) {
+            const localTime = new Date(localData.updatedAt).getTime();
+            const remoteTime = new Date(remoteMerged.updatedAt).getTime();
+            if (localTime > remoteTime) {
+              return localData;
+            }
+          }
+          try {
+            localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(remoteMerged));
+          } catch {
+            // ignore cache error
+          }
+          return remoteMerged;
+        }
+      }
+    } catch {
+      // fall through to Firestore SDK fallback
+    }
+  }
+
+  return getWebsiteDesignSettings();
+};
+
+/**
+ * Fetch published website appearance, typography, menus & layout settings.
+ * Checks local cache and Cloud Firestore, keeping whichever revision is newer.
+ */
+export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
+  let localData: WebsiteDesignSettings | null = null;
+  try {
+    const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
+    if (cached) {
+      localData = getCachedWebsiteDesignSettingsSync();
+    }
+  } catch {
     // fallback
   }
 
@@ -171,19 +278,7 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
-        const remoteMerged: WebsiteDesignSettings = {
-          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
-          colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
-          typography: mergeTypographyWithDefaults(data.typography, data.colors),
-          logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
-          announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
-          homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-          navigationMenus: ensureBlogNavItem(data.navigationMenus),
-          whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
-          versionHistory: data.versionHistory || [],
-          updatedAt: data.updatedAt || new Date().toISOString(),
-          updatedBy: data.updatedBy || 'admin'
-        };
+        const remoteMerged = normalizeWebsiteDesignPayload(data);
 
         // If local cache has newer saved changes than cloud document, prioritize local cache
         if (localData && localData.updatedAt && remoteMerged.updatedAt) {
@@ -562,6 +657,7 @@ export const uploadAndSaveWebsiteLogo = async (
         message: `Uploading logo to Firebase Storage (${bucketName})...`
       });
 
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const storage = getStorage(app, `gs://${bucketName}`);
       try {
         storage.maxUploadRetryTime = 4500;

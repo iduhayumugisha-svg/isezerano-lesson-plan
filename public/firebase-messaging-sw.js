@@ -1,7 +1,7 @@
 // =========================================================================
-// Firebase Cloud Messaging (FCM) Service Worker for ISEZERANO ONLINE – GS GITUMBA
-// Runs in background to deliver real push notifications to teacher device screens
-// even when the user is logged out or the browser/website is closed.
+// Firebase Cloud Messaging (FCM) Service Worker for ISEZERANO ONLINE
+// Runs in the background to deliver breaking news & announcement alerts
+// to subscriber devices without requiring user login.
 // =========================================================================
 
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
@@ -23,8 +23,8 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[FCM SW] Background message received:', payload);
 
-  const title = payload.notification?.title || payload.data?.title || 'ISEZERANO ONLINE – GS GITUMBA';
-  const body = payload.notification?.body || payload.data?.body || payload.data?.message || 'Itangazo Rishya ry\'Abarimu ryatanzwe n\'Umuyobozi.';
+  const title = payload.notification?.title || payload.data?.title || 'ISEZERANO ONLINE';
+  const body = payload.notification?.body || payload.data?.body || payload.data?.message || 'Amakuru mashya yashyizwe kuri ISEZERANO ONLINE.';
   const noticeId = payload.data?.noticeId || payload.data?.id || 'notice_' + Date.now();
   const targetUrl = payload.data?.url || '/?notice=' + noticeId;
 
@@ -34,14 +34,14 @@ messaging.onBackgroundMessage((payload) => {
     data: {
       url: targetUrl,
       noticeId: noticeId,
-      requiresAuth: true
+      requiresAuth: false
     },
     tag: noticeId, // Prevent duplicate pop-ups
     renotify: true,
-    requireInteraction: true, // Keep notification visible on screen until user interacts
+    requireInteraction: true,
     vibrate: [250, 100, 250, 100, 250],
     actions: [
-      { action: 'open_notice', title: 'Fungura Itangazo (Open)' }
+      { action: 'open_notice', title: 'Soma (Open)' }
     ]
   };
 
@@ -56,8 +56,8 @@ self.addEventListener('push', (event) => {
     const data = event.data.json();
     console.log('[FCM SW] Push event received JSON:', data);
 
-    const title = data.notification?.title || data.title || 'ISEZERANO ONLINE – GS GITUMBA';
-    const body = data.notification?.body || data.body || data.message || 'Itangazo rishya ry\'Abarimu ryatanzwe.';
+    const title = data.notification?.title || data.title || 'ISEZERANO ONLINE';
+    const body = data.notification?.body || data.body || data.message || 'Amakuru mashya yageze kuri ISEZERANO ONLINE.';
     const noticeId = data.data?.noticeId || data.noticeId || data.id || 'notice_' + Date.now();
     const targetUrl = data.data?.url || data.url || '/?notice=' + noticeId;
 
@@ -66,7 +66,7 @@ self.addEventListener('push', (event) => {
       data: {
         url: targetUrl,
         noticeId: noticeId,
-        requiresAuth: true
+        requiresAuth: false
       },
       tag: noticeId,
       renotify: true,
@@ -79,16 +79,16 @@ self.addEventListener('push', (event) => {
     // Plaintext push fallback
     const text = event.data.text();
     event.waitUntil(
-      self.registration.showNotification('ISEZERANO ONLINE – GS GITUMBA', {
+      self.registration.showNotification('ISEZERANO ONLINE', {
         body: text,
-        data: { url: '/', requiresAuth: true },
+        data: { url: '/', requiresAuth: false },
         requireInteraction: true
       })
     );
   }
 });
 
-// 3. Handle Notification Click (Open website, request login before showing announcement)
+// 3. Handle Notification Click (Open website directly to public announcement/news)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -97,7 +97,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If a window is already open, navigate it to targetUrl and bring to focus
       for (let client of windowClients) {
         if ('focus' in client) {
           if ('navigate' in client) {
@@ -106,7 +105,6 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      // If website is closed, open a new window
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
@@ -118,12 +116,12 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_TEST_NOTIFICATION') {
     const { title, body, noticeId } = event.data;
-    self.registration.showNotification(title || 'ISEZERANO ONLINE – GS GITUMBA', {
-      body: body || 'Igerageza ry\'itangazo ryoherejwe neza kuri iyi mudasobwa cyangwa terefone.',
+    self.registration.showNotification(title || 'ISEZERANO ONLINE', {
+      body: body || 'Igerageza ry\'itangazo ryoherejwe neza kuri iki gikoresho.',
       data: {
         url: '/?notice=' + (noticeId || 'test'),
         noticeId: noticeId || 'test',
-        requiresAuth: true
+        requiresAuth: false
       },
       vibrate: [200, 100, 200],
       requireInteraction: true

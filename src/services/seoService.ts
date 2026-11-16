@@ -7,9 +7,9 @@ import {
   isValidHttpsImageUrl
 } from '../utils/thumbnailUtils';
 
-export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
+export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE';
 export const DEFAULT_SEO_DESCRIPTION =
-  'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
+  'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
 export const DEFAULT_CANONICAL_ORIGIN = 'https://isezerano.online';
 const BASE_URL =
   typeof window !== 'undefined' &&
@@ -200,11 +200,11 @@ export const updateBlogPostSeo = (
     dateModified: post.updatedAt || post.publishedAt,
     author: {
       '@type': 'Person',
-      name: post.author?.name || 'GS GITUMBA Editorial Team',
-      jobTitle: post.author?.role || 'Educator'
+      name: post.author?.name || 'ISEZERANO Editorial Team',
+      jobTitle: post.author?.role || 'Editor'
     },
     publisher: {
-      '@type': 'EducationalOrganization',
+      '@type': 'NewsMediaOrganization',
       name: fullTitle
     }
   };

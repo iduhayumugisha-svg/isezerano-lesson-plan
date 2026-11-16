@@ -17,10 +17,10 @@ service cloud.firestore {
              request.auth.token.email_verified == true;
     }
 
-    // Strict single administrator: ONLY twizerefelix90@gmail.com with verified auth session.
-    // Custom claims (e.g. token.admin == true) are deliberately NOT accepted without the exact email.
+    // Strict single administrator: ONLY twizerefelix90@gmail.com with verified Google auth session.
+    // Custom claims (e.g. token.admin == true) are deliberately NOT accepted without the verified email.
     function isAdmin() {
-      return isAuthenticated() &&
+      return isGoogleAuth() &&
              request.auth.token.email != null &&
              (
                request.auth.token.email == 'twizerefelix90@gmail.com' ||
@@ -28,60 +28,15 @@ service cloud.firestore {
              );
     }
 
-    // Teacher ownership verification (must match authenticated Google UID)
-    function isOwner(uid) {
-      return isGoogleAuth() && request.auth.uid == uid;
-    }
-
     // ==============================================================
-    // 1. Users Collection (Confidential: restricted to owner or admin)
-    // Protected against privilege escalation and unauthorized field injection
+    // 1. Admin Users Collection (Strictly Admin-Only — no reader/teacher accounts)
     // ==============================================================
-
-    // Explicitly permitted fields for Teacher UserProfile documents
-    function isAllowedUserKeys(keys) {
-      return keys.hasOnly([
-        'uid', 'email', 'displayName', 'role', 'status', 'schoolName', 'createdAt', 'updatedAt'
-      ]);
-    }
-
-    function isSafeTeacherProfile(data, targetUid) {
-      return isAllowedUserKeys(data.keys()) &&
-             data.uid == targetUid &&
-             data.role == 'teacher' &&
-             (!('admin' in data)) &&
-             (!('isAdmin' in data)) &&
-             (!('permissions' in data)) &&
-             (!('isSuperAdmin' in data));
-    }
-
     match /users/{userId} {
-      // Users can only read their own profile; Admin has global oversight
-      allow read: if isOwner(userId) || isAdmin();
-
-      // Teacher profile creation: strictly limited to allowed fields, role teacher, status active
-      allow create: if (
-        isOwner(userId) &&
-        isSafeTeacherProfile(request.resource.data, userId) &&
-        request.resource.data.status == 'active' &&
-        request.resource.data.email == request.auth.token.email
-      ) || isAdmin();
-
-      // Teacher profile update: strictly limited to allowed fields; role and status cannot be modified
-      allow update: if (
-        isOwner(userId) &&
-        isSafeTeacherProfile(request.resource.data, userId) &&
-        request.resource.data.email == resource.data.email &&
-        resource.data.role == 'teacher' &&
-        request.resource.data.status == resource.data.status
-      ) || isAdmin();
-
-      // Only Admin can delete user profiles
-      allow delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // ==============================================================
-    // 2. Application Configurable Settings (Curriculum & Platform Parameters)
+    // 2. Application Configurable Settings (Design, Ads, WhatsApp, FCM Config)
     // ==============================================================
     match /appSettings/{settingId} {
       allow read: if true;
@@ -89,47 +44,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 2b. Official School Directory Records (Public Read, Admin Write)
-    // ==============================================================
-    match /school_directory/{schoolId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ==============================================================
-    // 3. Lesson Plans Collection (Authoritative ownerUid, No Conflicting IDs)
-    // ==============================================================
-    // Authoritative check: ownerUid must be present, match caller UID, and cannot conflict with userId
-    function isLessonPlanCleanOwner(data) {
-      return isGoogleAuth() &&
-             ('ownerUid' in data) &&
-             data.ownerUid is string &&
-             data.ownerUid == request.auth.uid &&
-             (!('userId' in data) || data.userId == request.auth.uid);
-    }
-
-    match /lesson_plans/{planId} {
-      // Teachers can only read/delete their own authoritative records; ownerless/conflicting records are admin-only
-      allow read, delete: if isLessonPlanCleanOwner(resource.data) || isAdmin();
-
-      // On create, ownerUid must equal the caller's auth UID, and if userId is present it must also match
-      allow create: if (
-        isGoogleAuth() &&
-        request.resource.data.ownerUid is string &&
-        request.resource.data.ownerUid == request.auth.uid &&
-        (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid)
-      ) || isAdmin();
-
-      // On update, ownerUid cannot be transferred/modified by teachers; conflicting userId is rejected
-      allow update: if (
-        isLessonPlanCleanOwner(resource.data) &&
-        request.resource.data.ownerUid == resource.data.ownerUid &&
-        (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid)
-      ) || isAdmin();
-    }
-
-    // ==============================================================
-    // 4. Homepage Hero Slides
+    // 3. Homepage Hero Slides
     // ==============================================================
     match /homepage_slides/{slideId} {
       allow read: if true;
@@ -137,7 +52,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 5. Website Editable Pages (About Us, Contact Us, Privacy Policy, Terms & Conditions)
+    // 4. Website Editable Pages (About Us, Contact Us, Privacy Policy, Terms & Conditions)
     // ==============================================================
     match /website_pages/{pageId} {
       allow read: if true;
@@ -145,7 +60,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 6. Shared Website Statistics and Activity Counters
+    // 5. Shared Website Statistics and Activity Counters
     // ==============================================================
     match /site_stats/{statId} {
       allow read: if true;
@@ -153,14 +68,12 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 7. News Platform: Posts with restricted view-counter increment (+1 only)
+    // 6. News Platform: Posts with restricted view-counter increment (+1 only)
     // ==============================================================
     match /posts/{postId} {
       allow read: if true;
       allow create, delete: if isAdmin();
       // Public visitors can only increment views by exactly +1 (or initialize to 1).
-      // Note: Rules enforce +1 delta and restrict updates solely to the 'views' field.
-      // Rules cannot perform stateful rate-limiting or prevent automated repetitive HTTP calls.
       allow update: if isAdmin() || (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
         request.resource.data.views is int && (
@@ -171,7 +84,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 8. Site Settings & Branding
+    // 7. Site Settings & Branding
     // ==============================================================
     match /siteSettings/branding {
       allow read: if true;
@@ -187,7 +100,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 9. Preserved News Website Collections & Validated Comments
+    // 8. News Website Collections & Validated Public Comments
     // ==============================================================
     match /categories/{catId} {
       allow read: if true;
@@ -204,7 +117,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Validation for public blog comments:
+    // Validation for public news comments:
     // Only permitted fields: name, content, postId, status, createdAt.
     // Commenters' emails and phone numbers are strictly prohibited from public comments
     // to ensure private personal info is never exposed to public reads.
@@ -225,14 +138,14 @@ service cloud.firestore {
 
     match /comments/{commentId} {
       // Public visitors can ONLY read comments whose status is 'approved' AND which do not contain private email/phone.
-      // Pending or rejected comments, or comments with private contact information, can ONLY be read by Admin.
+      // Pending or rejected comments can ONLY be read by Admin.
       allow read: if (
         resource.data.status == 'approved' &&
         (!('email' in resource.data)) &&
         (!('phone' in resource.data))
       ) || isAdmin();
 
-      // Legitimate public comment submission (status is pending or omitted, private email/phone fields strictly disallowed)
+      // Legitimate public comment submission (status is pending or omitted, private email/phone disallowed)
       allow create: if isValidPublicComment(request.resource.data) || isAdmin();
 
       // Moderation (approving, rejecting, updating status, editing, deleting) is administrator-only
@@ -245,218 +158,33 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 10. NURSERY STUDENT REPORT CARD SYSTEM (N1, N2, N3)
-    // Strict Google auth, verified email, private teacher records via ownerUid
-    // ==============================================================
-
-    function isValidNurseryStudent(data) {
-      return data.fullName is string &&
-             data.fullName.size() >= 2 &&
-             data.fullName.size() <= 120 &&
-             data.classGrade is string &&
-             data.classGrade.size() >= 1 &&
-             data.classGrade.size() <= 20 &&
-             data.ownerUid is string &&
-             data.ownerUid.size() > 0 &&
-             (data.gender == 'Boy' || data.gender == 'Girl' || data.gender == 'Gabo' || data.gender == 'Gore') &&
-             (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.size() <= 60)) &&
-             (!('parentContact' in data) || (data.parentContact is string && data.parentContact.size() <= 60)) &&
-             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20)) &&
-             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000));
-    }
-
-    // Validation for legacy general settings (does NOT require ownerUid)
-    function isValidLegacyGeneralSettings(data) {
-      return (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 120)) &&
-             (!('district' in data) || (data.district is string && data.district.size() <= 80)) &&
-             (!('sector' in data) || (data.sector is string && data.sector.size() <= 80)) &&
-             (!('cell' in data) || (data.cell is string && data.cell.size() <= 80)) &&
-             (!('village' in data) || (data.village is string && data.village.size() <= 80)) &&
-             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20));
-    }
-
-    // Validation for per-teacher school settings (strictly requires ownerUid)
-    function isValidTeacherSchoolSettings(data) {
-      return data.ownerUid is string &&
-             data.ownerUid.size() > 0 &&
-             (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 120)) &&
-             (!('district' in data) || (data.district is string && data.district.size() <= 80)) &&
-             (!('sector' in data) || (data.sector is string && data.sector.size() <= 80)) &&
-             (!('cell' in data) || (data.cell is string && data.cell.size() <= 80)) &&
-             (!('village' in data) || (data.village is string && data.village.size() <= 80)) &&
-             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20));
-    }
-
-    function isValidNurseryAssessment(data) {
-      return data.studentId is string &&
-             data.studentId.size() > 0 &&
-             data.studentId.size() <= 120 &&
-             data.ownerUid is string &&
-             data.ownerUid.size() > 0 &&
-             (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 20));
-    }
-
-    function studentBelongsToTeacher(studentId, teacherUid) {
-      return exists(/databases/$(database)/documents/nursery_students/$(studentId)) &&
-             get(/databases/$(database)/documents/nursery_students/$(studentId)).data.ownerUid == teacherUid;
-    }
-
-    // A. Nursery Students: Private per teacher via ownerUid; Admin has global oversight
-    match /nursery_students/{studentId} {
-      allow read, delete: if isOwner(resource.data.ownerUid) || isAdmin();
-
-      allow create: if (isOwner(request.resource.data.ownerUid) || isAdmin()) &&
-                       isValidNurseryStudent(request.resource.data);
-
-      allow update: if (
-        (isOwner(resource.data.ownerUid) && request.resource.data.ownerUid == resource.data.ownerUid) || 
-        isAdmin()
-      ) && isValidNurseryStudent(request.resource.data);
-    }
-
-    // B. Nursery School Settings:
-    // Legacy 'general' school profile is strictly admin-only: completely denied to teachers
-    // Teachers must only read, create, update, delete documents where ownerUid == request.auth.uid
-    // Ownership cannot be changed by teachers.
-    match /nursery_school_settings/{settingId} {
-      allow read: if (settingId == 'general' && isAdmin()) ||
-                     (settingId != 'general' && (isOwner(resource.data.ownerUid) || isAdmin()));
-
-      allow create: if (settingId == 'general' && isAdmin() && isValidLegacyGeneralSettings(request.resource.data)) ||
-                       (settingId != 'general' && (isOwner(request.resource.data.ownerUid) || isAdmin()) && isValidTeacherSchoolSettings(request.resource.data));
-
-      allow update: if (
-        (settingId == 'general' && isAdmin() && isValidLegacyGeneralSettings(request.resource.data)) ||
-        (settingId != 'general' && (
-          (isOwner(resource.data.ownerUid) && request.resource.data.ownerUid == resource.data.ownerUid) || 
-          isAdmin()
-        ) && isValidTeacherSchoolSettings(request.resource.data))
-      );
-
-      allow delete: if (settingId == 'general' && isAdmin()) ||
-                       (settingId != 'general' && (isOwner(resource.data.ownerUid) || isAdmin()));
-    }
-
-    // C. Nursery Assessments:
-    // Must belong to an existing student owned by the same teacher
-    // Cannot be attached to another teacher's student. Ownership cannot be modified.
-    match /nursery_assessments/{assessmentId} {
-      allow read, delete: if isOwner(resource.data.ownerUid) || isAdmin();
-
-      allow create: if (
-        (
-          isOwner(request.resource.data.ownerUid) &&
-          studentBelongsToTeacher(request.resource.data.studentId, request.auth.uid) &&
-          isValidNurseryAssessment(request.resource.data)
-        ) ||
-        (
-          isAdmin() &&
-          exists(/databases/$(database)/documents/nursery_students/$(request.resource.data.studentId)) &&
-          isValidNurseryAssessment(request.resource.data)
-        )
-      );
-
-      allow update: if (
-        (
-          isOwner(resource.data.ownerUid) &&
-          request.resource.data.ownerUid == resource.data.ownerUid &&
-          request.resource.data.studentId == resource.data.studentId &&
-          studentBelongsToTeacher(resource.data.studentId, request.auth.uid) &&
-          isValidNurseryAssessment(request.resource.data)
-        ) ||
-        (
-          isAdmin() &&
-          exists(/databases/$(database)/documents/nursery_students/$(request.resource.data.studentId)) &&
-          isValidNurseryAssessment(request.resource.data)
-        )
-      );
-    }
-
-    // ==============================================================
-    // 11. Teacher Profiles Collection (Private per teacher via ownerUid; Admin global oversight)
-    // ==============================================================
-    function isValidTeacherProfile(data) {
-      return data.ownerUid is string &&
-             data.ownerUid.size() > 0 &&
-             data.email is string &&
-             data.email.size() > 0 &&
-             (!('admin' in data)) &&
-             (!('isAdmin' in data)) &&
-             (!('isSuperAdmin' in data)) &&
-             (!('permissions' in data)) &&
-             (!('role' in data) || data.role == 'teacher') &&
-             (!('fullName' in data) || (data.fullName is string && data.fullName.size() <= 120)) &&
-             (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
-             (!('gender' in data) || (data.gender is string && data.gender.size() <= 20)) &&
-             (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 120)) &&
-             (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 100)) &&
-             (!('experienceYears' in data) || (data.experienceYears is string && data.experienceYears.size() <= 30) || data.experienceYears is int) &&
-             (!('district' in data) || (data.district is string && data.district.size() <= 80)) &&
-             (!('sector' in data) || (data.sector is string && data.sector.size() <= 80)) &&
-             (!('bio' in data) || (data.bio is string && data.bio.size() <= 2000));
-    }
-
-    match /teacher_profiles/{profileId} {
-      // Each teacher can only read their own profile; Admin has global oversight
-      allow read: if isOwner(resource.data.ownerUid) || isAdmin();
-
-      // On creation, ownerUid must equal caller UID, email must equal auth token email, and no admin claims
-      allow create: if (
-        (
-          isOwner(request.resource.data.ownerUid) &&
-          request.resource.data.ownerUid == request.auth.uid &&
-          request.resource.data.email == request.auth.token.email &&
-          isValidTeacherProfile(request.resource.data)
-        ) ||
-        (isAdmin() && isValidTeacherProfile(request.resource.data))
-      );
-
-      // On update, ownership and email cannot be changed by teachers, no admin claims allowed
-      allow update: if (
-        (
-          isOwner(resource.data.ownerUid) &&
-          request.resource.data.ownerUid == resource.data.ownerUid &&
-          request.resource.data.email == resource.data.email &&
-          isValidTeacherProfile(request.resource.data)
-        ) ||
-        (isAdmin() && isValidTeacherProfile(request.resource.data))
-      );
-
-      // Only admin can delete teacher profiles
-      allow delete: if isAdmin();
-    }
-
-    // ==============================================================
-    // 12. Announcements & Notification History (FCM Push)
+    // 9. Breaking News Announcements & Public Push Notification Subscriptions
     // ==============================================================
     match /announcements/{announcementId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ==============================================================
-    // 13. FCM Push Notification Device Tokens
-    // ==============================================================
+    function isValidPublicFcmToken(data) {
+      return data.id is string &&
+             data.id.size() > 0 &&
+             data.id.size() <= 128 &&
+             data.token is string &&
+             data.token.size() >= 10 &&
+             data.token.size() <= 4096 &&
+             (!('ownerUid' in data) || data.ownerUid == 'guest_device' || (isAuthenticated() && data.ownerUid == request.auth.uid));
+    }
+
     match /fcm_tokens/{tokenId} {
-      // Users can read their own token; Admin can read all tokens for push dispatch
-      allow get: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid) || isAdmin();
+      // Admin-only read/list/update/delete so visitor push tokens remain strictly confidential
+      allow get, list, update, delete: if isAdmin();
 
-      // Admin can list all tokens to broadcast announcements;
-      // Teachers can list only their own tokens
-      allow list: if isAdmin() || (isAuthenticated() && resource.data.ownerUid == request.auth.uid);
-      
-      // Teachers can register their own device tokens; Admin can manage all tokens
-      allow create: if (isAuthenticated() && request.resource.data.ownerUid == request.auth.uid) || isAdmin();
-
-      // Teachers can update only their own existing device tokens without transferring ownership
-      allow update: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid && request.resource.data.ownerUid == request.auth.uid) || isAdmin();
-
-      // Teachers can delete only their own device tokens; Admin can remove stale tokens
-      allow delete: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid) || isAdmin();
+      // Public readers can register a breaking news push subscription token without logging in
+      allow create: if isAdmin() || isValidPublicFcmToken(request.resource.data);
     }
 
     // ==============================================================
-    // 14. Default deny for all other documents
+    // 10. Default deny for all other or legacy educational collections
     // ==============================================================
     match /{document=**} {
       allow read, write: if false;

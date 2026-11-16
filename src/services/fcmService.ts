@@ -1,12 +1,11 @@
 /**
  * Firebase Cloud Messaging (FCM) & Push Notifications Service
- * for ISEZERANO ONLINE – GS GITUMBA
- * 
- * Delivers real push notifications to teacher phone/computer screens
- * even when the teacher is logged out or the website is closed.
+ * for ISEZERANO ONLINE
+ *
+ * Delivers real push notifications to subscriber phones and computers
+ * even when visitors are away from the website.
  */
 
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { 
   collection, 
   doc, 
@@ -19,7 +18,7 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { getFirebaseApp, initFirestoreIfConfigured, getFirebaseAuth } from './storageService';
+import { getFirebaseApp, initFirestoreIfConfigured, getFirebaseAuth } from '../config/firebase';
 import { PushAnnouncement, DeviceTokenInfo, FcmConfigSettings } from '../types/platform';
 
 const LOCAL_STORAGE_FCM_TOKEN_KEY = 'isezerano_fcm_device_token';
@@ -258,6 +257,7 @@ export const requestPushPermissionAndGetToken = async (
       };
     }
 
+    const { getMessaging, getToken } = await import('firebase/messaging');
     const messaging = getMessaging(app);
     const vapidKey = await getActiveVapidKey();
 
@@ -324,10 +324,10 @@ export const requestPushPermissionAndGetToken = async (
       }
     }
 
-    // 6. Show test notification to confirm to teacher that it works
+    // 6. Show test notification to confirm to visitor that it works
     showLocalTestNotification(
-      'ISEZERANO ONLINE – GS GITUMBA',
-      'Amatangazo ya Push Notifications yamaze gufungurwa neza kuri iki gikoresho!'
+      'ISEZERANO ONLINE',
+      'Amatangazo n\'amakuru mashya (Push Notifications) yamaze gufungurwa neza kuri iki gikoresho!'
     );
 
     return { success: true, token };
@@ -363,12 +363,12 @@ export const showLocalTestNotification = async (title: string, body: string, not
   try {
     const sw = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
     if (sw) {
-      await (sw as any).showNotification(title || 'ISEZERANO ONLINE – GS GITUMBA', {
+      await (sw as any).showNotification(title || 'ISEZERANO ONLINE', {
         body,
         data: {
           url: '/?notice=' + (noticeId || 'test'),
           noticeId: noticeId || 'test',
-          requiresAuth: true
+          requiresAuth: false
         },
         requireInteraction: true,
         vibrate: [200, 100, 200]
@@ -465,8 +465,8 @@ export const sendPushAnnouncement = async (
   ).toLowerCase().trim();
 
   const authorDisplayName = typeof adminUserOrEmail === 'string' 
-    ? (maybeDisplayName || 'Administrator (GS GITUMBA)')
-    : (adminUserOrEmail.displayName || 'Administrator (GS GITUMBA)');
+    ? (maybeDisplayName || 'Administrator (ISEZERANO ONLINE)')
+    : (adminUserOrEmail.displayName || 'Administrator (ISEZERANO ONLINE)');
 
   if (email !== 'twizerefelix90@gmail.com') {
     return {
@@ -486,10 +486,10 @@ export const sendPushAnnouncement = async (
       sender: email,
       senderName: authorDisplayName,
       createdAt: new Date().toISOString(),
-      target: (data.targetAudience as any) || 'all_teachers',
+      target: (data.targetAudience as any) || 'all_readers',
       targetCount: 0,
       priority: (data.priority === 'urgent' ? 'high' : data.priority) || 'normal',
-      requiresAuth: true,
+      requiresAuth: false,
       actionUrl: data.actionUrl || `/?notice=${noticeId}`,
       status: 'sent'
     };

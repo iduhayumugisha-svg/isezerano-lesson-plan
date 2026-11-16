@@ -284,7 +284,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
             <span className="inline-flex items-center space-x-1.5">
               <User className="w-3.5 h-3.5 text-slate-400" />
               <span className="font-medium text-slate-800">
-                {activePost.author?.name || 'GS GITUMBA Editorial'}
+                {activePost.author?.name || 'ISEZERANO Editorial'}
               </span>
               {activePost.author?.role && (
                 <span className="text-slate-500">({activePost.author.role})</span>
@@ -332,6 +332,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
             <ArticleThumbnailImage
               src={featuredThumb}
               alt={activePost.thumbnailAlt || activePost.title}
+              priority={true}
               className="w-full h-full object-cover"
             />
           </figure>
@@ -447,20 +448,20 @@ export const BlogView: React.FC<BlogViewProps> = ({
     branding?.showWebsiteName !== false
       ? branding?.platformTitle?.trim() || 'ISEZERANO ONLINE'
       : '';
-  const schoolSubtitleLabel = branding?.platformSubtitle?.trim() || 'GS GITUMBA';
+  const portalSubtitleLabel = branding?.platformSubtitle?.trim() || 'Newsroom';
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
       {/* Editorial Section Header */}
       <div className="border-b border-slate-200 pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1.5">
-          {(siteNameLabel || schoolSubtitleLabel) && (
+          {(siteNameLabel || portalSubtitleLabel) && (
             <div className="text-xs font-bold uppercase tracking-wider text-teal-800">
-              {[siteNameLabel, schoolSubtitleLabel].filter(Boolean).join(' · ')}
+              {[siteNameLabel, portalSubtitleLabel].filter(Boolean).join(' · ')}
             </div>
           )}
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            School Blog &amp; Educational Articles
+            News &amp; Editorial Articles
           </h1>
           {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
             <p className="text-xs sm:text-sm text-slate-600 max-w-2xl">
@@ -526,7 +527,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
           </h2>
           <p className="text-sm text-slate-500 max-w-md mx-auto">
             {posts.length === 0
-              ? 'Published school news, announcements, and educational articles will appear here.'
+              ? 'Published breaking news, special reports, and announcements will appear here.'
               : 'Try selecting another category or clearing your search filter.'}
           </p>
         </div>
@@ -575,7 +576,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
                     <span className="font-medium text-slate-700 truncate">
-                      {post.author?.name || 'GS GITUMBA Editorial'}
+                      {post.author?.name || 'ISEZERANO Editorial'}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
                       <button

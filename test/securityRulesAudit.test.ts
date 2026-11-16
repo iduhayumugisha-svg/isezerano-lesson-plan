@@ -1,34 +1,21 @@
 /**
- * Comprehensive Security and Functionality Audit Test Suite for ISEZERANO ONLINE
- * 
- * Verifies all security requirements:
+ * Security Rules Audit Test Suite for ISEZERANO ONLINE (News-Only, Admin-Only Platform)
+ *
+ * Verifies:
  * 1. Strict single administrator: ONLY twizerefelix90@gmail.com with verified Google auth.
- *    Any other user with admin: true claim is STRICTLY REJECTED.
- * 2. User profile field protection:
- *    - Teacher profile creation & updates restricted to 8 permitted fields.
- *    - Injection of admin, isAdmin, permissions, or role elevation is STRICTLY REJECTED.
- *    - Role and status are immutable by teachers.
- *    - Admin retains full management capability.
- * 3. Public comments privacy & moderation:
- *    - Public visitors can ONLY read comments whose status is 'approved' AND which do not contain private emails/phones.
- *    - Comments with status 'pending' or 'rejected' are strictly denied to public visitors and visible to Admin only.
- *    - Comments with private email addresses are hidden from public reads and visible to Admin only.
- *    - Public submissions with email/phone attached are blocked by isValidPublicComment.
- *    - Public submission with valid fields (name, content, postId, status: 'pending', createdAt) succeeds.
- *    - Public visitors cannot update or delete comments; Admin can moderate/update and delete.
- * 4. Post view counter:
- *    - Exact +1 increment (or initialization to 1) succeeds.
- *    - Attempting +2 or higher jump fails.
- *    - Attempting to decrease fails.
- *    - Explains and demonstrates that rules enforce +1 per request, but cannot perform stateful rate-limiting.
- * 5. Legacy general school settings: nursery_school_settings/general without ownerUid
- *    can be managed by twizerefelix90@gmail.com, but is completely denied to teachers.
- * 6. Lesson plans: ownerUid is authoritative; conflicting userId and ownerless records
- *    are blocked for teachers and restricted to administrator oversight.
- * 7. Multi-teacher isolation: Nursery students and assessments are completely private per teacher.
- * 8. Assessment attachment: cannot attach assessment to another teacher's student.
- * 9. Default deny for unauthenticated, anonymous, and non-Google providers.
+ *    Any other user (even with admin: true claim or non-Google/unverified session) is REJECTED.
+ * 2. Users collection is Admin-only (no public/teacher registration or profile self-service).
+ * 3. Deleted educational collections (lesson_plans, nursery_students, nursery_school_settings,
+ *    nursery_assessments, teacher_profiles, school_directory) are absent from firestore.rules and default-denied.
+ * 4. Public comments privacy & moderation (`approved` without email/phone public; `pending`/`rejected` Admin-only).
+ * 5. Post view counter exact +1 increment only.
+ * 6. News collections, static pages, branding & announcements (public read, Admin-only write).
+ * 7. Breaking news FCM token subscriptions (public create validated, read/list/update/delete Admin-only).
+ * 8. Storage upload rules restricted exclusively to verified Admin.
  */
+
+import fs from 'node:fs';
+import path from 'node:path';
 
 interface AuthContext {
   uid?: string;
@@ -42,37 +29,25 @@ interface AuthContext {
   };
 }
 
-interface FirestoreState {
-  documents: Map<string, Record<string, any>>;
-}
-
 class FirestoreRulesEngine {
-  private state: FirestoreState;
+  private documents: Map<string, Record<string, any>>;
 
   constructor(initialDocs?: Record<string, any>) {
-    this.state = {
-      documents: new Map()
-    };
+    this.documents = new Map();
     if (initialDocs) {
-      for (const [path, data] of Object.entries(initialDocs)) {
-        this.state.documents.set(path, JSON.parse(JSON.stringify(data)));
+      for (const [docPath, data] of Object.entries(initialDocs)) {
+        this.documents.set(docPath, JSON.parse(JSON.stringify(data)));
       }
     }
   }
 
-  public getDoc(path: string): Record<string, any> | null {
-    return this.state.documents.get(path) || null;
+  public getDoc(docPath: string): Record<string, any> | null {
+    return this.documents.get(docPath) || null;
   }
 
-  public setDoc(path: string, data: Record<string, any>): void {
-    this.state.documents.set(path, JSON.parse(JSON.stringify(data)));
+  public setDoc(docPath: string, data: Record<string, any>): void {
+    this.documents.set(docPath, JSON.parse(JSON.stringify(data)));
   }
-
-  public deleteDoc(path: string): void {
-    this.state.documents.delete(path);
-  }
-
-  // --- Rule evaluation helpers mirroring firestore.rules exactly ---
 
   private isAuthenticated(auth: AuthContext | null): boolean {
     return auth !== null && auth.uid !== undefined;
@@ -87,94 +62,17 @@ class FirestoreRulesEngine {
   }
 
   private isAdmin(auth: AuthContext | null): boolean {
-    if (!this.isAuthenticated(auth)) return false;
+    if (!this.isGoogleAuth(auth)) return false;
     const email = auth?.token?.email;
     if (!email) return false;
     return /^twizerefelix90@gmail\.com$/i.test(email);
-  }
-
-  private isOwner(auth: AuthContext | null, uid: string): boolean {
-    return this.isGoogleAuth(auth) && auth?.uid === uid;
-  }
-
-  // Permitted UserProfile fields
-  private isAllowedUserKeys(keys: string[]): boolean {
-    const allowed = new Set([
-      'uid', 'email', 'displayName', 'role', 'status', 'schoolName', 'createdAt', 'updatedAt'
-    ]);
-    return keys.every(k => allowed.has(k));
-  }
-
-  private isSafeTeacherProfile(data: any, targetUid: string): boolean {
-    if (!data || typeof data !== 'object') return false;
-    const keys = Object.keys(data);
-    if (!this.isAllowedUserKeys(keys)) return false;
-    if (data.uid !== targetUid) return false;
-    if (data.role !== 'teacher') return false;
-    if ('admin' in data || 'isAdmin' in data || 'permissions' in data || 'isSuperAdmin' in data) {
-      return false;
-    }
-    return true;
-  }
-
-  private isValidNurseryStudent(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (typeof data.fullName !== 'string' || data.fullName.length < 2 || data.fullName.length > 120) return false;
-    if (typeof data.classGrade !== 'string' || data.classGrade.length < 1 || data.classGrade.length > 20) return false;
-    if (typeof data.ownerUid !== 'string' || data.ownerUid.length === 0) return false;
-    const validGenders = ['Boy', 'Girl', 'Gabo', 'Gore'];
-    if (!validGenders.includes(data.gender)) return false;
-    if ('registrationNumber' in data && (typeof data.registrationNumber !== 'string' || data.registrationNumber.length > 60)) return false;
-    if ('parentContact' in data && (typeof data.parentContact !== 'string' || data.parentContact.length > 60)) return false;
-    if ('academicYear' in data && (typeof data.academicYear !== 'string' || data.academicYear.length > 20)) return false;
-    if ('photoUrl' in data && (typeof data.photoUrl !== 'string' || data.photoUrl.length > 2000)) return false;
-    return true;
-  }
-
-  private isValidLegacyGeneralSettings(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if ('schoolName' in data && (typeof data.schoolName !== 'string' || data.schoolName.length > 120)) return false;
-    if ('district' in data && (typeof data.district !== 'string' || data.district.length > 80)) return false;
-    if ('sector' in data && (typeof data.sector !== 'string' || data.sector.length > 80)) return false;
-    if ('cell' in data && (typeof data.cell !== 'string' || data.cell.length > 80)) return false;
-    if ('village' in data && (typeof data.village !== 'string' || data.village.length > 80)) return false;
-    if ('academicYear' in data && (typeof data.academicYear !== 'string' || data.academicYear.length > 20)) return false;
-    return true;
-  }
-
-  private isValidTeacherSchoolSettings(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (typeof data.ownerUid !== 'string' || data.ownerUid.length === 0) return false;
-    return this.isValidLegacyGeneralSettings(data);
-  }
-
-  private isValidNurseryAssessment(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (typeof data.studentId !== 'string' || data.studentId.length === 0 || data.studentId.length > 120) return false;
-    if (typeof data.ownerUid !== 'string' || data.ownerUid.length === 0) return false;
-    if ('academicYear' in data && (typeof data.academicYear !== 'string' || data.academicYear.length > 20)) return false;
-    return true;
-  }
-
-  private studentBelongsToTeacher(studentId: string, teacherUid: string): boolean {
-    const studentPath = `nursery_students/${studentId}`;
-    const student = this.getDoc(studentPath);
-    return student !== null && student.ownerUid === teacherUid;
-  }
-
-  private isLessonPlanCleanOwner(auth: AuthContext | null, data: any): boolean {
-    if (!this.isGoogleAuth(auth) || !auth?.uid) return false;
-    if (!('ownerUid' in data) || typeof data.ownerUid !== 'string') return false;
-    if (data.ownerUid !== auth.uid) return false;
-    if ('userId' in data && data.userId !== auth.uid) return false;
-    return true;
   }
 
   private isValidPublicComment(data: any): boolean {
     if (!data || typeof data !== 'object') return false;
     const allowed = new Set(['name', 'content', 'postId', 'createdAt', 'status']);
     const keys = Object.keys(data);
-    if (!keys.every(k => allowed.has(k))) return false;
+    if (!keys.every((k) => allowed.has(k))) return false;
     if (typeof data.name !== 'string' || data.name.length < 2 || data.name.length > 80) return false;
     if (typeof data.content !== 'string' || data.content.length < 2 || data.content.length > 2000) return false;
     if (typeof data.postId !== 'string' || data.postId.length === 0 || data.postId.length > 120) return false;
@@ -182,317 +80,100 @@ class FirestoreRulesEngine {
     return true;
   }
 
-  // --- Operations evaluation ---
-
-  // 1. Users collection
-  public canReadUser(auth: AuthContext | null, targetUserId: string): boolean {
-    return this.isOwner(auth, targetUserId) || this.isAdmin(auth);
+  private isValidPublicFcmToken(auth: AuthContext | null, data: any): boolean {
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.id !== 'string' || data.id.length === 0 || data.id.length > 128) return false;
+    if (typeof data.token !== 'string' || data.token.length < 10 || data.token.length > 4096) return false;
+    if ('ownerUid' in data) {
+      if (data.ownerUid === 'guest_device') return true;
+      return this.isAuthenticated(auth) && data.ownerUid === auth?.uid;
+    }
+    return true;
   }
 
-  public canCreateUser(auth: AuthContext | null, targetUserId: string, newUserData: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    if (!this.isOwner(auth, targetUserId)) return false;
-    return (
-      this.isSafeTeacherProfile(newUserData, targetUserId) &&
-      newUserData.status === 'active' &&
-      newUserData.email === auth?.token?.email
-    );
-  }
-
-  public canUpdateUser(auth: AuthContext | null, targetUserId: string, existingData: any, updatedData: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    if (!this.isOwner(auth, targetUserId)) return false;
-    return (
-      this.isSafeTeacherProfile(updatedData, targetUidOrSelf(targetUserId)) &&
-      updatedData.email === existingData.email &&
-      existingData.role === 'teacher' &&
-      updatedData.status === existingData.status
-    );
-  }
-
-  public canDeleteUser(auth: AuthContext | null, targetUserId: string): boolean {
+  // 1. Users (Admin-only)
+  public canAccessUser(auth: AuthContext | null): boolean {
     return this.isAdmin(auth);
   }
 
-  // 2. Nursery Students collection
-  public canReadNurseryStudent(auth: AuthContext | null, studentId: string): boolean {
-    const existing = this.getDoc(`nursery_students/${studentId}`);
-    if (!existing) return false;
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
+  // 2. Removed Educational Collections -> Default Deny
+  public canAccessRemovedEducationalCollection(): boolean {
+    return false;
   }
 
-  public canCreateNurseryStudent(auth: AuthContext | null, studentId: string, data: any): boolean {
-    const isValid = this.isValidNurseryStudent(data);
-    if (!isValid) return false;
-    return this.isOwner(auth, data.ownerUid) || this.isAdmin(auth);
-  }
-
-  public canUpdateNurseryStudent(auth: AuthContext | null, studentId: string, existing: any, updated: any): boolean {
-    const isValid = this.isValidNurseryStudent(updated);
-    if (!isValid) return false;
-    if (this.isAdmin(auth)) return true;
-    return (
-      this.isOwner(auth, existing.ownerUid) &&
-      updated.ownerUid === existing.ownerUid
-    );
-  }
-
-  public canDeleteNurseryStudent(auth: AuthContext | null, studentId: string): boolean {
-    const existing = this.getDoc(`nursery_students/${studentId}`);
-    if (!existing) return false;
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  // 3. Nursery School Settings
-  public canReadSchoolSettings(auth: AuthContext | null, settingId: string): boolean {
-    const existing = this.getDoc(`nursery_school_settings/${settingId}`);
-    if (!existing) return false;
-    if (settingId === 'general') {
-      return this.isAdmin(auth);
-    }
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  public canCreateSchoolSettings(auth: AuthContext | null, settingId: string, data: any): boolean {
-    if (settingId === 'general') {
-      return this.isAdmin(auth) && this.isValidLegacyGeneralSettings(data);
-    }
-    if (!this.isValidTeacherSchoolSettings(data)) return false;
-    return this.isOwner(auth, data.ownerUid) || this.isAdmin(auth);
-  }
-
-  public canUpdateSchoolSettings(auth: AuthContext | null, settingId: string, existing: any, updated: any): boolean {
-    if (settingId === 'general') {
-      return this.isAdmin(auth) && this.isValidLegacyGeneralSettings(updated);
-    }
-    if (!this.isValidTeacherSchoolSettings(updated)) return false;
-    if (this.isAdmin(auth)) return true;
-    return (
-      this.isOwner(auth, existing.ownerUid) &&
-      updated.ownerUid === existing.ownerUid
-    );
-  }
-
-  public canDeleteSchoolSettings(auth: AuthContext | null, settingId: string): boolean {
-    const existing = this.getDoc(`nursery_school_settings/${settingId}`);
-    if (!existing) return false;
-    if (settingId === 'general') {
-      return this.isAdmin(auth);
-    }
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  // 4. Nursery Assessments
-  public canReadNurseryAssessment(auth: AuthContext | null, assessmentId: string): boolean {
-    const existing = this.getDoc(`nursery_assessments/${assessmentId}`);
-    if (!existing) return false;
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  public canCreateNurseryAssessment(auth: AuthContext | null, assessmentId: string, data: any): boolean {
-    if (!this.isGoogleAuth(auth)) return false;
-    if (!this.isValidNurseryAssessment(data)) return false;
-    if (this.isAdmin(auth)) {
-      return this.getDoc(`nursery_students/${data.studentId}`) !== null;
-    }
-    return (
-      this.isOwner(auth, data.ownerUid) &&
-      this.studentBelongsToTeacher(data.studentId, auth!.uid!)
-    );
-  }
-
-  public canUpdateNurseryAssessment(auth: AuthContext | null, assessmentId: string, existing: any, updated: any): boolean {
-    if (!this.isGoogleAuth(auth)) return false;
-    if (!this.isValidNurseryAssessment(updated)) return false;
-    if (this.isAdmin(auth)) {
-      return this.getDoc(`nursery_students/${updated.studentId}`) !== null;
-    }
-    return (
-      this.isOwner(auth, existing.ownerUid) &&
-      updated.ownerUid === existing.ownerUid &&
-      updated.studentId === existing.studentId &&
-      this.studentBelongsToTeacher(existing.studentId, auth!.uid!)
-    );
-  }
-
-  public canDeleteNurseryAssessment(auth: AuthContext | null, assessmentId: string): boolean {
-    const existing = this.getDoc(`nursery_assessments/${assessmentId}`);
-    if (!existing) return false;
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  // 5. Lesson Plans
-  public canReadLessonPlan(auth: AuthContext | null, planId: string): boolean {
-    const existing = this.getDoc(`lesson_plans/${planId}`);
-    if (!existing) return false;
-    return this.isLessonPlanCleanOwner(auth, existing) || this.isAdmin(auth);
-  }
-
-  public canCreateLessonPlan(auth: AuthContext | null, planId: string, data: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    if (!this.isGoogleAuth(auth) || !auth?.uid) return false;
-    if (typeof data.ownerUid !== 'string' || data.ownerUid !== auth.uid) return false;
-    if ('userId' in data && data.userId !== auth.uid) return false;
+  // 3. Posts
+  public canReadPost(): boolean {
     return true;
   }
 
-  public canUpdateLessonPlan(auth: AuthContext | null, planId: string, existing: any, updated: any): boolean {
+  public canCreateOrDeletePost(auth: AuthContext | null): boolean {
+    return this.isAdmin(auth);
+  }
+
+  public canUpdatePost(auth: AuthContext | null, existing: any, updated: any): boolean {
     if (this.isAdmin(auth)) return true;
-    if (!this.isLessonPlanCleanOwner(auth, existing)) return false;
-    if (updated.ownerUid !== existing.ownerUid) return false;
-    if ('userId' in updated && updated.userId !== auth!.uid) return false;
-    return true;
-  }
-
-  public canDeleteLessonPlan(auth: AuthContext | null, planId: string): boolean {
-    const existing = this.getDoc(`lesson_plans/${planId}`);
-    if (!existing) return false;
-    return this.isLessonPlanCleanOwner(auth, existing) || this.isAdmin(auth);
-  }
-
-  // 6. Posts (News) and View-Counter Increment
-  public canReadPost(auth: AuthContext | null, postId: string): boolean {
-    return true;
-  }
-
-  public canUpdatePost(auth: AuthContext | null, postId: string, existing: any, updated: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    // Check diff affectedKeys hasOnly(['views'])
     const updatedKeys = Object.keys(updated);
-    const changedKeys = updatedKeys.filter(k => updated[k] !== existing[k]);
-    if (changedKeys.length !== 1 || changedKeys[0] !== 'views') {
-      return false;
-    }
-    if (typeof updated.views !== 'number' || !Number.isInteger(updated.views)) {
-      return false;
-    }
-    // Condition: (!('views' in existing) && updated.views == 1) || (updated.views == existing.views + 1)
-    if (!('views' in existing)) {
-      return updated.views === 1;
-    }
+    const changedKeys = updatedKeys.filter((k) => updated[k] !== existing[k]);
+    if (changedKeys.length !== 1 || changedKeys[0] !== 'views') return false;
+    if (typeof updated.views !== 'number' || !Number.isInteger(updated.views)) return false;
+    if (!('views' in existing)) return updated.views === 1;
     return updated.views === existing.views + 1;
   }
 
-  // 7. Comments
+  // 4. Comments
   public canReadComment(auth: AuthContext | null, commentId: string): boolean {
     const existing = this.getDoc(`comments/${commentId}`);
     if (!existing) return false;
     if (this.isAdmin(auth)) return true;
-    // Public read requires: status == 'approved' && !('email' in existing) && !('phone' in existing)
-    return (
-      existing.status === 'approved' &&
-      !('email' in existing) &&
-      !('phone' in existing)
-    );
+    return existing.status === 'approved' && !('email' in existing) && !('phone' in existing);
   }
 
-  public canCreateComment(auth: AuthContext | null, commentId: string, data: any): boolean {
+  public canCreateComment(auth: AuthContext | null, data: any): boolean {
     if (this.isAdmin(auth)) return true;
     return this.isValidPublicComment(data);
   }
 
-  public canUpdateComment(auth: AuthContext | null, commentId: string): boolean {
+  public canModerateComment(auth: AuthContext | null): boolean {
     return this.isAdmin(auth);
   }
 
-  public canDeleteComment(auth: AuthContext | null, commentId: string): boolean {
-    return this.isAdmin(auth);
-  }
-
-  // 8. Teacher Profiles collection
-  private isValidTeacherProfile(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (typeof data.ownerUid !== 'string' || data.ownerUid.length === 0) return false;
-    if (typeof data.email !== 'string' || data.email.length === 0) return false;
-    if ('admin' in data || 'isAdmin' in data || 'isSuperAdmin' in data || 'permissions' in data) return false;
-    if ('role' in data && data.role !== 'teacher') return false;
-    if ('fullName' in data && (typeof data.fullName !== 'string' || data.fullName.length > 120)) return false;
-    if ('phone' in data && (typeof data.phone !== 'string' || data.phone.length > 40)) return false;
-    if ('gender' in data && (typeof data.gender !== 'string' || data.gender.length > 20)) return false;
-    if ('schoolName' in data && (typeof data.schoolName !== 'string' || data.schoolName.length > 120)) return false;
-    if ('qualification' in data && (typeof data.qualification !== 'string' || data.qualification.length > 100)) return false;
-    if ('district' in data && (typeof data.district !== 'string' || data.district.length > 80)) return false;
-    if ('sector' in data && (typeof data.sector !== 'string' || data.sector.length > 80)) return false;
-    if ('bio' in data && (typeof data.bio !== 'string' || data.bio.length > 2000)) return false;
+  // 5. Public CMS collections (categories, website_pages, appSettings, siteSettings, announcements)
+  public canReadPublicCms(): boolean {
     return true;
   }
 
-  public canReadTeacherProfile(auth: AuthContext | null, profileId: string): boolean {
-    const existing = this.getDoc(`teacher_profiles/${profileId}`);
-    if (!existing) return false;
-    return this.isOwner(auth, existing.ownerUid) || this.isAdmin(auth);
-  }
-
-  public canCreateTeacherProfile(auth: AuthContext | null, profileId: string, data: any): boolean {
-    if (!this.isValidTeacherProfile(data)) return false;
-    if (this.isAdmin(auth)) return true;
-    return (
-      this.isOwner(auth, data.ownerUid) &&
-      data.ownerUid === auth?.uid &&
-      data.email === auth?.token?.email
-    );
-  }
-
-  public canUpdateTeacherProfile(auth: AuthContext | null, profileId: string, existing: any, updated: any): boolean {
-    if (!this.isValidTeacherProfile(updated)) return false;
-    if (this.isAdmin(auth)) return true;
-    return (
-      this.isOwner(auth, existing.ownerUid) &&
-      updated.ownerUid === existing.ownerUid &&
-      updated.email === existing.email
-    );
-  }
-
-  public canDeleteTeacherProfile(auth: AuthContext | null, profileId: string): boolean {
+  public canWritePublicCms(auth: AuthContext | null): boolean {
     return this.isAdmin(auth);
   }
 
-  // 9. Announcements (FCM)
-  public canReadAnnouncement(auth: AuthContext | null, announcementId: string): boolean {
-    return true;
+  // 6. FCM Tokens
+  public canCreateFcmToken(auth: AuthContext | null, data: any): boolean {
+    if (this.isAdmin(auth)) return true;
+    return this.isValidPublicFcmToken(auth, data);
   }
 
-  public canWriteAnnouncement(auth: AuthContext | null, announcementId: string): boolean {
+  public canReadOrManageFcmToken(auth: AuthContext | null): boolean {
     return this.isAdmin(auth);
   }
 
-  // 10. FCM Device Tokens
-  public canReadFcmToken(auth: AuthContext | null, tokenId: string): boolean {
-    const existing = this.getDoc(`fcm_tokens/${tokenId}`);
-    if (!existing) return false;
-    if (this.isAdmin(auth)) return true;
-    return !!(auth && auth.uid && existing.ownerUid === auth.uid);
-  }
-
-  public canCreateFcmToken(auth: AuthContext | null, tokenId: string, data: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    return !!(auth && auth.uid && data && data.ownerUid === auth.uid);
-  }
-
-  public canUpdateFcmToken(auth: AuthContext | null, tokenId: string, existing: any, updated: any): boolean {
-    if (this.isAdmin(auth)) return true;
-    return !!(auth && auth.uid && existing.ownerUid === auth.uid && updated.ownerUid === auth.uid);
-  }
-
-  public canDeleteFcmToken(auth: AuthContext | null, tokenId: string): boolean {
-    const existing = this.getDoc(`fcm_tokens/${tokenId}`);
-    if (!existing) return false;
-    if (this.isAdmin(auth)) return true;
-    return !!(auth && auth.uid && existing.ownerUid === auth.uid);
+  // 7. Storage upload rule evaluation
+  public canUploadStorageMedia(
+    auth: AuthContext | null,
+    contentType: string,
+    sizeBytes: number,
+    maxBytes: number
+  ): boolean {
+    return (
+      this.isAdmin(auth) &&
+      contentType.startsWith('image/') &&
+      sizeBytes < maxBytes
+    );
   }
 }
-
-function targetUidOrSelf(targetUserId: string): string {
-  return targetUserId;
-}
-
-// =========================================================================
-// RUN ALL TESTS AGAINST THE RULES ENGINE
-// =========================================================================
 
 export function runSecurityAuditTests() {
   console.log('===========================================================');
-  console.log('STARTING FIRESTORE SECURITY RULES COMPREHENSIVE AUDIT TEST');
+  console.log('STARTING FIRESTORE & STORAGE SECURITY AUDIT (NEWS-ONLY)');
   console.log('===========================================================');
 
   let passed = 0;
@@ -508,25 +189,6 @@ export function runSecurityAuditTests() {
     }
   }
 
-  // Define Principals
-  const teacherA: AuthContext = {
-    uid: 'teacher-a-uid',
-    token: {
-      email: 'teacher.a@gmail.com',
-      email_verified: true,
-      firebase: { sign_in_provider: 'google.com' }
-    }
-  };
-
-  const teacherB: AuthContext = {
-    uid: 'teacher-b-uid',
-    token: {
-      email: 'teacher.b@gmail.com',
-      email_verified: true,
-      firebase: { sign_in_provider: 'google.com' }
-    }
-  };
-
   const admin: AuthContext = {
     uid: 'admin-felix-uid',
     token: {
@@ -534,6 +196,15 @@ export function runSecurityAuditTests() {
       email_verified: true,
       admin: true,
       firebase: { sign_in_provider: 'google.com' }
+    }
+  };
+
+  const unverifiedAdminEmail: AuthContext = {
+    uid: 'unverified-admin-uid',
+    token: {
+      email: 'twizerefelix90@gmail.com',
+      email_verified: false,
+      firebase: { sign_in_provider: 'password' }
     }
   };
 
@@ -547,102 +218,34 @@ export function runSecurityAuditTests() {
     }
   };
 
-  const anonymousUser: AuthContext = {
-    uid: 'anon-user-123',
+  const randomGoogleUser: AuthContext = {
+    uid: 'visitor-google-uid',
     token: {
-      email_verified: false,
-      firebase: { sign_in_provider: 'anonymous' }
+      email: 'reader@gmail.com',
+      email_verified: true,
+      firebase: { sign_in_provider: 'google.com' }
     }
   };
 
-  const unauthenticated: AuthContext | null = null;
-
-  // Initialize engine with seed records
   const engine = new FirestoreRulesEngine({
-    // Student belonging to Teacher B
-    'nursery_students/student-b-1': {
-      fullName: 'Keza Marie',
-      classGrade: 'N1',
-      gender: 'Girl',
-      ownerUid: 'teacher-b-uid',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z'
-    },
-    // Student belonging to Teacher A
-    'nursery_students/student-a-1': {
-      fullName: 'Mugisha Eric',
-      classGrade: 'N2',
-      gender: 'Boy',
-      ownerUid: 'teacher-a-uid',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z'
-    },
-    // Assessment belonging to Teacher B
-    'nursery_assessments/assessment_student-b-1': {
-      studentId: 'student-b-1',
-      ownerUid: 'teacher-b-uid',
-      term1Scores: { c1: 'EE' },
-      updatedAt: '2026-01-01T00:00:00Z'
-    },
-    // School Settings for Teacher B
-    'nursery_school_settings/teacher-b-uid': {
-      ownerUid: 'teacher-b-uid',
-      schoolName: 'GS Gitumba Nursery',
-      district: 'Rulindo'
-    },
-    // School Settings for Teacher A
-    'nursery_school_settings/teacher-a-uid': {
-      ownerUid: 'teacher-a-uid',
-      schoolName: 'GS Rulindo Primary',
-      district: 'Rulindo'
-    },
-    // Legacy 'general' school settings (WITHOUT ownerUid)
-    'nursery_school_settings/general': {
-      schoolName: 'ISEZERANO Academy Legacy Main',
-      district: 'Gasabo',
-      sector: 'Remera'
-    },
-    // Clean lesson plan for Teacher B
-    'lesson_plans/plan-b-1': {
-      title: 'Kinyarwanda Reading',
-      ownerUid: 'teacher-b-uid',
-      userId: 'teacher-b-uid',
-      subject: 'Kinyarwanda'
-    },
-    // Conflicting lesson plan (ownerUid != userId)
-    'lesson_plans/plan-conflicting': {
-      title: 'Mathematics Counting',
-      ownerUid: 'teacher-a-uid',
-      userId: 'teacher-b-uid',
-      subject: 'Math'
-    },
-    // Legacy ownerless lesson plan (NO ownerUid)
-    'lesson_plans/plan-ownerless': {
-      title: 'Science Exploration',
-      userId: 'teacher-a-uid',
-      subject: 'Science'
-    },
-    // Post with views
     'posts/post-1': {
-      title: 'Rwanda Education Board Updates',
-      content: '<p>Update content</p>',
+      title: 'Rwanda Economic Growth Outlook',
+      content: '<p>Full report</p>',
       views: 42
     },
-    // Post with no views field yet
     'posts/post-2': {
-      title: 'New Term Announcements',
-      content: '<p>Term content</p>'
+      title: 'Regional Infrastructure Update',
+      content: '<p>Bridge project opens</p>'
     },
-    // Comments of various statuses
     'comments/comment-approved-clean': {
       name: 'John Doe',
-      content: 'Very helpful article!',
+      content: 'Very informative report!',
       postId: 'post-1',
       status: 'approved'
     },
     'comments/comment-approved-with-email': {
       name: 'Jane Smith',
-      content: 'Nice news!',
+      content: 'Great coverage!',
       postId: 'post-1',
       email: 'jane@example.com',
       status: 'approved'
@@ -658,714 +261,115 @@ export function runSecurityAuditTests() {
       content: 'Rejected content',
       postId: 'post-1',
       status: 'rejected'
-    },
-    // Teacher B profile
-    'users/teacher-b-uid': {
-      uid: 'teacher-b-uid',
-      email: 'teacher.b@gmail.com',
-      displayName: 'Teacher B',
-      role: 'teacher',
-      status: 'active',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z'
-    },
-    // Seed Teacher Profile for Teacher B
-    'teacher_profiles/teacher-b-uid': {
-      ownerUid: 'teacher-b-uid',
-      email: 'teacher.b@gmail.com',
-      fullName: 'Teacher B Marie',
-      schoolName: 'GS Gitumba',
-      phone: '0782971258',
-      gender: 'Gore',
-      qualification: 'A0 – Bachelor of Education (B.Ed)',
-      subjectsTaught: ['Mathematics', 'SET'],
-      classesTaught: ['P1', 'P2'],
-      district: 'Rulindo',
-      sector: 'Gitumba',
-      bio: 'Head of Mathematics Department'
     }
   });
 
-  // -----------------------------------------------------------------------
-  // TEST SUITE 1: STRICT SINGLE ADMINISTRATOR AUTHORIZATION
-  // -----------------------------------------------------------------------
+  // 1. Strict Single Admin Verification
   console.log('\n--- 1. STRICT SINGLE ADMINISTRATOR TESTS ---');
-  assert('Admin twizerefelix90@gmail.com CAN read any user profile', engine.canReadUser(admin, 'teacher-b-uid'));
-  assert('Admin twizerefelix90@gmail.com CAN delete user profile', engine.canDeleteUser(admin, 'teacher-b-uid'));
+  assert('Verified Google Admin twizerefelix90@gmail.com CAN manage users', engine.canAccessUser(admin));
+  assert('Unverified non-Google admin email CANNOT access users', !engine.canAccessUser(unverifiedAdminEmail));
+  assert('Attacker with token.admin == true claim CANNOT access users', !engine.canAccessUser(maliciousAdminClaim));
+  assert('Random authenticated Google user CANNOT access users', !engine.canAccessUser(randomGoogleUser));
+  assert('Unauthenticated visitor CANNOT access users', !engine.canAccessUser(null));
+
+  // 2. Removed Educational Collections Check (Static Rules Inspection + Default Deny)
+  console.log('\n--- 2. EDUCATIONAL RULES PERMANENT REMOVAL TESTS ---');
+  const firestoreRulesSrc = fs.readFileSync(path.resolve('firestore.rules'), 'utf8');
+  const storageRulesSrc = fs.readFileSync(path.resolve('storage.rules'), 'utf8');
+
+  for (const legacyCollection of [
+    'lesson_plans',
+    'nursery_students',
+    'nursery_school_settings',
+    'nursery_assessments',
+    'teacher_profiles',
+    'school_directory'
+  ]) {
+    assert(
+      `firestore.rules no longer exposes legacy educational collection "${legacyCollection}"`,
+      !firestoreRulesSrc.includes(legacyCollection)
+    );
+  }
+  assert('Legacy educational collections default-denied', !engine.canAccessRemovedEducationalCollection());
   assert(
-    'Attacker with token.admin == true but wrong email CANNOT read user profile',
-    !engine.canReadUser(maliciousAdminClaim, 'teacher-b-uid'),
-    'Token admin claim was ignored as required'
-  );
-  assert(
-    'Attacker with token.admin == true but wrong email CANNOT delete user profile',
-    !engine.canDeleteUser(maliciousAdminClaim, 'teacher-b-uid'),
-    'Token admin claim was ignored as required'
-  );
-  assert(
-    'Attacker with token.admin == true CANNOT read Teacher B student',
-    !engine.canReadNurseryStudent(maliciousAdminClaim, 'student-b-1')
-  );
-  assert(
-    'Attacker with token.admin == true CANNOT read Teacher B assessment',
-    !engine.canReadNurseryAssessment(maliciousAdminClaim, 'assessment_student-b-1')
+    'storage.rules removes token.admin claim bypass and open isAuthenticated() write bypass',
+    !storageRulesSrc.includes('token.admin == true') && !storageRulesSrc.includes('|| isAuthenticated()')
   );
 
-  // -----------------------------------------------------------------------
-  // TEST SUITE 2: USER PROFILE FIELD PROTECTION & PRIVILEGE ESCALATION
-  // -----------------------------------------------------------------------
-  console.log('\n--- 2. USER PROFILE FIELD PROTECTION TESTS ---');
-  assert(
-    'Teacher A CAN create clean profile with permitted fields',
-    engine.canCreateUser(teacherA, 'teacher-a-uid', {
-      uid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      displayName: 'Teacher A',
-      role: 'teacher',
-      status: 'active',
-      schoolName: 'GS Gitumba',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z'
-    })
-  );
-  assert(
-    'Teacher A CANNOT create profile with admin: true',
-    !engine.canCreateUser(teacherA, 'teacher-a-uid', {
-      uid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      displayName: 'Teacher A',
-      role: 'teacher',
-      status: 'active',
-      admin: true
-    })
-  );
-  assert(
-    'Teacher A CANNOT create profile with isAdmin: true',
-    !engine.canCreateUser(teacherA, 'teacher-a-uid', {
-      uid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      displayName: 'Teacher A',
-      role: 'teacher',
-      status: 'active',
-      isAdmin: true
-    })
-  );
-  assert(
-    'Teacher A CANNOT create profile with permissions: ["all"]',
-    !engine.canCreateUser(teacherA, 'teacher-a-uid', {
-      uid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      displayName: 'Teacher A',
-      role: 'teacher',
-      status: 'active',
-      permissions: ['all']
-    })
-  );
-  assert(
-    'Teacher A CANNOT create profile with unexpected field "customSuper"',
-    !engine.canCreateUser(teacherA, 'teacher-a-uid', {
-      uid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      displayName: 'Teacher A',
-      role: 'teacher',
-      status: 'active',
-      customSuper: true
-    })
-  );
-  assert(
-    'Teacher B CANNOT update profile to inject admin: true',
-    !engine.canUpdateUser(teacherB, 'teacher-b-uid', engine.getDoc('users/teacher-b-uid'), {
-      ...engine.getDoc('users/teacher-b-uid'),
-      admin: true
-    })
-  );
-  assert(
-    'Teacher B CANNOT update role to admin',
-    !engine.canUpdateUser(teacherB, 'teacher-b-uid', engine.getDoc('users/teacher-b-uid'), {
-      ...engine.getDoc('users/teacher-b-uid'),
-      role: 'admin'
-    })
-  );
-  assert(
-    'Teacher B CANNOT change own status from active to inactive',
-    !engine.canUpdateUser(teacherB, 'teacher-b-uid', engine.getDoc('users/teacher-b-uid'), {
-      ...engine.getDoc('users/teacher-b-uid'),
-      status: 'inactive'
-    })
-  );
-  assert(
-    'Admin CAN update any user role, status, or fields',
-    engine.canUpdateUser(admin, 'teacher-b-uid', engine.getDoc('users/teacher-b-uid'), {
-      ...engine.getDoc('users/teacher-b-uid'),
-      role: 'admin',
-      status: 'inactive'
-    })
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 3: PUBLIC COMMENTS PRIVACY & MODERATION
-  // -----------------------------------------------------------------------
+  // 3. Public Comments Privacy & Moderation
   console.log('\n--- 3. PUBLIC COMMENTS PRIVACY & MODERATION TESTS ---');
+  assert('Public visitor CAN read approved clean comment', engine.canReadComment(null, 'comment-approved-clean'));
+  assert('Public visitor CANNOT read approved comment with private email', !engine.canReadComment(null, 'comment-approved-with-email'));
+  assert('Public visitor CANNOT read pending comment', !engine.canReadComment(null, 'comment-pending'));
+  assert('Public visitor CANNOT read rejected comment', !engine.canReadComment(null, 'comment-rejected'));
+  assert('Admin CAN read pending/rejected/private comments', engine.canReadComment(admin, 'comment-pending') && engine.canReadComment(admin, 'comment-rejected'));
   assert(
-    'Public visitor CAN read approved clean comment',
-    engine.canReadComment(unauthenticated, 'comment-approved-clean')
-  );
-  assert(
-    'Public visitor CANNOT read approved comment that contains private email',
-    !engine.canReadComment(unauthenticated, 'comment-approved-with-email'),
-    'Commenter email is shielded from public reads'
-  );
-  assert(
-    'Public visitor CANNOT read pending comment',
-    !engine.canReadComment(unauthenticated, 'comment-pending')
-  );
-  assert(
-    'Public visitor CANNOT read rejected comment',
-    !engine.canReadComment(unauthenticated, 'comment-rejected')
-  );
-  assert(
-    'Admin CAN read approved comment with email',
-    engine.canReadComment(admin, 'comment-approved-with-email')
-  );
-  assert(
-    'Admin CAN read pending comment for moderation',
-    engine.canReadComment(admin, 'comment-pending')
-  );
-  assert(
-    'Admin CAN read rejected comment',
-    engine.canReadComment(admin, 'comment-rejected')
-  );
-  assert(
-    'Public visitor CAN create valid comment with status pending',
-    engine.canCreateComment(unauthenticated, 'comment-new', {
+    'Public visitor CAN submit valid pending comment',
+    engine.canCreateComment(null, {
       name: 'Alice Mukamana',
-      content: 'Very clear explanation, thank you.',
+      content: 'Thank you for this clear news report.',
       postId: 'post-1',
       status: 'pending'
     })
   );
   assert(
-    'Public visitor CANNOT submit comment with private email field (forbidden by schema)',
-    !engine.canCreateComment(unauthenticated, 'comment-with-email', {
+    'Public visitor CANNOT submit comment with email field',
+    !engine.canCreateComment(null, {
       name: 'Alice',
-      content: 'Here is my email',
+      content: 'Contact me',
       postId: 'post-1',
       email: 'alice@example.com'
-    }),
-    'Email field disallowed on public comment creation'
+    })
   );
   assert(
-    'Public visitor CANNOT submit comment with status "approved" (bypassing moderation)',
-    !engine.canCreateComment(unauthenticated, 'comment-bypass', {
+    'Public visitor CANNOT self-approve comment',
+    !engine.canCreateComment(null, {
       name: 'Alice',
-      content: 'Self-approved comment',
+      content: 'Approved comment',
       postId: 'post-1',
       status: 'approved'
     })
   );
-  assert(
-    'Public visitor CANNOT update existing comment',
-    !engine.canUpdateComment(unauthenticated, 'comment-approved-clean')
-  );
-  assert(
-    'Public visitor CANNOT delete existing comment',
-    !engine.canDeleteComment(unauthenticated, 'comment-approved-clean')
-  );
-  assert(
-    'Admin CAN update/moderate existing comment',
-    engine.canUpdateComment(admin, 'comment-pending')
-  );
-  assert(
-    'Admin CAN delete any comment',
-    engine.canDeleteComment(admin, 'comment-rejected')
-  );
+  assert('Public/Google non-admin CANNOT moderate or delete comments', !engine.canModerateComment(randomGoogleUser));
+  assert('Admin CAN moderate or delete comments', engine.canModerateComment(admin));
 
-  // -----------------------------------------------------------------------
-  // TEST SUITE 4: POST VIEW COUNTER INCREMENT (+1 ONLY) & REPEATED CALLS
-  // -----------------------------------------------------------------------
-  console.log('\n--- 4. POST VIEW-COUNTER INCREMENT & REPETITION TESTS ---');
-  let currentViews = 42;
-  const initialPost = engine.getDoc('posts/post-1')!;
+  // 4. Post View Counter Increment (+1 only)
+  console.log('\n--- 4. POST VIEW-COUNTER & CMS WRITE TESTS ---');
+  const post1 = engine.getDoc('posts/post-1')!;
+  const post2 = engine.getDoc('posts/post-2')!;
+  assert('Public visitor CAN read posts', engine.canReadPost());
+  assert('Public visitor CAN increment views +1', engine.canUpdatePost(null, post1, { ...post1, views: 43 }));
+  assert('Public visitor CAN initialize views to 1', engine.canUpdatePost(null, post2, { ...post2, views: 1 }));
+  assert('Public visitor CANNOT jump views +2', !engine.canUpdatePost(null, post1, { ...post1, views: 44 }));
+  assert('Public visitor CANNOT decrement views', !engine.canUpdatePost(null, post1, { ...post1, views: 41 }));
+  assert('Public visitor CANNOT alter title along with views', !engine.canUpdatePost(null, post1, { ...post1, title: 'Hacked', views: 43 }));
+  assert('Non-admin Google user CANNOT create/delete posts or edit CMS pages', !engine.canCreateOrDeletePost(randomGoogleUser) && !engine.canWritePublicCms(randomGoogleUser));
+  assert('Admin CAN create/delete posts & edit CMS pages/categories/ads', engine.canCreateOrDeletePost(admin) && engine.canWritePublicCms(admin));
 
+  // 5. FCM Breaking News Subscriptions & Storage Admin Enforcement
+  console.log('\n--- 5. FCM PUSH SUBSCRIPTIONS & STORAGE RULES TESTS ---');
   assert(
-    'Visitor single call CAN increment views from 42 to 43 (+1 exact)',
-    engine.canUpdatePost(unauthenticated, 'post-1', initialPost, {
-      ...initialPost,
-      views: 43
+    'Public news reader CAN register breaking news push subscription token without login',
+    engine.canCreateFcmToken(null, {
+      id: 'tok_guest_1',
+      token: 'fcm_public_device_token_123456',
+      ownerUid: 'guest_device'
     })
   );
   assert(
-    'Visitor CAN initialize views from undefined to 1',
-    engine.canUpdatePost(unauthenticated, 'post-2', engine.getDoc('posts/post-2')!, {
-      ...engine.getDoc('posts/post-2')!,
-      views: 1
+    'Public reader CANNOT spoof another UID in FCM token creation',
+    !engine.canCreateFcmToken(null, {
+      id: 'tok_spoof',
+      token: 'fcm_public_device_token_123456',
+      ownerUid: 'admin-felix-uid'
     })
   );
-  assert(
-    'Visitor single call CANNOT inflate views from 42 to 44 (+2 in one request)',
-    !engine.canUpdatePost(unauthenticated, 'post-1', initialPost, {
-      ...initialPost,
-      views: 44
-    })
-  );
-  assert(
-    'Visitor single call CANNOT inflate views from 42 to 5000',
-    !engine.canUpdatePost(unauthenticated, 'post-1', initialPost, {
-      ...initialPost,
-      views: 5000
-    })
-  );
-  assert(
-    'Visitor CANNOT decrement views from 42 to 41',
-    !engine.canUpdatePost(unauthenticated, 'post-1', initialPost, {
-      ...initialPost,
-      views: 41
-    })
-  );
-  assert(
-    'Visitor CANNOT modify title along with views',
-    !engine.canUpdatePost(unauthenticated, 'post-1', initialPost, {
-      ...initialPost,
-      title: 'Hacked Title',
-      views: 43
-    })
-  );
+  assert('Public / non-admin reader CANNOT read, list, update, or delete FCM tokens', !engine.canReadOrManageFcmToken(null) && !engine.canReadOrManageFcmToken(randomGoogleUser));
+  assert('Admin CAN read, list, and prune FCM tokens', engine.canReadOrManageFcmToken(admin));
+  assert('Verified Admin CAN upload valid post image (<15MB)', engine.canUploadStorageMedia(admin, 'image/jpeg', 500_000, 15 * 1024 * 1024));
+  assert('Random authenticated Google user CANNOT upload to Storage', !engine.canUploadStorageMedia(randomGoogleUser, 'image/jpeg', 500_000, 15 * 1024 * 1024));
+  assert('Attacker with spoofed token.admin claim CANNOT upload to Storage', !engine.canUploadStorageMedia(maliciousAdminClaim, 'image/jpeg', 500_000, 15 * 1024 * 1024));
 
-  // Demonstrate repeated sequential +1 requests:
-  // Each individual request satisfies rules because each one is valid (+1).
-  // This verifies why rules cannot stop bot loops without client-side or server rate-limiting.
-  let simulatedDoc = { ...initialPost };
-  let sequenceSuccess = true;
-  for (let step = 1; step <= 5; step++) {
-    const nextDoc = { ...simulatedDoc, views: simulatedDoc.views + 1 };
-    const allowed = engine.canUpdatePost(unauthenticated, 'post-1', simulatedDoc, nextDoc);
-    if (!allowed) {
-      sequenceSuccess = false;
-      break;
-    }
-    simulatedDoc = nextDoc;
-  }
-  assert(
-    'Stateless rules evaluate each +1 individually; repeated sequential requests pass rules individually',
-    sequenceSuccess,
-    'Confirms rules enforce data delta (+1) but require client-side throttling to stop bot loops'
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 5: LEGACY GENERAL SCHOOL SETTINGS
-  // -----------------------------------------------------------------------
-  console.log('\n--- 5. LEGACY GENERAL SCHOOL SETTINGS TESTS ---');
-  assert('Admin CAN read legacy general school settings without ownerUid', engine.canReadSchoolSettings(admin, 'general'));
-  assert(
-    'Admin CAN update legacy general school settings without ownerUid',
-    engine.canUpdateSchoolSettings(admin, 'general', engine.getDoc('nursery_school_settings/general'), {
-      schoolName: 'ISEZERANO Academy Updated Legacy Main',
-      district: 'Gasabo'
-    })
-  );
-  assert('Teacher A CANNOT read legacy general school settings', !engine.canReadSchoolSettings(teacherA, 'general'));
-  assert('Teacher B CANNOT read legacy general school settings', !engine.canReadSchoolSettings(teacherB, 'general'));
-  assert(
-    'Teacher A CANNOT update legacy general school settings',
-    !engine.canUpdateSchoolSettings(teacherA, 'general', engine.getDoc('nursery_school_settings/general'), {
-      schoolName: 'Hacked school name'
-    })
-  );
-  assert(
-    'Teacher A CANNOT delete legacy general school settings',
-    !engine.canDeleteSchoolSettings(teacherA, 'general')
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 6: PER-TEACHER SCHOOL SETTINGS
-  // -----------------------------------------------------------------------
-  console.log('\n--- 6. PER-TEACHER SCHOOL SETTINGS TESTS ---');
-  assert('Teacher B CAN read own school settings', engine.canReadSchoolSettings(teacherB, 'teacher-b-uid'));
-  assert('Teacher A CANNOT read Teacher B school settings', !engine.canReadSchoolSettings(teacherA, 'teacher-b-uid'));
-  assert('Admin CAN read Teacher B school settings', engine.canReadSchoolSettings(admin, 'teacher-b-uid'));
-  assert('Admin CAN read Teacher A school settings', engine.canReadSchoolSettings(admin, 'teacher-a-uid'));
-  assert(
-    'Teacher B CANNOT change ownerUid on school settings',
-    !engine.canUpdateSchoolSettings(
-      teacherB,
-      'teacher-b-uid',
-      engine.getDoc('nursery_school_settings/teacher-b-uid'),
-      { ownerUid: 'teacher-a-uid', schoolName: 'Hijacked' }
-    )
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 7: LESSON PLAN AUTHORITATIVE OWNERSHIP & CONFLICT RESOLUTION
-  // -----------------------------------------------------------------------
-  console.log('\n--- 7. LESSON PLAN AUTHORITATIVE OWNERSHIP TESTS ---');
-  assert('Teacher B CAN read own clean lesson plan', engine.canReadLessonPlan(teacherB, 'plan-b-1'));
-  assert('Teacher A CANNOT read Teacher B clean lesson plan', !engine.canReadLessonPlan(teacherA, 'plan-b-1'));
-  assert('Admin CAN read Teacher B clean lesson plan', engine.canReadLessonPlan(admin, 'plan-b-1'));
-  assert(
-    'Teacher A CANNOT read conflicting lesson plan (ownerUid=A, userId=B)',
-    !engine.canReadLessonPlan(teacherA, 'plan-conflicting')
-  );
-  assert(
-    'Teacher B CANNOT read conflicting lesson plan (ownerUid=A, userId=B)',
-    !engine.canReadLessonPlan(teacherB, 'plan-conflicting')
-  );
-  assert(
-    'Admin CAN read conflicting lesson plan for oversight/recovery',
-    engine.canReadLessonPlan(admin, 'plan-conflicting')
-  );
-  assert(
-    'Teacher A CANNOT read legacy ownerless lesson plan',
-    !engine.canReadLessonPlan(teacherA, 'plan-ownerless')
-  );
-  assert(
-    'Admin CAN read legacy ownerless lesson plan',
-    engine.canReadLessonPlan(admin, 'plan-ownerless')
-  );
-  assert(
-    'Teacher A CANNOT create lesson plan with conflicting userId',
-    !engine.canCreateLessonPlan(teacherA, 'plan-new', {
-      title: 'New Plan',
-      ownerUid: 'teacher-a-uid',
-      userId: 'teacher-b-uid'
-    })
-  );
-  assert(
-    'Teacher A CAN create lesson plan with matching ownerUid and userId',
-    engine.canCreateLessonPlan(teacherA, 'plan-new', {
-      title: 'New Plan',
-      ownerUid: 'teacher-a-uid',
-      userId: 'teacher-a-uid'
-    })
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 8: NURSERY STUDENTS ISOLATION & VALIDATION
-  // -----------------------------------------------------------------------
-  console.log('\n--- 8. NURSERY STUDENTS ISOLATION TESTS ---');
-  assert('Teacher B CAN read own student Keza Marie', engine.canReadNurseryStudent(teacherB, 'student-b-1'));
-  assert('Teacher A CANNOT read Teacher B student', !engine.canReadNurseryStudent(teacherA, 'student-b-1'));
-  assert('Admin CAN read Teacher B student', engine.canReadNurseryStudent(admin, 'student-b-1'));
-  assert('Teacher A CANNOT delete Teacher B student', !engine.canDeleteNurseryStudent(teacherA, 'student-b-1'));
-  assert('Teacher B CAN delete own student', engine.canDeleteNurseryStudent(teacherB, 'student-b-1'));
-
-  // Gender validation
-  assert(
-    'Valid gender Boy accepted',
-    engine.canCreateNurseryStudent(teacherA, 'student-new-1', {
-      fullName: 'Manzi David',
-      classGrade: 'N1',
-      gender: 'Boy',
-      ownerUid: 'teacher-a-uid'
-    })
-  );
-  assert(
-    'Valid gender Gore accepted',
-    engine.canCreateNurseryStudent(teacherA, 'student-new-2', {
-      fullName: 'Uwase Aline',
-      classGrade: 'N1',
-      gender: 'Gore',
-      ownerUid: 'teacher-a-uid'
-    })
-  );
-  assert(
-    'Invalid gender Alien REJECTED',
-    !engine.canCreateNurseryStudent(teacherA, 'student-invalid', {
-      fullName: 'Manzi David',
-      classGrade: 'N1',
-      gender: 'Alien',
-      ownerUid: 'teacher-a-uid'
-    })
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 9: NURSERY ASSESSMENTS ISOLATION & STUDENT ATTACHMENT
-  // -----------------------------------------------------------------------
-  console.log('\n--- 9. NURSERY ASSESSMENTS ISOLATION TESTS ---');
-  assert('Teacher B CAN read own assessment', engine.canReadNurseryAssessment(teacherB, 'assessment_student-b-1'));
-  assert('Teacher A CANNOT read Teacher B assessment', !engine.canReadNurseryAssessment(teacherA, 'assessment_student-b-1'));
-  assert('Admin CAN read Teacher B assessment', engine.canReadNurseryAssessment(admin, 'assessment_student-b-1'));
-
-  assert(
-    'Teacher A CANNOT attach assessment to Teacher B student',
-    !engine.canCreateNurseryAssessment(teacherA, 'new-assessment-x', {
-      studentId: 'student-b-1',
-      ownerUid: 'teacher-a-uid',
-      term1Scores: { c1: 'EE' }
-    })
-  );
-
-  assert(
-    'Teacher A CAN attach assessment to own student',
-    engine.canCreateNurseryAssessment(teacherA, 'new-assessment-a', {
-      studentId: 'student-a-1',
-      ownerUid: 'teacher-a-uid',
-      term1Scores: { c1: 'EE' }
-    })
-  );
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 10: AUTHENTICATION PROVIDER GUARDS
-  // -----------------------------------------------------------------------
-  console.log('\n--- 10. AUTH PROVIDER SECURITY TESTS ---');
-  assert('Anonymous user CANNOT read Teacher B student', !engine.canReadNurseryStudent(anonymousUser, 'student-b-1'));
-  assert('Unauthenticated visitor CANNOT read Teacher B student', !engine.canReadNurseryStudent(unauthenticated, 'student-b-1'));
-  assert('Anonymous user CANNOT read Teacher B assessment', !engine.canReadNurseryAssessment(anonymousUser, 'assessment_student-b-1'));
-  assert('Unauthenticated visitor CANNOT read Teacher B school settings', !engine.canReadSchoolSettings(unauthenticated, 'teacher-b-uid'));
-
-  // -----------------------------------------------------------------------
-  // TEST SUITE 11: TEACHER PROFILES ISOLATION & PRIVILEGE GUARDS
-  // -----------------------------------------------------------------------
-  console.log('\n--- 11. TEACHER PROFILES ISOLATION & PRIVILEGE TESTS ---');
-  assert('Teacher B CAN read own teacher profile', engine.canReadTeacherProfile(teacherB, 'teacher-b-uid'));
-  assert('Teacher A CANNOT read Teacher B teacher profile', !engine.canReadTeacherProfile(teacherA, 'teacher-b-uid'));
-  assert('Admin twizerefelix90@gmail.com CAN read Teacher B profile', engine.canReadTeacherProfile(admin, 'teacher-b-uid'));
-  assert('Anonymous user CANNOT read teacher profile', !engine.canReadTeacherProfile(anonymousUser, 'teacher-b-uid'));
-  assert('Unauthenticated visitor CANNOT read teacher profile', !engine.canReadTeacherProfile(unauthenticated, 'teacher-b-uid'));
-
-  assert(
-    'Teacher A CAN create own valid teacher profile',
-    engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
-      ownerUid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      fullName: 'Teacher A Mugisha',
-      schoolName: 'GS Gitumba',
-      phone: '0788123456',
-      gender: 'Gabo',
-      qualification: 'A0 – Bachelor of Education (B.Ed)',
-      subjectsTaught: ['English', 'Kinyarwanda'],
-      classesTaught: ['P3', 'P4']
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT create profile for Teacher B (ownerUid mismatch)',
-    !engine.canCreateTeacherProfile(teacherA, 'teacher-b-uid', {
-      ownerUid: 'teacher-b-uid',
-      email: 'teacher.b@gmail.com',
-      fullName: 'Impersonated Teacher'
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT create profile forging another email',
-    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
-      ownerUid: 'teacher-a-uid',
-      email: 'victim@gmail.com',
-      fullName: 'Teacher A'
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT inject admin: true into teacher profile',
-    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
-      ownerUid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      fullName: 'Teacher A',
-      admin: true
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT inject role: "admin" into teacher profile',
-    !engine.canCreateTeacherProfile(teacherA, 'teacher-a-uid', {
-      ownerUid: 'teacher-a-uid',
-      email: 'teacher.a@gmail.com',
-      fullName: 'Teacher A',
-      role: 'admin'
-    })
-  );
-
-  const teacherBExistingProfile = engine.getDoc('teacher_profiles/teacher-b-uid')!;
-
-  assert(
-    'Teacher B CAN update own teacher profile',
-    engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
-      ...teacherBExistingProfile,
-      phone: '0782999999',
-      qualification: 'Master of Education (M.Ed)'
-    })
-  );
-
-  assert(
-    'Teacher B CANNOT change ownerUid on profile',
-    !engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
-      ...teacherBExistingProfile,
-      ownerUid: 'teacher-a-uid'
-    })
-  );
-
-  assert(
-    'Teacher B CANNOT change email on profile',
-    !engine.canUpdateTeacherProfile(teacherB, 'teacher-b-uid', teacherBExistingProfile, {
-      ...teacherBExistingProfile,
-      email: 'different@gmail.com'
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT update Teacher B profile',
-    !engine.canUpdateTeacherProfile(teacherA, 'teacher-b-uid', teacherBExistingProfile, {
-      ...teacherBExistingProfile,
-      fullName: 'Hijacked Name'
-    })
-  );
-
-  assert(
-    'Teacher B CANNOT delete own profile (Admin only)',
-    !engine.canDeleteTeacherProfile(teacherB, 'teacher-b-uid')
-  );
-
-  assert(
-    'Admin CAN delete teacher profile',
-    engine.canDeleteTeacherProfile(admin, 'teacher-b-uid')
-  );
-
-  // --- 12. FCM PUSH NOTIFICATIONS & DEVICE TOKENS AUDIT ---
-  console.log('--- 12. FCM PUSH NOTIFICATIONS & DEVICE TOKENS AUDIT ---');
-
-  const teacherATokenPhone = {
-    id: 'tok_teacher_a_phone',
-    token: 'fcm_token_teacher_a_phone_string_12345',
-    ownerUid: 'teacher-a-uid',
-    ownerEmail: 'teacher-a@example.com',
-    ownerName: 'Teacher A',
-    deviceType: 'mobile',
-    browser: 'Chrome Mobile',
-    os: 'Android'
-  };
-
-  const teacherATokenLaptop = {
-    id: 'tok_teacher_a_laptop',
-    token: 'fcm_token_teacher_a_laptop_string_67890',
-    ownerUid: 'teacher-a-uid',
-    ownerEmail: 'teacher-a@example.com',
-    ownerName: 'Teacher A',
-    deviceType: 'desktop',
-    browser: 'Chrome',
-    os: 'Windows'
-  };
-
-  const teacherBToken = {
-    id: 'tok_teacher_b_phone',
-    token: 'fcm_token_teacher_b_phone_string_99999',
-    ownerUid: 'teacher-b-uid',
-    ownerEmail: 'teacher-b@example.com',
-    ownerName: 'Teacher B',
-    deviceType: 'mobile',
-    browser: 'Safari Mobile',
-    os: 'iOS'
-  };
-
-  engine.setDoc('fcm_tokens/tok_teacher_a_phone', teacherATokenPhone);
-  engine.setDoc('fcm_tokens/tok_teacher_a_laptop', teacherATokenLaptop);
-  engine.setDoc('fcm_tokens/tok_teacher_b_phone', teacherBToken);
-
-  const announcementDoc = {
-    id: 'notice_101',
-    title: 'Urgent Staff Meeting',
-    body: 'All staff meeting tomorrow at 8:00 AM in the main hall.',
-    sender: 'twizerefelix90@gmail.com',
-    senderName: 'Administrator',
-    priority: 'high',
-    createdAt: new Date().toISOString()
-  };
-  engine.setDoc('announcements/notice_101', announcementDoc);
-
-  assert(
-    'Teacher A CAN register their own device token (phone)',
-    engine.canCreateFcmToken(teacherA, 'tok_teacher_a_phone', teacherATokenPhone)
-  );
-
-  assert(
-    'Teacher A CAN register a second device token (laptop) without conflict',
-    engine.canCreateFcmToken(teacherA, 'tok_teacher_a_laptop', teacherATokenLaptop)
-  );
-
-  assert(
-    'Teacher A CANNOT register token with Teacher B ownerUid (spoofing)',
-    !engine.canCreateFcmToken(teacherA, 'tok_spoofed', {
-      ...teacherATokenPhone,
-      ownerUid: 'teacher-b-uid'
-    })
-  );
-
-  assert(
-    'Teacher A CAN read own phone device token',
-    engine.canReadFcmToken(teacherA, 'tok_teacher_a_phone')
-  );
-
-  assert(
-    'Teacher A CAN read own laptop device token',
-    engine.canReadFcmToken(teacherA, 'tok_teacher_a_laptop')
-  );
-
-  assert(
-    'Teacher A CANNOT read Teacher B device token',
-    !engine.canReadFcmToken(teacherA, 'tok_teacher_b_phone')
-  );
-
-  assert(
-    'Teacher A CANNOT update Teacher B device token',
-    !engine.canUpdateFcmToken(teacherA, 'tok_teacher_b_phone', teacherBToken, {
-      ...teacherBToken,
-      ownerName: 'Hijacked'
-    })
-  );
-
-  assert(
-    'Teacher A CANNOT delete Teacher B device token',
-    !engine.canDeleteFcmToken(teacherA, 'tok_teacher_b_phone')
-  );
-
-  assert(
-    'Teacher A CAN delete own phone device token',
-    engine.canDeleteFcmToken(teacherA, 'tok_teacher_a_phone')
-  );
-
-  assert(
-    'Admin twizerefelix90@gmail.com CAN read all teacher device tokens for broadcast',
-    engine.canReadFcmToken(admin, 'tok_teacher_a_phone') &&
-    engine.canReadFcmToken(admin, 'tok_teacher_a_laptop') &&
-    engine.canReadFcmToken(admin, 'tok_teacher_b_phone')
-  );
-
-  assert(
-    'Admin CAN delete any invalid device token',
-    engine.canDeleteFcmToken(admin, 'tok_teacher_b_phone')
-  );
-
-  assert(
-    'Unauthenticated visitor CANNOT read any device token',
-    !engine.canReadFcmToken(null, 'tok_teacher_a_phone')
-  );
-
-  assert(
-    'Unauthenticated visitor CANNOT register any device token',
-    !engine.canCreateFcmToken(null, 'tok_anon', teacherATokenPhone)
-  );
-
-  assert(
-    'Unauthenticated visitor CANNOT delete any device token',
-    !engine.canDeleteFcmToken(null, 'tok_teacher_a_phone')
-  );
-
-  assert(
-    'Public visitor / Teacher CAN read announcements',
-    engine.canReadAnnouncement(null, 'notice_101') &&
-    engine.canReadAnnouncement(teacherA, 'notice_101')
-  );
-
-  assert(
-    'Teacher A CANNOT create announcements (Admin-only)',
-    !engine.canWriteAnnouncement(teacherA, 'notice_fake')
-  );
-
-  assert(
-    'Admin twizerefelix90@gmail.com CAN create announcements',
-    engine.canWriteAnnouncement(admin, 'notice_101')
-  );
-
-  // Summary
   console.log('===========================================================');
   console.log(`AUDIT TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
   console.log('===========================================================');
@@ -1375,5 +379,4 @@ export function runSecurityAuditTests() {
   }
 }
 
-// Execute tests
 runSecurityAuditTests();

@@ -1,11 +1,11 @@
 /**
- * ISEZERANO Lesson Plan - Trusted Admin Setup Script
+ * ISEZERANO ONLINE - Trusted Admin Setup Script
  * 
  * Usage:
  *   1. Run in a secure server-side environment with Firebase Admin SDK credentials.
  *   2. node scripts/setup-admin.js <target_email>
  * 
- * This securely promotes a registered teacher account to 'admin' in Cloud Firestore
+ * This securely promotes an authorized account to 'admin' in Cloud Firestore
  * without exposing secrets or hardcoding credentials in the frontend.
  */
 
@@ -30,7 +30,7 @@ const db = admin.firestore();
 async function promoteUserToAdmin(targetEmail) {
   if (!targetEmail) {
     console.error('Please specify a target email address.');
-    console.log('Example: node scripts/setup-admin.js teacher@school.rw');
+    console.log('Example: node scripts/setup-admin.js twizerefelix90@gmail.com');
     process.exit(1);
   }
 

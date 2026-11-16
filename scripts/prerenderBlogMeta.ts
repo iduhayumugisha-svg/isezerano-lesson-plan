@@ -145,7 +145,7 @@ export async function prerenderStaticBlogDist(
     origin,
     branding,
     '/blog',
-    'School Blog & Educational Articles'
+    'News & Editorial Articles'
   );
   fs.mkdirSync(blogOutDir, { recursive: true });
   fs.writeFileSync(path.join(blogOutDir, 'index.html'), blogIndexHtml, 'utf-8');

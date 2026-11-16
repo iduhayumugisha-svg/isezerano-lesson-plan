@@ -1,28 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  ShieldAlert, 
-  Users, 
-  Settings as SettingsIcon, 
-  BookOpen, 
-  GraduationCap, 
-  CheckCircle2, 
-  AlertCircle, 
-  ToggleLeft, 
-  ToggleRight, 
-  Plus, 
-  Trash2, 
-  Save, 
-  RefreshCw, 
-  Server, 
-  Key, 
-  Copy, 
-  Check, 
-  Clock, 
-  Search,
-  UserX,
-  UserCheck,
-  Sparkles, 
+import {
+  ShieldCheck,
+  ShieldAlert,
+  BookOpen,
+  Copy,
+  Check,
   Palette,
   ArrowLeft,
   LogOut,
@@ -35,73 +17,52 @@ import {
   Globe,
   FileText,
   Megaphone,
-  Layers,
-  User,
-  Mail,
-  Phone,
-  School,
-  MapPin,
-  Calendar,
-  X,
-  Bell
+  Bell,
+  Key,
+  RefreshCw,
+  Newspaper
 } from 'lucide-react';
-import { UserProfile, AppSettings, LessonPlan, SaasNavPage } from '../types/lessonPlan';
-import { TeacherProfile } from '../types/platform';
-import { getAppSettings, saveAppSettings } from '../services/siteSettingsService';
-import { listUsers, setUserStatus, setUserRole } from '../services/authService';
-import { getAllTeacherProfiles } from '../services/teacherProfileService';
+import { SaasNavPage } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
-import { NurserySubjectsAndColorsManager } from '../components/NurserySubjectsAndColorsManager';
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
-import { AdminSchoolDirectoryPanel } from '../components/AdminSchoolDirectoryPanel';
 import { AdminBlogManager } from '../components/AdminBlogManager';
 import { AdminWhatsAppSettings } from '../components/AdminWhatsAppSettings';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { formatWhatsAppDisplayNumber } from '../utils/whatsappUtils';
-import { 
-  getAnalyticsSummary, 
-  subscribeToSharedAnalytics, 
-  AnalyticsSummary, 
-  GA_MEASUREMENT_ID 
+import {
+  getAnalyticsSummary,
+  subscribeToSharedAnalytics,
+  AnalyticsSummary,
+  GA_MEASUREMENT_ID
 } from '../services/analyticsService';
 
 interface AdminDashboardViewProps {
-  lessonPlans: LessonPlan[];
   onNavigate: (page: SaasNavPage) => void;
   onLogout?: () => void;
 }
 
-type AdminTab = 'pages' | 'blog' | 'design' | 'whatsapp' | 'schools' | 'ads' | 'analytics' | 'notifications' | 'nursery-subjects' | 'modules' | 'curriculum' | 'teachers' | 'usage' | 'security';
+type AdminTab =
+  | 'pages'
+  | 'blog'
+  | 'design'
+  | 'whatsapp'
+  | 'ads'
+  | 'analytics'
+  | 'notifications'
+  | 'security';
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
-  lessonPlans,
   onNavigate,
   onLogout
 }) => {
   const { user, isAdmin, signOutUser } = useAuth();
   const { whatsappContact } = useWebsiteDesign();
-  const [activeTab, setActiveTab] = useState<AdminTab>('pages');
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [usersList, setUsersList] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTab>('blog');
   const [copiedScript, setCopiedScript] = useState(false);
-  const [userSearchTerm, setUserSearchTerm] = useState('');
   const [analyticsData, setAnalyticsData] = useState<AnalyticsSummary>(() => getAnalyticsSummary());
-  const [teacherProfiles, setTeacherProfiles] = useState<Record<string, TeacherProfile>>({});
-  const [selectedTeacherProfile, setSelectedTeacherProfile] = useState<TeacherProfile | null>(null);
-
-  // Curriculum editing local states
-  const [newSubject, setNewSubject] = useState('');
-  const [newClass, setNewClass] = useState('');
-
-  useEffect(() => {
-    loadAdminData();
-  }, [isAdmin]);
 
   useEffect(() => {
     if (activeTab === 'analytics') {
@@ -111,121 +72,6 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       return () => unsubscribe();
     }
   }, [activeTab]);
-
-  const loadAdminData = async () => {
-    setIsLoading(true);
-    try {
-      const [appSettingsData, fetchedUsers, allProfiles] = await Promise.all([
-        getAppSettings(),
-        listUsers(),
-        getAllTeacherProfiles()
-      ]);
-      setSettings(appSettingsData);
-      setUsersList(fetchedUsers);
-      const profilesMap: Record<string, TeacherProfile> = {};
-      allProfiles.forEach(p => {
-        if (p.ownerUid) {
-          profilesMap[p.ownerUid] = p;
-        }
-      });
-      setTeacherProfiles(profilesMap);
-      setAnalyticsData(getAnalyticsSummary());
-    } catch (err) {
-      console.error('Failed to load admin data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    if (!settings || !user) return;
-    setIsSaving(true);
-    setSaveStatus(null);
-    try {
-      const result = await saveAppSettings(settings, user.uid);
-      if (result.success) {
-        setSaveStatus({ type: 'success', message: 'Platform settings saved successfully to Firestore!' });
-      } else {
-        setSaveStatus({ type: 'error', message: result.error || 'Failed to save settings.' });
-      }
-    } catch (err: unknown) {
-      setSaveStatus({ type: 'error', message: err instanceof Error ? err.message : 'Error saving settings' });
-    } finally {
-      setIsSaving(false);
-      setTimeout(() => setSaveStatus(null), 4000);
-    }
-  };
-
-  const handleToggleModule = (key: keyof AppSettings['enabledModules']) => {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      enabledModules: {
-        ...settings.enabledModules,
-        [key]: !settings.enabledModules[key]
-      }
-    });
-  };
-
-  const handleAddSubject = () => {
-    if (!newSubject.trim() || !settings) return;
-    if (settings.availableSubjects.includes(newSubject.trim())) return;
-    setSettings({
-      ...settings,
-      availableSubjects: [...settings.availableSubjects, newSubject.trim()]
-    });
-    setNewSubject('');
-  };
-
-  const handleRemoveSubject = (subjectToRemove: string) => {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      availableSubjects: settings.availableSubjects.filter(s => s !== subjectToRemove)
-    });
-  };
-
-  const handleAddClass = () => {
-    if (!newClass.trim() || !settings) return;
-    if (settings.availableClasses.includes(newClass.trim())) return;
-    setSettings({
-      ...settings,
-      availableClasses: [...settings.availableClasses, newClass.trim()]
-    });
-    setNewClass('');
-  };
-
-  const handleRemoveClass = (classToRemove: string) => {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      availableClasses: settings.availableClasses.filter(c => c !== classToRemove)
-    });
-  };
-
-  const handleToggleUserStatus = async (targetUser: UserProfile) => {
-    const newStatus = targetUser.status === 'active' ? 'inactive' : 'active';
-    const result = await setUserStatus(targetUser.uid, newStatus);
-    if (result.success) {
-      setUsersList(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, status: newStatus } : u));
-    } else {
-      alert(`Could not update status: ${result.error}`);
-    }
-  };
-
-  const handleToggleUserRole = async (targetUser: UserProfile) => {
-    if (targetUser.uid === user?.uid) {
-      alert('You cannot demote your own administrator account.');
-      return;
-    }
-    const newRole = targetUser.role === 'admin' ? 'teacher' : 'admin';
-    const result = await setUserRole(targetUser.uid, newRole);
-    if (result.success) {
-      setUsersList(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, role: newRole } : u));
-    } else {
-      alert(`Could not update role: ${result.error}`);
-    }
-  };
 
   // If not logged in as Admin, block access securely
   if (!isAdmin) {
@@ -239,16 +85,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             Access Restricted: Administrator Privileges Required
           </h2>
           <p className="text-xs text-slate-600 max-w-md mx-auto">
-            You are signed in as a <strong className="text-emerald-700 capitalize">{user?.role || 'Guest'}</strong>. 
-            The Admin Management Dashboard is exclusively reserved for verified administrators with role authorization in Cloud Firestore.
+            The Admin Management Dashboard is exclusively reserved for the verified portal administrator.
           </p>
-          <div className="pt-4 flex justify-center space-x-3">
+          <div className="pt-4 flex justify-center">
             <button
-              onClick={() => onNavigate('create')}
-              className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
+              type="button"
+              onClick={() => onNavigate('home')}
+              className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-600 text-white transition-all shadow-sm cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Return to Lesson Plan Generator</span>
+              <span>Return to Public Newsroom</span>
             </button>
           </div>
         </div>
@@ -256,21 +102,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     );
   }
 
-  const primaryPlansCount = lessonPlans.filter(p => p.educationLevel === 'Primary').length;
-  const secondaryPlansCount = lessonPlans.filter(p => p.educationLevel === 'Secondary').length;
-  const filteredUsers = usersList.filter(u => 
-    u.email.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-    (u.displayName && u.displayName.toLowerCase().includes(userSearchTerm.toLowerCase())) ||
-    (u.schoolName && u.schoolName.toLowerCase().includes(userSearchTerm.toLowerCase()))
-  );
-
   const adminSetupScript = `// scripts/setup-admin.js
-// Run in your server or terminal with Firebase Admin SDK credentials:
+// Run locally with Firebase Admin SDK credentials:
 const admin = require('firebase-admin');
 
-// Initialize with service account:
 admin.initializeApp({
-  credential: admin.credential.applicationDefault(), // or admin.credential.cert(serviceAccount)
+  credential: admin.credential.applicationDefault(),
   projectId: 'isezerano-news'
 });
 
@@ -285,47 +122,40 @@ async function promoteToAdmin(targetEmail) {
     return;
   }
 
-  snapshot.forEach(async (doc) => {
-    await doc.ref.update({
+  for (const docSnap of snapshot.docs) {
+    await docSnap.ref.update({
       role: 'admin',
       status: 'active',
       updatedAt: new Date().toISOString()
     });
     console.log(\`Successfully promoted \${targetEmail} to Admin!\`);
-  });
+  }
 }
 
-// Example usage:
-promoteToAdmin('admin@example.com');`;
-
-  // Defense-in-depth: Strict authorization guard
-  if (!isAdmin) {
-    return (
-      <div className="max-w-xl mx-auto my-12 p-8 text-center bg-white rounded-2xl border border-red-200 shadow-md space-y-4">
-        <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
-        <h2 className="text-xl font-bold text-slate-900">Administrator Access Required</h2>
-        <p className="text-sm text-slate-600">
-          This management dashboard is restricted exclusively to authorized platform administrators.
-        </p>
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className="inline-flex items-center space-x-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Return to Public Website</span>
-        </button>
-      </div>
-    );
-  }
+promoteToAdmin('twizerefelix90@gmail.com');`;
 
   const handleLogoutClick = async () => {
     if (onLogout) {
       onLogout();
     } else {
       await signOutUser();
-      onNavigate('home' as SaasNavPage);
+      onNavigate('home');
     }
   };
+
+  const trackedSections = [
+    { key: 'home', label: 'Newspaper Front Page', path: '/' },
+    { key: 'blog', label: 'News Articles & Categories', path: '/blog' },
+    { key: 'about', label: 'About Us', path: '/about' },
+    { key: 'contact', label: 'Contact Us', path: '/contact' },
+    { key: 'privacy', label: 'Privacy Policy', path: '/privacy' },
+    { key: 'terms', label: 'Terms & Conditions', path: '/terms' },
+    { key: 'admin', label: 'Admin Management Portal', path: '/admin' }
+  ];
+
+  const activeSectionsCount = trackedSections.filter(
+    (item) => (analyticsData.pageViewsByPage[item.key] || 0) > 0
+  ).length;
 
   return (
     <div className="space-y-6 pb-16">
@@ -337,33 +167,26 @@ promoteToAdmin('admin@example.com');`;
             <span>Authorized Administrator{user?.displayName ? `: ${user.displayName}` : ''}</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-            ISEZERANO ONLINE – Admin Management Dashboard
+            ISEZERANO ONLINE – Newsroom Admin Dashboard
           </h1>
           <p className="text-xs text-slate-300 mt-1">
-            Manage homepage photos, curriculum parameters, platform settings, and teacher access.
+            Publish news articles, moderate reader comments, customize design &amp; static pages, and monitor live traffic.
           </p>
         </div>
 
         <div className="flex items-center space-x-2">
           <button
-            onClick={loadAdminData}
-            disabled={isLoading}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-            title="Refresh Data"
+            type="button"
+            onClick={() => onNavigate('home')}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <Newspaper className="w-4 h-4" />
+            <span>View Public Site</span>
           </button>
           <button
-            onClick={handleSaveSettings}
-            disabled={isSaving || !settings}
-            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Saving...' : 'Save All Settings'}</span>
-          </button>
-          <button
+            type="button"
             onClick={handleLogoutClick}
-            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95 cursor-pointer ml-1"
+            className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95 cursor-pointer"
             title="Terminate administrator session and return to public website"
           >
             <LogOut className="w-4 h-4" />
@@ -372,25 +195,30 @@ promoteToAdmin('admin@example.com');`;
         </div>
       </div>
 
-      {/* Notifications */}
-      {saveStatus && (
-        <div className={`p-4 rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-sm ${
-          saveStatus.type === 'success'
-            ? 'bg-emerald-50 border border-emerald-300 text-emerald-800'
-            : 'bg-red-50 border border-red-300 text-red-800'
-        }`}>
-          {saveStatus.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-          )}
-          <span>{saveStatus.message}</span>
-        </div>
-      )}
-
       {/* Navigation Tabs */}
       <div className="bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm flex flex-wrap gap-1">
         <button
+          type="button"
+          onClick={() => setActiveTab('blog')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'blog'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-teal-400" />
+          <span>News &amp; Editorial</span>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'blog' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'
+            }`}
+          >
+            Articles, Categories &amp; Comments
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('pages')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'pages'
@@ -400,27 +228,17 @@ promoteToAdmin('admin@example.com');`;
         >
           <FileText className="w-4 h-4 text-amber-300" />
           <span>Website Pages</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'pages' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'pages' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'
+            }`}
+          >
             About, Contact, Privacy, Terms
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('blog')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'blog'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <BookOpen className="w-4 h-4 text-teal-400" />
-          <span>Blog Management</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'blog' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Articles &amp; Categories
-          </span>
-        </button>
-
-        <button
+          type="button"
           onClick={() => setActiveTab('design')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'design'
@@ -430,12 +248,17 @@ promoteToAdmin('admin@example.com');`;
         >
           <Palette className="w-4 h-4 text-amber-300" />
           <span>Website Branding &amp; Logo</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'design' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'design' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'
+            }`}
+          >
             Name, Desc &amp; Logo
           </span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('whatsapp')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'whatsapp'
@@ -445,27 +268,17 @@ promoteToAdmin('admin@example.com');`;
         >
           <MessageCircle className="w-4 h-4 text-emerald-400" />
           <span>WhatsApp Contact Settings</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'whatsapp' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'whatsapp' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
             {whatsappContact.enabled ? 'Active' : 'Off'}
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('schools')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'schools'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <School className="w-4 h-4 text-teal-400" />
-          <span>School Directory</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'schools' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Auto-Fill
-          </span>
-        </button>
-
-        <button
+          type="button"
           onClick={() => setActiveTab('ads')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'ads'
@@ -475,12 +288,17 @@ promoteToAdmin('admin@example.com');`;
         >
           <Megaphone className="w-4 h-4 text-amber-300" />
           <span>Ads Management</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'ads' ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-100 text-indigo-800'}`}>
-            Header & Footer
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'ads' ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
+            }`}
+          >
+            Header &amp; Footer
           </span>
         </button>
 
         <button
+          type="button"
           onClick={() => {
             setActiveTab('analytics');
             setAnalyticsData(getAnalyticsSummary());
@@ -493,12 +311,17 @@ promoteToAdmin('admin@example.com');`;
         >
           <BarChart3 className="w-4 h-4 text-emerald-300" />
           <span>Website Analytics</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'analytics' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'analytics' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
             GA4 Live
           </span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('notifications')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'notifications'
@@ -506,119 +329,45 @@ promoteToAdmin('admin@example.com');`;
               : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <Bell className="w-4 h-4 text-emerald-400 animate-pulse" />
+          <Bell className="w-4 h-4 text-emerald-400" />
           <span>Push Notifications</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'notifications' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
-            Real Push (FCM)
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'notifications' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            FCM
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('modules')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'modules'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <SettingsIcon className="w-4 h-4" />
-          <span>Modules & Platform</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('curriculum')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'curriculum'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Curriculum & Classes</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('nursery-subjects')}
+          type="button"
+          onClick={() => setActiveTab('security')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'nursery-subjects'
-              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+            activeTab === 'security'
+              ? 'bg-slate-800 text-white shadow-sm'
               : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <Palette className="w-4 h-4 text-amber-300" />
-          <span>Nursery: Subjects & Colors</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${activeTab === 'nursery-subjects' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'}`}>
-            Report Cards
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('teachers')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'teachers'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Teacher Accounts ({usersList.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('usage')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'usage'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <GraduationCap className="w-4 h-4" />
-          <span>Usage & Activity</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('security')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'security'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
           <Key className="w-4 h-4" />
-          <span>Admin Setup & Security</span>
+          <span>Admin Setup &amp; Security</span>
         </button>
       </div>
 
-      {/* ================= TAB: WEBSITE PAGES MANAGEMENT (About, Contact, Privacy, Terms) ================= */}
-      {activeTab === 'pages' && (
-        <WebsitePagesManager />
-      )}
+      {/* ================= TAB: NEWS ARTICLES, CATEGORIES & COMMENTS ================= */}
+      {activeTab === 'blog' && <AdminBlogManager />}
 
-      {/* ================= TAB: BLOG ARTICLES & MEDIA MANAGEMENT ================= */}
-      {activeTab === 'blog' && (
-        <AdminBlogManager />
-      )}
+      {/* ================= TAB: WEBSITE PAGES MANAGEMENT (About, Contact, Privacy, Terms) ================= */}
+      {activeTab === 'pages' && <WebsitePagesManager />}
 
       {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}
-      {activeTab === 'design' && (
-        <WebsiteDesignManager />
-      )}
+      {activeTab === 'design' && <WebsiteDesignManager />}
 
       {/* ================= TAB: WHATSAPP CONTACT SETTINGS ================= */}
-      {activeTab === 'whatsapp' && (
-        <AdminWhatsAppSettings />
-      )}
-
-      {/* ================= TAB: RWANDA SCHOOL DIRECTORY MANAGEMENT ================= */}
-      {activeTab === 'schools' && (
-        <AdminSchoolDirectoryPanel adminUid={user?.uid} />
-      )}
-
+      {activeTab === 'whatsapp' && <AdminWhatsAppSettings />}
 
       {/* ================= TAB: ADS MANAGEMENT ================= */}
-      {activeTab === 'ads' && (
-        <AdsManager />
-      )}
+      {activeTab === 'ads' && <AdsManager />}
 
       {/* ================= TAB: WEBSITE ANALYTICS & GOOGLE ANALYTICS 4 ================= */}
       {activeTab === 'analytics' && (
@@ -632,10 +381,11 @@ promoteToAdmin('admin@example.com');`;
                   <span>Google Analytics 4 • Live Stream Connected</span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                  Website Traffic & Conversion Analytics
+                  Website Traffic &amp; Reader Analytics
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-                  Monitoring visitor traffic, lesson-planning activity, and parent/teacher WhatsApp inquiries for <span className="text-emerald-300 font-semibold">ISEZERANO ONLINE – GS GITUMBA</span>.
+                  Monitoring readership activity, section page views, and WhatsApp inquiries for{' '}
+                  <span className="text-emerald-300 font-semibold">ISEZERANO ONLINE</span>.
                 </p>
               </div>
 
@@ -684,8 +434,8 @@ promoteToAdmin('admin@example.com');`;
             </div>
           </div>
 
-          {/* Key Metrics Grid (4 Cards) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Key Metrics Grid (3 Cards) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* 1. Page Views */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
@@ -699,9 +449,8 @@ promoteToAdmin('admin@example.com');`;
               <div className="mt-3 text-3xl font-extrabold text-slate-900 tracking-tight">
                 {analyticsData.totalPageViews}
               </div>
-              <p className="text-xs text-slate-500 mt-1 flex items-center space-x-1">
-                <span className="text-emerald-600 font-semibold">SPA tracked</span>
-                <span>across all public & tool pages</span>
+              <p className="text-xs text-slate-500 mt-1">
+                <span className="text-emerald-600 font-semibold">SPA tracked</span> across all public routes
               </p>
             </div>
 
@@ -723,39 +472,21 @@ promoteToAdmin('admin@example.com');`;
               </p>
             </div>
 
-            {/* 3. Lesson Plans Created */}
+            {/* 3. Active Sections */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  CBC Lesson Plans
+                  Active Portal Sections
                 </span>
-                <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-                  <BookOpen className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
+                  <Globe className="w-5 h-5" />
                 </div>
               </div>
-              <div className="mt-3 text-3xl font-extrabold text-purple-700 tracking-tight">
-                {analyticsData.totalLessonPlansCreated}
+              <div className="mt-3 text-3xl font-extrabold text-sky-700 tracking-tight">
+                {activeSectionsCount} / {trackedSections.length}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                {lessonPlans.length} saved in local & cloud storage
-              </p>
-            </div>
-
-            {/* 4. PDF Exports */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  A4 PDF Exports
-                </span>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
-              </div>
-              <div className="mt-3 text-3xl font-extrabold text-blue-700 tracking-tight">
-                {analyticsData.totalPdfExports}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Standard CBC official prints generated
+                Sections visited in shared telemetry
               </p>
             </div>
           </div>
@@ -775,21 +506,12 @@ promoteToAdmin('admin@example.com');`;
               </div>
 
               <div className="space-y-3 pt-2">
-                {[
-                  { key: 'home', label: 'Homepage & Hero Slider', path: '/' },
-                  { key: 'dashboard', label: 'Lesson Plan Hub', path: '/dashboard' },
-                  { key: 'create', label: 'CBC Plan Creator (8 Columns)', path: '/create' },
-                  { key: 'saved', label: 'Saved Lesson Plans', path: '/saved' },
-                  { key: 'settings', label: 'Teacher Preferences', path: '/settings' },
-                  { key: 'about', label: 'About GS GITUMBA', path: '/about' },
-                  { key: 'contact', label: 'Contact & Location', path: '/contact' },
-                  { key: 'privacy', label: 'Privacy Policy', path: '/privacy' },
-                  { key: 'admin', label: 'Admin Management Portal', path: '/admin' }
-                ].map((item) => {
+                {trackedSections.map((item) => {
                   const count = analyticsData.pageViewsByPage[item.key] || 0;
-                  const percentage = analyticsData.totalPageViews > 0 
-                    ? Math.round((count / analyticsData.totalPageViews) * 100) 
-                    : 0;
+                  const percentage =
+                    analyticsData.totalPageViews > 0
+                      ? Math.round((count / analyticsData.totalPageViews) * 100)
+                      : 0;
 
                   return (
                     <div key={item.key} className="space-y-1">
@@ -804,8 +526,8 @@ promoteToAdmin('admin@example.com');`;
                         </div>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className="bg-emerald-600 h-2 rounded-full transition-all duration-500" 
+                        <div
+                          className="bg-emerald-600 h-2 rounded-full transition-all duration-500"
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
@@ -827,21 +549,14 @@ promoteToAdmin('admin@example.com');`;
 
               {analyticsData.recentEvents.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs">
-                  No activity events recorded yet. Browse the website or create a plan to test tracking.
+                  No activity events recorded yet. Browse the newsroom pages to test tracking.
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
                   {analyticsData.recentEvents.map((evt) => {
                     const isWhatsApp = evt.eventName === 'whatsapp_click';
-                    const isLessonPlan = evt.eventName === 'lesson_plan_created';
-                    const isPdf = evt.eventName === 'lesson_plan_export_pdf';
-
                     const badgeColor = isWhatsApp
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                      : isLessonPlan
-                      ? 'bg-purple-100 text-purple-800 border-purple-300'
-                      : isPdf
-                      ? 'bg-blue-100 text-blue-800 border-blue-300'
                       : 'bg-slate-100 text-slate-700 border-slate-200';
 
                     return (
@@ -863,7 +578,11 @@ promoteToAdmin('admin@example.com');`;
                           </p>
                         </div>
                         <span className="text-[11px] text-slate-400 shrink-0 font-mono">
-                          {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          {new Date(evt.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
                         </span>
                       </div>
                     );
@@ -877,28 +596,34 @@ promoteToAdmin('admin@example.com');`;
           <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-xs text-slate-600 space-y-4">
             <div className="font-bold text-slate-900 flex items-center space-x-2 text-sm">
               <Globe className="w-4 h-4 text-teal-600" />
-              <span>Google Analytics 4 & Shared Cloud Firestore Telemetry</span>
+              <span>Google Analytics 4 &amp; Shared Cloud Firestore Telemetry</span>
             </div>
             <p className="leading-relaxed">
-              Traffic and user interactions are tracked with dual-layer integrity for <span className="font-semibold text-slate-900">ISEZERANO ONLINE – GS GITUMBA</span>:
+              Traffic and reader interactions are tracked with dual-layer integrity for{' '}
+              <span className="font-semibold text-slate-900">ISEZERANO ONLINE</span>:
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
                 <span className="font-bold text-slate-800 block text-xs">Google Analytics 4 Property</span>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Official stream (<code className="text-emerald-700 font-mono font-semibold">{analyticsData.measurementId || GA_MEASUREMENT_ID}</code>) transmits telemetry to Google Cloud for official reports and geographical demographics.
+                  Official stream (
+                  <code className="text-emerald-700 font-mono font-semibold">
+                    {analyticsData.measurementId || GA_MEASUREMENT_ID}
+                  </code>
+                  ) transmits telemetry to Google Cloud for reports and audience demographics.
                 </p>
               </div>
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
                 <span className="font-bold text-slate-800 block text-xs">Shared Cloud Counters</span>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  All page views, lesson plan generations, and WhatsApp clicks synchronize to Firestore (<code className="text-teal-700 font-mono font-semibold">site_stats/counters</code>) in real time across every visitor device.
+                  Page views and WhatsApp clicks synchronize to Firestore (
+                  <code className="text-teal-700 font-mono font-semibold">site_stats/counters</code>) across devices.
                 </p>
               </div>
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1">
                 <span className="font-bold text-slate-800 block text-xs">Data Preservation</span>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Reset buttons have been completely removed. Existing view counts and historical metrics are permanently preserved in the shared database.
+                  Existing view counts and historical metrics are preserved continuously in Cloud Firestore.
                 </p>
               </div>
             </div>
@@ -907,473 +632,34 @@ promoteToAdmin('admin@example.com');`;
       )}
 
       {/* ================= TAB: PUSH NOTIFICATIONS (FCM) ================= */}
-      {activeTab === 'notifications' && (
-        <AdminNotificationManager />
-      )}
+      {activeTab === 'notifications' && <AdminNotificationManager />}
 
-      {/* ================= TAB 1: MODULES & PLATFORM ================= */}
-      {activeTab === 'modules' && settings && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* General Platform Info */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-              <SettingsIcon className="w-4 h-4 text-purple-600" />
-              <span>General Platform Settings</span>
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Default School Name (Used in new lesson plans)
-                </label>
-                <input
-                  type="text"
-                  value={settings.schoolDefaultName}
-                  onChange={(e) => setSettings({ ...settings, schoolDefaultName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Active Academic Year
-                </label>
-                <input
-                  type="text"
-                  value={settings.academicYear}
-                  onChange={(e) => setSettings({ ...settings, academicYear: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Curriculum Standard Title
-                </label>
-                <input
-                  type="text"
-                  value={settings.curriculumVersion}
-                  onChange={(e) => setSettings({ ...settings, curriculumVersion: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium text-slate-900"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Configurable Optional Feature Modules */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-              <ToggleRight className="w-4 h-4 text-purple-600" />
-              <span>Configurable Feature Modules</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Enable or disable application modules across the SaaS platform for teachers.
-            </p>
-
-            <div className="space-y-3 pt-1">
-              {/* AI Assistance Module */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">AI Assistance & Suggestions</h4>
-                  <p className="text-[11px] text-slate-500">Curriculum competency guidance and activity drafting</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleModule('aiAssistance')}
-                  className="text-purple-600 hover:text-purple-700 cursor-pointer"
-                >
-                  {settings.enabledModules.aiAssistance ? (
-                    <ToggleRight className="w-8 h-8 text-purple-600" />
-                  ) : (
-                    <ToggleLeft className="w-8 h-8 text-slate-400" />
-                  )}
-                </button>
-              </div>
-
-              {/* Cloud Sync Module */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Firestore Cloud Sync</h4>
-                  <p className="text-[11px] text-slate-500">Real-time sync to Cloud Firestore collections</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleModule('cloudSync')}
-                  className="text-purple-600 hover:text-purple-700 cursor-pointer"
-                >
-                  {settings.enabledModules.cloudSync ? (
-                    <ToggleRight className="w-8 h-8 text-purple-600" />
-                  ) : (
-                    <ToggleLeft className="w-8 h-8 text-slate-400" />
-                  )}
-                </button>
-              </div>
-
-              {/* Print / PDF Export Module */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Official PDF & Print Export</h4>
-                  <p className="text-[11px] text-slate-500">Official MINEDUC/REB 8-column printable table formats</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleModule('printExport')}
-                  className="text-purple-600 hover:text-purple-700 cursor-pointer"
-                >
-                  {settings.enabledModules.printExport ? (
-                    <ToggleRight className="w-8 h-8 text-purple-600" />
-                  ) : (
-                    <ToggleLeft className="w-8 h-8 text-slate-400" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= TAB 2: CURRICULUM & CLASSES ================= */}
-      {activeTab === 'curriculum' && settings && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Manage Classes */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-              <GraduationCap className="w-4 h-4 text-purple-600" />
-              <span>Available Classes / Grades</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Classes available in the generator dropdown for teachers (e.g., P1 to P6, S1 to S6).
-            </p>
-
-            {/* Add class */}
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                placeholder="New class (e.g., S3B)"
-                value={newClass}
-                onChange={(e) => setNewClass(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
-              />
-              <button
-                type="button"
-                onClick={handleAddClass}
-                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add</span>
-              </button>
-            </div>
-
-            {/* Class badges list */}
-            <div className="flex flex-wrap gap-2 pt-2">
-              {settings.availableClasses.map((cls) => (
-                <span
-                  key={cls}
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200"
-                >
-                  <span>{cls}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveClass(cls)}
-                    className="p-0.5 rounded hover:text-red-600"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Manage Subjects */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-              <BookOpen className="w-4 h-4 text-purple-600" />
-              <span>Supported Curriculum Subjects</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Subjects offered under Rwanda Competence-Based Curriculum (CBC).
-            </p>
-
-            {/* Add Subject */}
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                placeholder="New subject (e.g., Economics)"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
-              />
-              <button
-                type="button"
-                onClick={handleAddSubject}
-                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add</span>
-              </button>
-            </div>
-
-            {/* Subjects list */}
-            <div className="flex flex-wrap gap-2 pt-2 max-h-80 overflow-y-auto">
-              {settings.availableSubjects.map((sub) => (
-                <span
-                  key={sub}
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
-                >
-                  <span>{sub}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveSubject(sub)}
-                    className="p-0.5 rounded hover:text-red-600"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= TAB: NURSERY REPORT CARDS SUBJECTS & COLORS ================= */}
-      {activeTab === 'nursery-subjects' && (
-        <NurserySubjectsAndColorsManager />
-      )}
-
-      {/* ================= TAB 3: TEACHER ACCOUNTS ================= */}
-      {activeTab === 'teachers' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-                <Users className="w-4 h-4 text-purple-600" />
-                <span>Teacher & User Accounts Management</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                View registered users, promote/demote administrator roles, or activate/deactivate teacher accounts.
-              </p>
-            </div>
-
-            {/* Search users */}
-            <div className="relative min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search by name, email, school..."
-                value={userSearchTerm}
-                onChange={(e) => setUserSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
-              />
-            </div>
-          </div>
-
-          {filteredUsers.length === 0 ? (
-            <div className="text-center py-10 border border-dashed border-slate-200 rounded-xl">
-              <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-500">
-                {usersList.length === 0 ? 'No user records retrieved yet.' : 'No users match your search.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
-                    <th className="p-3">User / Name</th>
-                    <th className="p-3">Email Address</th>
-                    <th className="p-3">School</th>
-                    <th className="p-3">Teacher Profile</th>
-                    <th className="p-3">Role</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredUsers.map((u) => {
-                    const isSelf = u.uid === user?.uid;
-                    const teacherProf = teacherProfiles[u.uid];
-                    return (
-                      <tr key={u.uid} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="p-3 font-semibold text-slate-900">
-                          {u.displayName || '—'} {isSelf && <span className="text-[10px] text-purple-600 font-bold">(You)</span>}
-                        </td>
-                        <td className="p-3 text-slate-600 font-mono text-[11px]">
-                          {u.email}
-                        </td>
-                        <td className="p-3 text-slate-600">
-                          {teacherProf?.schoolName || u.schoolName || '—'}
-                        </td>
-                        <td className="p-3">
-                          {teacherProf ? (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedTeacherProfile(teacherProf)}
-                              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 cursor-pointer"
-                              title="View full Teacher Profile"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-teal-600" />
-                              <span>View Profile</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedTeacherProfile({
-                                ownerUid: u.uid,
-                                email: u.email,
-                                fullName: u.displayName || u.email.split('@')[0],
-                                schoolName: u.schoolName || 'GS GITUMBA',
-                                phone: '',
-                                gender: '',
-                                qualification: 'Not provided yet',
-                                subjectsTaught: [],
-                                classesTaught: [],
-                                bio: 'No extra profile details provided yet.'
-                              })}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer"
-                            >
-                              <span>View Details</span>
-                            </button>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            u.role === 'admin'
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          }`}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            u.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-red-50 text-red-700'
-                          }`}>
-                            {u.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleUserStatus(u)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
-                              u.status === 'active'
-                                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                            }`}
-                            title={u.status === 'active' ? 'Deactivate access' : 'Activate access'}
-                          >
-                            {u.status === 'active' ? 'Deactivate' : 'Activate'}
-                          </button>
-
-                          {!isSelf && (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleUserRole(u)}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors border border-slate-200"
-                              title={u.role === 'admin' ? 'Change to Teacher' : 'Promote to Admin'}
-                            >
-                              {u.role === 'admin' ? 'Set as Teacher' : 'Make Admin'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ================= TAB 4: USAGE & ACTIVITY ================= */}
-      {activeTab === 'usage' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Total Lesson Plans
-              </span>
-              <div className="mt-2 text-3xl font-extrabold text-slate-900">
-                {lessonPlans.length}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Saved across the system</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Primary Education Plans
-              </span>
-              <div className="mt-2 text-3xl font-extrabold text-blue-600">
-                {primaryPlansCount}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">P1 to P6 curriculums</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Secondary Education Plans
-              </span>
-              <div className="mt-2 text-3xl font-extrabold text-indigo-600">
-                {secondaryPlansCount}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">S1 to S6 curriculums</p>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Registered Users
-              </span>
-              <div className="mt-2 text-3xl font-extrabold text-purple-600">
-                {usersList.length}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {usersList.filter(u => u.role === 'admin').length} Admin(s) • {usersList.filter(u => u.role === 'teacher').length} Teacher(s)
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= TAB 5: ADMIN SETUP & SECURITY ================= */}
+      {/* ================= TAB: ADMIN SETUP & SECURITY ================= */}
       {activeTab === 'security' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center space-x-2">
-              <Key className="w-4 h-4 text-purple-600" />
-              <span>Secure First-Admin Provisioning & Security Rules</span>
+              <Key className="w-4 h-4 text-teal-700" />
+              <span>Admin-Only Authentication &amp; Security Rules</span>
             </h3>
-            
-            <p className="text-xs text-slate-600 leading-relaxed">
-              In accordance with security requirements, <strong>Admin credentials and passwords are never hardcoded</strong> in client source files, and ordinary public sign-ups are restricted to the <strong>Teacher</strong> role by default.
-            </p>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-2">
-              <div className="font-bold text-slate-900 flex items-center space-x-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>How to establish or promote an Admin in production:</span>
-              </div>
-              <ol className="list-decimal pl-5 space-y-1 text-slate-600">
-                <li>Register the user through the standard Sign Up form (they receive <code>role: "teacher"</code>).</li>
-                <li>In the <strong>Firebase Console &gt; Cloud Firestore</strong>, navigate to the <code>users</code> collection.</li>
-                <li>Find the document matching the user's UID and change <code>role: "teacher"</code> to <code>role: "admin"</code>.</li>
-                <li>Alternatively, execute the trusted server-side Node.js script below using the Firebase Admin SDK.</li>
-              </ol>
-            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              ISEZERANO ONLINE operates as a dedicated news portal with <strong>Admin-Only authentication</strong>. Public visitors can browse, search, read, comment, and subscribe to breaking news alerts without creating an account. Administrative access is strictly limited to verified Google login for{' '}
+              <code className="font-mono text-teal-800 font-semibold">twizerefelix90@gmail.com</code> and enforced server-side in Cloud Firestore and Firebase Storage security rules.
+            </p>
 
             {/* Script Box */}
             <div className="relative">
               <div className="flex items-center justify-between px-4 py-2 bg-slate-900 text-slate-300 rounded-t-xl text-xs font-mono">
                 <span>scripts/setup-admin.js</span>
                 <button
+                  type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(adminSetupScript);
                     setCopiedScript(true);
                     setTimeout(() => setCopiedScript(false), 2500);
                   }}
-                  className="inline-flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-bold"
+                  className="inline-flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
                 >
                   {copiedScript ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedScript ? 'Copied' : 'Copy Script'}</span>
@@ -1386,186 +672,6 @@ promoteToAdmin('admin@example.com');`;
           </div>
         </div>
       )}
-
-      {/* ================= TEACHER PROFILE INSPECTION MODAL (ADMIN GLOBAL OVERSIGHT) ================= */}
-      {selectedTeacherProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl space-y-5 p-6 animate-in zoom-in-95">
-            
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-lg border border-teal-200">
-                  {selectedTeacherProfile.fullName ? selectedTeacherProfile.fullName.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-base font-bold text-slate-900">
-                      {selectedTeacherProfile.fullName || 'Mwarimu'}
-                    </h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold uppercase">
-                      Teacher Profile
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 font-mono">
-                    {selectedTeacherProfile.email}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedTeacherProfile(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                title="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              
-              {/* Phone */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <Phone className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Phone Number</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.phone || '— (Ntabwo yashyizwemo)'}
-                </p>
-              </div>
-
-              {/* Gender */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <User className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Gender (Igitsina)</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.gender === 'Gabo' ? 'Gabo (Male)' : selectedTeacherProfile.gender === 'Gore' ? 'Gore (Female)' : selectedTeacherProfile.gender || '—'}
-                </p>
-              </div>
-
-              {/* School */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <School className="w-3.5 h-3.5 text-teal-600" />
-                  <span>School Name</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.schoolName || 'GS GITUMBA'}
-                </p>
-              </div>
-
-              {/* Qualification */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <GraduationCap className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Qualification</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.qualification || '—'}
-                </p>
-              </div>
-
-              {/* Location */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <MapPin className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Location</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.district ? `${selectedTeacherProfile.district}${selectedTeacherProfile.sector ? `, ${selectedTeacherProfile.sector}` : ''}` : 'Rulindo, Gitumba'}
-                </p>
-              </div>
-
-              {/* Experience */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1">
-                <span className="text-slate-500 font-bold flex items-center space-x-1.5 uppercase text-[10px]">
-                  <Calendar className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Teaching Experience</span>
-                </span>
-                <p className="font-semibold text-slate-900 text-sm">
-                  {selectedTeacherProfile.experienceYears ? `${selectedTeacherProfile.experienceYears} imyaka` : '—'}
-                </p>
-              </div>
-
-            </div>
-
-            {/* Classes Taught */}
-            <div className="space-y-1.5 pt-1">
-              <span className="font-bold text-slate-700 text-xs block">
-                Classes Taught (Imyaka Wigisha):
-              </span>
-              {selectedTeacherProfile.classesTaught && selectedTeacherProfile.classesTaught.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedTeacherProfile.classesTaught.map((cls) => (
-                    <span
-                      key={cls}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-100 text-teal-900 border border-teal-200"
-                    >
-                      {cls}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No classes listed yet.</p>
-              )}
-            </div>
-
-            {/* Subjects Taught */}
-            <div className="space-y-1.5 pt-1">
-              <span className="font-bold text-slate-700 text-xs block">
-                Subjects Taught (Amasomo Wigisha):
-              </span>
-              {selectedTeacherProfile.subjectsTaught && selectedTeacherProfile.subjectsTaught.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedTeacherProfile.subjectsTaught.map((sub) => (
-                    <span
-                      key={sub}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
-                    >
-                      {sub}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No subjects listed yet.</p>
-              )}
-            </div>
-
-            {/* Bio & Responsibilities */}
-            {selectedTeacherProfile.bio && (
-              <div className="space-y-1 pt-1 border-t border-slate-100">
-                <span className="font-bold text-slate-700 text-xs block">
-                  Professional Bio & Responsibilities:
-                </span>
-                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200/80 leading-relaxed whitespace-pre-wrap">
-                  {selectedTeacherProfile.bio}
-                </p>
-              </div>
-            )}
-
-            {/* Modal Footer */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-              <span>
-                Owner UID: <code className="text-slate-600 font-mono text-[10px]">{selectedTeacherProfile.ownerUid}</code>
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedTeacherProfile(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition-all cursor-pointer"
-              >
-                Funga (Close)
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };

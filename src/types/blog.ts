@@ -46,11 +46,11 @@ export interface BlogCategory {
 
 export const BLOG_CATEGORIES = [
   'All Categories',
-  'CBC Curriculum',
-  'School News',
-  'Teacher Resources',
-  'Academic Guidance',
-  'Pedagogical Innovation',
+  'General News',
+  'National',
+  'Education',
+  'Opinion',
+  'Culture & Sports',
   'Announcements'
 ] as const;
 
@@ -60,45 +60,45 @@ export const BLOG_WRITE_CATEGORIES = BLOG_CATEGORIES.filter(
 
 export const DEFAULT_AI_BLOG_CATEGORIES: BlogCategory[] = [
   {
-    id: 'ai_cat_cbc_curriculum',
-    name: 'CBC Curriculum',
-    slug: 'cbc-curriculum',
-    description: 'Rwanda Competence-Based Curriculum (CBC) lesson planning guides and pedagogical standards.',
+    id: 'ai_cat_general_news',
+    name: 'General News',
+    slug: 'general-news',
+    description: 'Latest breaking stories, top headlines, and verified news reports.',
     isDefault: true
   },
   {
-    id: 'ai_cat_school_news',
-    name: 'School News',
-    slug: 'school-news',
-    description: 'Updates, activities, and official news from GS GITUMBA and education partners.',
+    id: 'ai_cat_national',
+    name: 'National',
+    slug: 'national',
+    description: 'National news, public affairs, and community developments across Rwanda.',
     isDefault: true
   },
   {
-    id: 'ai_cat_teacher_resources',
-    name: 'Teacher Resources',
-    slug: 'teacher-resources',
-    description: 'Classroom teaching materials, assessment templates, and practical educator guides.',
+    id: 'ai_cat_education',
+    name: 'Education',
+    slug: 'education',
+    description: 'Education news, academic policy updates, and institutional reports.',
     isDefault: true
   },
   {
-    id: 'ai_cat_academic_guidance',
-    name: 'Academic Guidance',
-    slug: 'academic-guidance',
-    description: 'Student learning support, study tips, and academic mentoring insights.',
+    id: 'ai_cat_opinion',
+    name: 'Opinion',
+    slug: 'opinion',
+    description: 'Editorial commentary, perspectives, and in-depth analysis.',
     isDefault: true
   },
   {
-    id: 'ai_cat_pedagogical_innovation',
-    name: 'Pedagogical Innovation',
-    slug: 'pedagogical-innovation',
-    description: 'Modern teaching strategies and classroom methodology improvements.',
+    id: 'ai_cat_culture_sports',
+    name: 'Culture & Sports',
+    slug: 'culture-and-sports',
+    description: 'Arts, culture, youth initiatives, and sports coverage.',
     isDefault: true
   },
   {
     id: 'ai_cat_announcements',
     name: 'Announcements',
     slug: 'announcements',
-    description: 'Official school notices, term calendars, and important administrative updates.',
+    description: 'Official notices, press releases, and important public updates.',
     isDefault: true
   }
 ];

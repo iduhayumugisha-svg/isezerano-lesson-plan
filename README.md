@@ -1,35 +1,31 @@
-# ISEZERANO Lesson Plan – Rwanda CBC Teacher Hub
+# ISEZERANO ONLINE – Digital News & Information Portal
 
-A production-ready educational SaaS platform for Rwandan educators from Lower Primary through Upper Secondary, strictly aligned with the **Rwanda Education Board (REB) / Ministry of Education (MINEDUC) Competence-Based Curriculum (CBC)** standards.
+A modern digital news and editorial publishing platform powered by React, TypeScript, Vite, Firebase Hosting, Cloud Firestore, and Firebase Cloud Messaging (FCM).
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-1. **Zero-Barrier Public Teacher Experience**
-   - **No Login or Account Required**: Rwandan teachers can immediately open the app, enter lesson parameters, generate standard CBC lesson plans, and print/export to PDF without creating an account or signing in.
-   - **CBC Auto-Generator**: Instant generation of structured lesson plan outlines with Bloom's taxonomy objectives, teaching aids, 3-stage lesson development (Introduction, Development, Conclusion), generic competences, and cross-cutting issues.
-   - **Official REB 8-Column Format**: Clean, printable layout matching official pedagogical monitoring inspection sheets.
-   - **Tri-Lingual Support**: English, Ikinyarwanda, and Français.
+1. **Zero-Barrier Public News Reading Experience**
+   - **No Login Required for Readers**: Visitors immediately read breaking headlines, browse categories, search articles, post moderated comments, subscribe to push announcements, and share stories to WhatsApp, Facebook, Telegram, or social channels.
+   - **SEO & Social Crawler Open Graph Previews**: Static article HTML pre-rendering (`scripts/prerenderBlogMeta.ts`) and Express SSR (`server.ts`, `server/ogMeta.ts`) provide clean Open Graph metadata and `/og-blog/*` thumbnails for WhatsApp, Facebook, and X/Twitter.
+   - **Tri-Lingual UI Support**: English, Ikinyarwanda, and Français.
 
-2. **Secure Website Owner / Admin Account**
-   - **Owner Email**: `twizerefelix90@gmail.com`
-   - **Discreet Access**: Discreet entry via the footer and navigation without forcing teachers through a login modal.
+2. **Secure Administrator-Only Account**
+   - **Owner Email**: `twizerefelix90@gmail.com` (verified Google authentication)
    - **Admin Management Portal (`/admin`)**:
-     - Platform module toggles (enable/disable secondary modules).
-     - Curriculum configuration (add/remove classes and subjects).
-     - Teacher directory and access status controls.
-     - Usage analytics and system health checks.
-     - Firebase security configuration and promotion tools.
+     - Articles & Categories CMS (`posts`, `categories`) with Rich Text editing and comment moderation (`comments`).
+     - Static Website Pages CMS (`website_pages`: About Us, Contact Us, Privacy Policy, Terms & Conditions).
+     - Website Design, Branding, Typography, Top Announcement Ticker, WhatsApp Contact Settings, and Ads/Monetag Slots (`appSettings`, `siteSettings`).
+     - Breaking News Push Notifications & Analytics (`announcements`, `fcm_tokens`).
 
 3. **Production Firebase Architecture**
-   - **Firebase Hosting**: Fast SPA delivery with root rewrites (`dist/`).
-   - **Cloud Firestore**: Strict role-based access control (RBAC) via `firestore.rules`.
-   - **Data Privacy**: Teacher plans remain private to local storage or strictly bound to `ownerUid` in the cloud.
+   - **Firebase Hosting**: Fast static delivery from `dist/` with clean URLs (`firebase.json`).
+   - **Cloud Firestore & Storage**: Strictly verified single-admin write protection in `firestore.rules` and `storage.rules`.
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## Quick Start (Local Development)
 
 ```bash
 # 1. Install dependencies
@@ -41,7 +37,7 @@ npm run dev
 # 3. Check TypeScript types
 npm run lint
 
-# 4. Create production build
+# 4. Create production build & prerender article OG metadata
 npm run build
 ```
 
@@ -49,62 +45,16 @@ The dev server runs at `http://localhost:3000`.
 
 ---
 
-## 🔐 Admin Setup & Provisioning
+## Admin Setup & Security
 
-To securely designate `twizerefelix90@gmail.com` as the verified Administrator:
-
-### Option A: Using Firebase Console (Quickest)
-1. Go to the [Firebase Console](https://console.firebase.google.com/) for project `isezerano-news`.
-2. Ensure the user `twizerefelix90@gmail.com` has signed in once under **Authentication > Users**.
-3. Navigate to **Firestore Database** > `users` collection > document with the user's `UID`.
-4. Set the field:
-   - `role`: `"admin"` (string)
-   - `status`: `"active"` (string)
-
-### Option B: Using the Included Script (Cloud Shell or Local)
-```bash
-# Set GOOGLE_APPLICATION_CREDENTIALS to your service account key
-export GOOGLE_APPLICATION_CREDENTIALS="path/to/serviceAccountKey.json"
-
-# Run the promotion script
-node scripts/setup-admin.js twizerefelix90@gmail.com
-```
+Only `twizerefelix90@gmail.com` signing in with verified Google Authentication is authorized as platform Administrator across client auth, Firestore rules (`firestore.rules`), Storage rules (`storage.rules`), and FCM push endpoints.
 
 ---
 
-## 🚢 Deploying to Firebase Hosting & Firestore
+## Security Rules Overview
 
-Deploy directly from Google Cloud Shell or your local machine with Firebase CLI:
-
-```bash
-# 1. Login to Firebase CLI
-firebase login
-
-# 2. Verify active project
-firebase use isezerano-news
-
-# 3. Build optimized production bundle
-npm run build
-
-# 4. Deploy Hosting and Security Rules
-firebase deploy --only hosting,firestore:rules
-```
-
-### Deployed Artifacts:
-- **Hosting URL**: `https://isezerano-news.web.app` or custom domain
-- **Build Directory**: `dist/`
-- **Security Rules**: `firestore.rules` (enforced on Cloud Firestore)
-
----
-
-## 🛡️ Security Rules Overview
-
-- `users/{uid}`: Authenticated users can read their own profile; only administrators can promote or deactivate accounts.
-- `appSettings/{settingId}`: Publicly readable by all teachers; only verified administrators can update curriculum options.
-- `lesson_plans/{planId}`: Cloud plans are strictly accessible only by the owning teacher or authorized administrators.
-
----
-
-## 📄 License & Compliance
-
-Designed and built for compliance with the **Rwanda Ministry of Education (MINEDUC)** and **Rwanda Basic Education Board (REB)** Competence-Based Curriculum (CBC) framework.
+- `posts/{postId}`: Publicly readable; Admin create/delete; public update strictly limited to exact `+1` view count increment.
+- `comments/{commentId}`: Publicly readable only when `status == 'approved'` without private email/phone; public creation strictly validated as `pending`; moderation/deletion Admin-only.
+- `categories`, `website_pages`, `appSettings`, `siteSettings`, `announcements`: Public read, verified Admin write.
+- `users/{userId}`: Verified Admin-only access.
+- `fcm_tokens/{tokenId}`: Public push subscription creation with Admin-only read/list/delete.

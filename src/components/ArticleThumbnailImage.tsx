@@ -6,13 +6,15 @@ interface ArticleThumbnailImageProps {
   alt: string;
   className?: string;
   compact?: boolean;
+  priority?: boolean;
 }
 
 export const ArticleThumbnailImage: React.FC<ArticleThumbnailImageProps> = ({
   src,
   alt,
   className = '',
-  compact = false
+  compact = false,
+  priority = false
 }) => {
   const [hasError, setHasError] = useState(false);
 
@@ -32,7 +34,7 @@ export const ArticleThumbnailImage: React.FC<ArticleThumbnailImageProps> = ({
         <FileText className={compact ? 'w-5 h-5 opacity-55' : 'w-7 h-7 opacity-55'} />
         {!compact && (
           <span className="text-[11px] font-medium tracking-wide uppercase text-slate-500">
-            GS GITUMBA
+            ISEZERANO ONLINE
           </span>
         )}
       </div>
@@ -45,7 +47,9 @@ export const ArticleThumbnailImage: React.FC<ArticleThumbnailImageProps> = ({
       alt={alt}
       className={className}
       referrerPolicy="no-referrer"
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
+      decoding="async"
       onError={() => setHasError(true)}
     />
   );

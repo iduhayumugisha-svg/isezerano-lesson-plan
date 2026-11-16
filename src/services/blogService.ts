@@ -10,13 +10,12 @@ import {
   onSnapshot,
   writeBatch
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
   initFirestoreIfConfigured,
   getFirebaseApp,
   getFirebaseConfig,
   getFirebaseAuth
-} from './storageService';
+} from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 import {
   BlogCategory,
@@ -351,9 +350,9 @@ export const prepareBlogPostPayload = (
     thumbnailUrl: sanitized.thumbnailUrl || '',
     thumbnailAlt: (sanitized.thumbnailAlt || `${sanitized.title.trim()} – Featured Image`).trim(),
     thumbnailIsCustomOverride: Boolean(sanitized.thumbnailIsCustomOverride),
-    category: (sanitized.category || '').trim() || 'School News',
+    category: (sanitized.category || '').trim() || 'General News',
     author: {
-      name: sanitized.author?.name?.trim() || 'GS GITUMBA Editorial',
+      name: sanitized.author?.name?.trim() || 'ISEZERANO Editorial',
       role: sanitized.author?.role?.trim() || 'Administrator',
       ...(authorEmail ? { email: authorEmail } : {})
     },
@@ -750,6 +749,7 @@ export const uploadAndOptimizeBlogImage = async (
     try {
       onProgress?.(30, 'Checking Firebase Cloud Storage...');
       const { blob, contentType, ext } = await optimizeForCloudStorage(file, 1600);
+      const { getStorage, ref, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
       const storage = getStorage(app, `gs://${bucketName}`);
       try {
         storage.maxUploadRetryTime = 4500;

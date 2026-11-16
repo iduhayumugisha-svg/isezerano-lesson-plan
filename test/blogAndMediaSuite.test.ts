@@ -152,8 +152,8 @@ function testImageCleanupAndPreservedAssets() {
   const unwantedPhoto = path.join(rootDir, 'src/assets/images/bible_logo_1792762017892.jpg');
   assert.equal(fs.existsSync(unwantedPhoto), false, 'Unwanted bible_logo photo must be deleted');
 
-  const preservedPdf = path.join(rootDir, 'public/assets/aistudio/Class_Reports_N1_Term_1_62cf6792.pdf');
-  assert.equal(fs.existsSync(preservedPdf), true, 'Report card asset must remain preserved');
+  const removedNurseryPdf = path.join(rootDir, 'public/assets/aistudio/Class_Reports_N1_Term_1_62cf6792.pdf');
+  assert.equal(fs.existsSync(removedNurseryPdf), false, 'Nursery report PDF must remain permanently deleted');
 
   const walk = (dir: string): string[] => {
     if (!fs.existsSync(dir)) return [];
@@ -590,7 +590,7 @@ function testWebsiteBrandingDefaultsAndLayout() {
 
 function testDynamicSeoMetadataUpdates() {
   const expectedDesc =
-    'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
+    'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
   assert.equal(DEFAULT_SEO_DESCRIPTION, expectedDesc);
   assert.equal(DEFAULT_WEBSITE_BRANDING.websiteDescription, expectedDesc);
   assert.equal(fs.existsSync(path.join(rootDir, 'public/og-isezerano-online.jpg')), false);
@@ -606,7 +606,7 @@ function testDynamicSeoMetadataUpdates() {
     true
   );
   for (const tagSnippet of [
-    '<meta property="og:title" content="ISEZERANO ONLINE – GS GITUMBA"',
+    '<meta property="og:title" content="ISEZERANO ONLINE"',
     'property="og:description"',
     '<meta property="og:url" content="https://isezerano.online/"',
     '<meta name="twitter:card" content="summary_large_image"'
@@ -616,15 +616,15 @@ function testDynamicSeoMetadataUpdates() {
 
   const customBranding: WebsiteBrandingSettings = {
     ...DEFAULT_WEBSITE_BRANDING,
-    platformTitle: 'GS GITUMBA PORTAL',
-    platformSubtitle: 'NORDIC CBC HUB',
-    websiteDescription: 'Custom school portal description managed by Admin.'
+    platformTitle: 'ISEZERANO NEWS PORTAL',
+    platformSubtitle: 'DIGITAL DESK',
+    websiteDescription: 'Custom news portal description managed by Admin.'
   };
 
   const resolved = resolveSiteBrandingSeo(customBranding);
-  assert.equal(resolved.siteName, 'GS GITUMBA PORTAL');
-  assert.equal(resolved.fullTitle, 'GS GITUMBA PORTAL – NORDIC CBC HUB');
-  assert.equal(resolved.siteDescription, 'Custom school portal description managed by Admin.');
+  assert.equal(resolved.siteName, 'ISEZERANO NEWS PORTAL');
+  assert.equal(resolved.fullTitle, 'ISEZERANO NEWS PORTAL – DIGITAL DESK');
+  assert.equal(resolved.siteDescription, 'Custom news portal description managed by Admin.');
 
   const defaultResolved = resolveSiteBrandingSeo({});
   assert.equal(defaultResolved.siteName, 'ISEZERANO ONLINE');
@@ -696,10 +696,10 @@ function testDynamicSeoMetadataUpdates() {
   (globalThis as any).document = mockDocument;
   try {
     updateWebsiteBrandingSeo(customBranding);
-    assert.equal(mockDocument.title, 'GS GITUMBA PORTAL – NORDIC CBC HUB');
-    assert.equal(metaMap.get('name=description')?.attrs.content, 'Custom school portal description managed by Admin.');
-    assert.equal(metaMap.get('property=og:site_name')?.attrs.content, 'GS GITUMBA PORTAL – NORDIC CBC HUB');
-    assert.equal(metaMap.get('property=og:description')?.attrs.content, 'Custom school portal description managed by Admin.');
+    assert.equal(mockDocument.title, 'ISEZERANO NEWS PORTAL – DIGITAL DESK');
+    assert.equal(metaMap.get('name=description')?.attrs.content, 'Custom news portal description managed by Admin.');
+    assert.equal(metaMap.get('property=og:site_name')?.attrs.content, 'ISEZERANO NEWS PORTAL – DIGITAL DESK');
+    assert.equal(metaMap.get('property=og:description')?.attrs.content, 'Custom news portal description managed by Admin.');
     assert.equal(metaMap.has('property=og:image'), false);
     assert.equal(metaMap.has('name=twitter:image'), false);
     assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
@@ -707,20 +707,20 @@ function testDynamicSeoMetadataUpdates() {
     updateBlogPostSeo(
       {
         id: 'post_seo_1',
-        title: 'Term 2 Reopening',
-        slug: 'term-2-reopening',
-        content: '<p>Welcome back to school.</p>',
-        excerpt: 'Classes resume Monday.',
+        title: 'National Summit Opens',
+        slug: 'national-summit-opens',
+        content: '<p>Live newsroom coverage.</p>',
+        excerpt: 'Delegates gather in Kigali.',
         thumbnailUrl: '',
-        category: 'Announcements',
+        category: 'Top Stories',
         author: { name: 'Twizere Felix', role: 'Administrator' },
         publishedAt: '2026-11-10T08:00:00Z',
         status: 'published'
       },
       customBranding
     );
-    assert.equal(mockDocument.title, 'Term 2 Reopening – GS GITUMBA PORTAL – NORDIC CBC HUB');
-    assert.equal(metaMap.get('name=description')?.attrs.content, 'Classes resume Monday.');
+    assert.equal(mockDocument.title, 'National Summit Opens – ISEZERANO NEWS PORTAL – DIGITAL DESK');
+    assert.equal(metaMap.get('name=description')?.attrs.content, 'Delegates gather in Kigali.');
     assert.equal(metaMap.has('property=og:image'), false);
     assert.equal(metaMap.has('name=twitter:image'), false);
     assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary');
@@ -728,12 +728,12 @@ function testDynamicSeoMetadataUpdates() {
     updateBlogPostSeo(
       {
         id: 'post_seo_2',
-        title: 'Science Fair Gallery',
-        slug: 'science-fair-gallery',
-        content: '<p>Photos from campus.</p><img src="https://cdn.example.org/fair.jpg" alt="Fair" />',
-        excerpt: 'Students showcase projects.',
+        title: 'Innovation Expo Gallery',
+        slug: 'innovation-expo-gallery',
+        content: '<p>Photos from venue.</p><img src="https://cdn.example.org/fair.jpg" alt="Fair" />',
+        excerpt: 'Leaders showcase projects.',
         thumbnailUrl: '',
-        category: 'School News',
+        category: 'Technology',
         author: { name: 'Twizere Felix', role: 'Administrator' },
         publishedAt: '2026-11-11T08:00:00Z',
         status: 'published'
@@ -774,8 +774,9 @@ function testBlogCategoryDiscoveryAndValidation() {
 
   assert.equal(validateCategoryInput('   ', initialCats).valid, false);
   assert.equal(validateCategoryInput('All Categories', initialCats).valid, false);
-  assert.equal(validateCategoryInput('cbc curriculum', initialCats).valid, false);
-  assert.equal(validateCategoryInput('CBC Curriculum', initialCats, 'ai_cat_cbc_curriculum').valid, true);
+  const firstAiCat = DEFAULT_AI_BLOG_CATEGORIES[0];
+  assert.equal(validateCategoryInput(firstAiCat.name.toLowerCase(), initialCats).valid, false);
+  assert.equal(validateCategoryInput(firstAiCat.name, initialCats, firstAiCat.id).valid, true);
   assert.equal(validateCategoryInput('Sports & Culture', initialCats).valid, true);
 
   console.log('✓ 10. Blog category AI migration, post discovery, deletion persistence, and validation verified');
@@ -927,22 +928,21 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(adminCode.includes('handleConfirmDeleteComment'), true);
   assert.equal(commentServiceCode.includes("where('status', '==', 'approved')"), true);
 
-  // Newspaper redesign & three-dot menu checks
+  // Newspaper redesign & three-dot menu checks (Admin-only portal, zero educational links)
   const tier2Marker = 'TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR';
   const tier2Index = headerCode.indexOf(tier2Marker);
   assert.equal(tier2Index > 0, true);
   const tier1OverflowSection = headerCode.slice(0, tier2Index);
   const tier2NavSection = headerCode.slice(tier2Index);
 
-  for (const movedSection of ['Lesson Preparation', 'CBC Report Cards N1-N3', 'Admin Portal']) {
-    assert.equal(tier1OverflowSection.includes(movedSection), true);
-    assert.equal(tier2NavSection.includes(movedSection), false);
+  assert.equal(tier1OverflowSection.includes('Admin Portal'), true);
+  assert.equal(tier2NavSection.includes('Admin Portal'), false);
+  for (const removedLink of ['Lesson Preparation', 'CBC Report Cards N1-N3']) {
+    assert.equal(headerCode.includes(removedLink), false);
   }
   for (const excludedMainItem of ['Ahabanza (Home)', 'Blog & Articles']) {
     assert.equal(tier2NavSection.includes(excludedMainItem), false);
   }
-  assert.equal(tier1OverflowSection.includes("handleNavClick('dashboard')"), true);
-  assert.equal(tier1OverflowSection.includes("handleNavClick('nursery')"), true);
   assert.equal(tier1OverflowSection.includes("handleNavClick('admin')"), true);
   assert.equal(tier1OverflowSection.includes('MoreVertical'), true);
   assert.equal(headerCode.includes('subscribeToBlogCategories'), true);
@@ -971,7 +971,7 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(appCode.includes('subscribeToBlogCategories'), true);
   assert.equal(appCode.includes('handleOpenNewspaperArticle'), true);
   assert.equal(appCode.includes('AdminPortalGateway'), true);
-  assert.equal(appCode.includes('LessonPlanAuthGate'), true);
+  assert.equal(appCode.includes('LessonPlanAuthGate'), false);
 
   console.log('✓ 12. Comments, moderation, sharing & newspaper redesign verified');
 }
@@ -1155,7 +1155,7 @@ async function testSocialCrawlersAndAllPostThumbnails(): Promise<void> {
     assert.equal(homeRes.status, 200);
     const homeHtml = await homeRes.text();
     assert.equal(homeHtml.includes('<meta property="og:type" content="website" />'), true);
-    assert.equal(homeHtml.includes('<meta property="og:title" content="ISEZERANO ONLINE – GS GITUMBA" />'), true);
+    assert.equal(homeHtml.includes('<meta property="og:title" content="ISEZERANO ONLINE" />'), true);
     assert.equal(homeHtml.includes('og-isezerano-online.jpg'), false);
     assert.equal(homeHtml.includes('property="og:image"'), false);
     assert.equal(homeHtml.includes('Rwanda CBC Term 1 Lesson Guide'), false);

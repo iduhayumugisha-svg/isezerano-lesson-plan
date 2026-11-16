@@ -695,7 +695,7 @@ export const TopAnnouncementStripManager: React.FC = () => {
                 rows={2}
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
-                placeholder="e.g. Abanyeshuri n'Abarimu ba GS GITUMBA bakiriwe mu gihembwe cya kabiri..."
+                placeholder="e.g. Inkuru nshya yihutirwa: Isesengura ku bukungu n'iterambere..."
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-teal-500 bg-white"
                 required
               />
@@ -710,7 +710,7 @@ export const TopAnnouncementStripManager: React.FC = () => {
                   type="text"
                   value={newBadge}
                   onChange={(e) => setNewBadge(e.target.value)}
-                  placeholder="e.g. AMAKURU, UBUREZI, CBC 2026"
+                  placeholder="e.g. AMAKURU, BREAKING, SPORTS"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-teal-500 bg-white uppercase font-bold"
                 />
               </div>
@@ -723,7 +723,7 @@ export const TopAnnouncementStripManager: React.FC = () => {
                   type="text"
                   value={newLink}
                   onChange={(e) => setNewLink(e.target.value)}
-                  placeholder="e.g. /blog/post-slug, /dashboard, https://..."
+                  placeholder="e.g. /blog/post-slug, /blog, https://..."
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-teal-500 bg-white"
                 />
               </div>

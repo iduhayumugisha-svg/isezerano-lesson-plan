@@ -57,16 +57,16 @@ import {
 import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
 import { TopAnnouncementStripManager } from './TopAnnouncementStripManager';
 
-// Preset educational palettes for 1-click theme switching
+// Preset palettes for 1-click theme switching
 const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
   {
-    name: 'Official GS GITUMBA (Teal & Navy)',
-    description: 'The standard authentic pedagogical palette of ISEZERANO ONLINE',
+    name: 'Official ISEZERANO ONLINE (Teal & Navy)',
+    description: 'The standard editorial palette of ISEZERANO ONLINE',
     colors: { ...DEFAULT_WEBSITE_COLORS }
   },
   {
-    name: 'Academic Emerald & Slate',
-    description: 'Refined green campus feel with high-contrast slate text',
+    name: 'Emerald & Slate',
+    description: 'Refined emerald newsroom feel with high-contrast slate text',
     colors: {
       headerBg: '#ffffff',
       headerText: '#064e3b',
@@ -88,8 +88,8 @@ const PALETTE_PRESETS: { name: string; description: string; colors: Partial<Webs
     }
   },
   {
-    name: 'Royal Academic Blue',
-    description: 'Distinguished university & MINEDUC inspection tone',
+    name: 'Royal Editorial Blue',
+    description: 'Distinguished broadsheet & international press tone',
     colors: {
       headerBg: '#ffffff',
       headerText: '#1e3a8a',
@@ -111,8 +111,8 @@ const PALETTE_PRESETS: { name: string; description: string; colors: Partial<Webs
     }
   },
   {
-    name: 'Warm Pedagogical Burgundy',
-    description: 'Prestigious classical boarding school elegance',
+    name: 'Classic Print Burgundy',
+    description: 'Prestigious classical journalism contrast',
     colors: {
       headerBg: '#ffffff',
       headerText: '#831843',
@@ -135,64 +135,64 @@ const PALETTE_PRESETS: { name: string; description: string; colors: Partial<Webs
   }
 ];
 
-// Curated professional font families freely available for education, publishing, and CBC lesson planning
+// Curated professional font families for digital publishing and news
 const FONT_PRESETS = [
   // Serifs
   { 
     id: 'times', 
-    label: 'Times New Roman (REB Academic Standard)', 
+    label: 'Times New Roman (Classic Newspaper)', 
     category: 'Serif',
     value: "'Times New Roman', Times, Baskerville, Georgia, serif",
-    sample: 'The quick brown fox jumps over the lazy dog'
+    sample: 'Breaking news, analysis, and public information'
   },
   { 
     id: 'georgia', 
-    label: 'Georgia (Pedagogical Book Serif)', 
+    label: 'Georgia (Editorial Serif)', 
     category: 'Serif',
     value: "Georgia, Cambria, 'Times New Roman', Times, serif",
-    sample: 'Amakuru meza ku burezi bwiteganyirijwe mu Rwanda'
+    sample: 'Amakuru agezweho n’inkuru zicukumbuye mu Rwanda'
   },
   { 
     id: 'garamond', 
     label: 'EB Garamond (Classical Literature)', 
     category: 'Serif',
     value: "'EB Garamond', Garamond, 'Palatino Linotype', serif",
-    sample: 'Competence-Based Curriculum pedagogical documentation'
+    sample: 'Independent journalism and investigative reporting'
   },
   { 
     id: 'merriweather', 
     label: 'Merriweather (Editorial & Long-form)', 
     category: 'Serif',
     value: "'Merriweather', Georgia, 'Times New Roman', serif",
-    sample: 'Integanyanyigisho y’u Rwanda yubakiye ku bushobozi'
+    sample: 'Inkuru z’ubukungu, umuco n’imibereho myiza'
   },
   { 
     id: 'playfair', 
     label: 'Playfair Display (Prestigious Headline)', 
     category: 'Serif',
     value: "'Playfair Display', Georgia, 'Times New Roman', serif",
-    sample: 'Groupe Scolaire GITUMBA — Urubuga rw’Uburezi'
+    sample: 'ISEZERANO ONLINE — Digital Newsroom'
   },
   { 
     id: 'lora', 
     label: 'Lora (Contemporary Book Serif)', 
     category: 'Serif',
     value: "'Lora', Georgia, 'Times New Roman', serif",
-    sample: 'Professional educational planning and assessment'
+    sample: 'Reliable news reporting and community coverage'
   },
   { 
     id: 'baskerville', 
     label: 'Baskerville (Refined Classical)', 
     category: 'Serif',
     value: "Baskerville, 'Baskerville Old Face', 'Hoefler Text', Garamond, serif",
-    sample: 'Pedagogical clarity and structured lesson preparation'
+    sample: 'Editorial clarity and structured news layouts'
   },
   { 
     id: 'palatino', 
     label: 'Palatino Linotype (Book Antiqua)', 
     category: 'Serif',
     value: "'Palatino Linotype', Palatino, 'Book Antiqua', serif",
-    sample: 'Inyandiko zizewe z’amasomo n’indangamanota z’abanyeshuri'
+    sample: 'Inyandiko zizewe n’amakuru y’imvaho'
   },
   // Sans-Serifs
   { 
@@ -200,7 +200,7 @@ const FONT_PRESETS = [
     label: 'Inter (Modern Clean Sans)', 
     category: 'Sans-Serif',
     value: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    sample: 'Clear digital interfaces for modern classroom teachers'
+    sample: 'Clear digital interfaces for news readers'
   },
   { 
     id: 'roboto', 
@@ -214,35 +214,35 @@ const FONT_PRESETS = [
     label: 'Open Sans (Friendly & Legible)', 
     category: 'Sans-Serif',
     value: "'Open Sans', system-ui, -apple-system, sans-serif",
-    sample: 'Uburezi bufite ireme ku bana b’inshuke n’abanyeshuri bose'
+    sample: 'Amakuru asomeka neza ku gikoresho icyo ari cyo cyose'
   },
   { 
     id: 'montserrat', 
     label: 'Montserrat (Geometric Modern)', 
     category: 'Sans-Serif',
     value: "Montserrat, system-ui, -apple-system, sans-serif",
-    sample: 'ISEZERANO ONLINE — GS GITUMBA Buyoga Rulindo'
+    sample: 'ISEZERANO ONLINE — News & Information Portal'
   },
   { 
     id: 'poppins', 
     label: 'Poppins (Friendly Geometric)', 
     category: 'Sans-Serif',
     value: "Poppins, system-ui, -apple-system, sans-serif",
-    sample: 'Modern layout designed for teachers and administrators'
+    sample: 'Modern layout designed for fast digital reading'
   },
   { 
     id: 'lato', 
     label: 'Lato (Warm & Balanced)', 
     category: 'Sans-Serif',
     value: "Lato, system-ui, -apple-system, sans-serif",
-    sample: 'Balanced proportions with high legibility for reports'
+    sample: 'Balanced proportions with high legibility for articles'
   },
   { 
     id: 'segoe', 
     label: 'Segoe UI (Microsoft Standard)', 
     category: 'Sans-Serif',
     value: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    sample: 'Standard clean interface typography on Windows PCs'
+    sample: 'Standard clean interface typography on desktop browsers'
   },
   { 
     id: 'arial', 
@@ -256,7 +256,7 @@ const FONT_PRESETS = [
     label: 'Trebuchet MS (Humanist Sans)', 
     category: 'Sans-Serif',
     value: "'Trebuchet MS', 'Lucida Sans Unicode', sans-serif",
-    sample: 'Dynamic humanistic sans-serif for school documents'
+    sample: 'Dynamic humanistic sans-serif for news headlines'
   },
   // Monospace
   { 
@@ -264,7 +264,7 @@ const FONT_PRESETS = [
     label: 'Fira Code (Technical Monospace)', 
     category: 'Monospace',
     value: "'Fira Code', Consolas, Monaco, 'Courier New', monospace",
-    sample: 'Structured pedagogical standards: REB CBC 8-Columns'
+    sample: 'Structured editorial timestamps and metadata'
   }
 ];
 
@@ -323,7 +323,7 @@ export const WebsiteDesignManager: React.FC = () => {
   const [newSectionBadge, setNewSectionBadge] = useState<string>('');
   const [newSectionBg, setNewSectionBg] = useState<'default' | 'white' | 'slate_dark' | 'teal_gradient' | 'amber_soft' | 'blue_soft'>('teal_gradient');
   const [newSectionBtnText, setNewSectionBtnText] = useState<string>('');
-  const [newSectionBtnLink, setNewSectionBtnLink] = useState<string>('dashboard');
+  const [newSectionBtnLink, setNewSectionBtnLink] = useState<string>('blog');
 
   // Navigation Menu Item Editing State
   const [isAddingNavMenu, setIsAddingNavMenu] = useState<boolean>(false);
@@ -525,7 +525,7 @@ export const WebsiteDesignManager: React.FC = () => {
               Website Design, Typography & Logo Manager
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Customize colors, font families, responsive text sizes, and the official school logo directly from your phone or computer. All changes are saved to Firebase and take effect instantly on the real website.
+              Customize colors, font families, responsive text sizes, and the official portal logo directly from your phone or computer. All changes are saved to Firebase and take effect instantly on the live newsroom.
             </p>
           </div>
 
@@ -778,7 +778,7 @@ export const WebsiteDesignManager: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Restore Original Website Logo?</h3>
-                <p className="text-xs text-slate-500">Reverts to the default school platform branding.</p>
+                <p className="text-xs text-slate-500">Reverts to the default news portal branding.</p>
               </div>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
@@ -877,13 +877,13 @@ export const WebsiteDesignManager: React.FC = () => {
               {/* Platform Subtitle */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-800">
-                  School Subtitle Label (Optional)
+                  Portal Subtitle Label (Optional)
                 </label>
                 <input
                   type="text"
                   value={draftSettings.branding?.platformSubtitle ?? ''}
                   onChange={(e) => updateDraftBranding({ platformSubtitle: e.target.value })}
-                  placeholder="GS GITUMBA"
+                  placeholder="News & Information Portal"
                   className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
                 />
                 <p className="text-[11px] text-slate-500">
@@ -929,7 +929,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   rows={2}
                   value={draftSettings.branding?.websiteDescription ?? ''}
                   onChange={(e) => updateDraftBranding({ websiteDescription: e.target.value })}
-                  placeholder="ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators."
+                  placeholder="ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information."
                   className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed"
                 />
                 <p className="text-[11px] text-slate-500">
@@ -1225,37 +1225,7 @@ export const WebsiteDesignManager: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* School Name */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800">
-                Official School Name
-              </label>
-              <input
-                type="text"
-                value={draftSettings.branding?.schoolName || ''}
-                onChange={(e) => updateDraftBranding({ schoolName: e.target.value })}
-                placeholder="GS GITUMBA"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-              />
-              <p className="text-[11px] text-slate-500">Official name of the school institution.</p>
-            </div>
 
-            {/* School Location */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800">
-                School Geographical Location
-              </label>
-              <input
-                type="text"
-                value={draftSettings.branding?.schoolLocation || ''}
-                onChange={(e) => updateDraftBranding({ schoolLocation: e.target.value })}
-                placeholder="Buyoga Sector, Rulindo District, Northern Province, Rwanda"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-              />
-              <p className="text-[11px] text-slate-500">District, sector, and province in Rwanda.</p>
-            </div>
-          </div>
 
           {/* Top Announcement Strip Gateway Card */}
           <div className="bg-gradient-to-r from-teal-50 via-slate-50 to-emerald-50 p-5 rounded-2xl border border-teal-200 space-y-3 shadow-2xs">
@@ -1300,10 +1270,10 @@ export const WebsiteDesignManager: React.FC = () => {
             <div className="border-b border-slate-100 pb-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
                 <FileText className="w-4 h-4 text-teal-700" />
-                <span>Homepage Custom Content &amp; Titles (Admin Controlled)</span>
+                <span>Homepage Custom Notice Banner (Admin Controlled)</span>
               </h4>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Manage what visitors see on the public homepage. AI-generated promotional text has been removed. You have full control over any text shown. Leave fields empty if you want visitors to see strictly the clean Lesson Plan and Report Card tools.
+                Optionally display an editorial headline and note above the homepage news feed. Leave fields empty to show only live published articles.
               </p>
             </div>
 
@@ -1316,7 +1286,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   type="text"
                   value={draftSettings.branding?.homepageWelcomeHeadline || ''}
                   onChange={(e) => updateDraftBranding({ homepageWelcomeHeadline: e.target.value })}
-                  placeholder="e.g. Ikaze kuri GS GITUMBA (Leave empty to omit)"
+                  placeholder="e.g. Special Editorial Edition (Leave empty to omit)"
                   className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -1329,59 +1299,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   type="text"
                   value={draftSettings.branding?.homepageCustomNote || ''}
                   onChange={(e) => updateDraftBranding({ homepageCustomNote: e.target.value })}
-                  placeholder="e.g. Term 2 CBC preparation is now active"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Lesson Plan Card Title
-                </label>
-                <input
-                  type="text"
-                  value={draftSettings.branding?.lessonPlanCardTitle || ''}
-                  onChange={(e) => updateDraftBranding({ lessonPlanCardTitle: e.target.value })}
-                  placeholder="Lesson Plan"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Report Card Card Title
-                </label>
-                <input
-                  type="text"
-                  value={draftSettings.branding?.reportCardTitle || ''}
-                  onChange={(e) => updateDraftBranding({ reportCardTitle: e.target.value })}
-                  placeholder="Report Card"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-semibold"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Lesson Plan Custom Subtext (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={draftSettings.branding?.lessonPlanCardDescription || ''}
-                  onChange={(e) => updateDraftBranding({ lessonPlanCardDescription: e.target.value })}
-                  placeholder="Optional custom note written by admin for lesson planning..."
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Report Card Custom Subtext (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={draftSettings.branding?.reportCardDescription || ''}
-                  onChange={(e) => updateDraftBranding({ reportCardDescription: e.target.value })}
-                  placeholder="Optional custom note written by admin for report cards..."
+                  placeholder="e.g. Live coverage updates from our editorial desk"
                   className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -1392,13 +1310,13 @@ export const WebsiteDesignManager: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Footer Tagline & Mission Narrative
+                Footer Tagline &amp; Mission Narrative
               </label>
               <textarea
                 rows={3}
                 value={draftSettings.branding?.footerTagline || ''}
                 onChange={(e) => updateDraftBranding({ footerTagline: e.target.value })}
-                placeholder="Brief description about the platform origin at GS GITUMBA"
+                placeholder="Brief editorial mission statement shown in the portal footer"
                 className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed"
               />
             </div>
@@ -1411,7 +1329,7 @@ export const WebsiteDesignManager: React.FC = () => {
                 type="text"
                 value={draftSettings.branding?.footerCopyright || ''}
                 onChange={(e) => updateDraftBranding({ footerCopyright: e.target.value })}
-                placeholder="© 2026 ISEZERANO ONLINE – GS GITUMBA. All rights reserved."
+                placeholder="© 2026 ISEZERANO ONLINE. All rights reserved."
                 className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-mono text-[11px]"
               />
             </div>
@@ -1433,7 +1351,7 @@ export const WebsiteDesignManager: React.FC = () => {
             <div>
               <h3 className="text-lg font-bold text-slate-900">Official Website Logo Management</h3>
               <p className="text-xs text-slate-500">
-                Upload a school crest or institution logo. The logo applies consistently across the header, footer, admin portal, and printed lesson plans.
+                Upload your news portal logo. The logo applies consistently across the header, footer, and admin gateway.
               </p>
             </div>
 
@@ -1657,7 +1575,7 @@ export const WebsiteDesignManager: React.FC = () => {
                         Use Public Image URL (Direct Web Address)
                       </h5>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Link any publicly hosted image URL (HTTPS) for the school crest or institution logo.
+                        Link any publicly hosted image URL (HTTPS) for your news portal logo.
                       </p>
                     </div>
                     <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-md border border-teal-200">
@@ -1679,7 +1597,7 @@ export const WebsiteDesignManager: React.FC = () => {
                             setUrlTestStatus({ status: 'idle' });
                           }
                         }}
-                        placeholder="https://example.com/images/school-logo.png"
+                        placeholder="https://example.com/images/portal-logo.png"
                         className="flex-1 px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 bg-white"
                       />
                       <button
@@ -1979,7 +1897,7 @@ export const WebsiteDesignManager: React.FC = () => {
             {/* Group 3: Cards and Main Content */}
             <ColorGroupSection
               title="3. Cards & Content Sections"
-              description="Lesson planning workspace cards, feature panels, and tables"
+              description="News article cards, editorial panels, and content containers"
               fields={[
                 { key: 'cardBg', label: 'Card Background', value: draftSettings.colors.cardBg },
                 { key: 'cardBorder', label: 'Card Border Line', value: draftSettings.colors.cardBorder },
@@ -2074,7 +1992,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   Kongera cyangwa Kugabanya Ingano y'Inyuguti kuri Website Yose
                 </h4>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Iyi setting ihita igabanya cyangwa yongera ingano y'amagambo yose agaragara ku rubuga (Home, Lesson Plans, Report Cards, Footer) kuri mudasobwa na telefoni.
+                  Iyi setting ihita igabanya cyangwa yongera ingano y'amagambo yose agaragara ku rubuga (Home, News Articles, Static Pages, Footer) kuri mudasobwa na telefoni.
                 </p>
               </div>
 
@@ -2195,10 +2113,10 @@ export const WebsiteDesignManager: React.FC = () => {
                 style={{ fontSize: `${15 * (draftSettings.typography.fontScale || 1.0)}px` }}
               >
                 <p className="font-bold text-slate-900 leading-snug">
-                  ISEZERANO ONLINE – GS GITUMBA (Buyoga Sector, Rulindo District)
+                  ISEZERANO ONLINE — News &amp; Information Portal
                 </p>
                 <p className="text-slate-600 leading-relaxed text-[0.9em]">
-                  Urubuga rwo gutegura imfashanyigisho z'amasomo (CBC Lesson Plans) n'indangamanota z'abanyeshuri (Nursery Report Cards).
+                  Urubuga rw&apos;amakuru agezweho, inkuru zicukumbuye, n&apos;isesengura ryizewe mu Kinyarwanda n&apos;izindi ndimi.
                 </p>
               </div>
             </div>
@@ -2400,7 +2318,7 @@ export const WebsiteDesignManager: React.FC = () => {
                   setNewSectionBody('');
                   setNewSectionBadge('');
                   setNewSectionBtnText('');
-                  setNewSectionBtnLink('dashboard');
+                  setNewSectionBtnLink('blog');
                   setIsAddingSection(true);
                 }}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-xs cursor-pointer"
@@ -2460,7 +2378,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newSectionLabel}
                     onChange={(e) => setNewSectionLabel(e.target.value)}
-                    placeholder="urugero: Itangazo rya Guhembwa cyangwa CBC Tips"
+                    placeholder="urugero: Itangazo ry'Amakuru cyangwa Editorial Highlight"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
@@ -2471,7 +2389,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newSectionBadge}
                     onChange={(e) => setNewSectionBadge(e.target.value)}
-                    placeholder="urugero: AMAKURU MASHYA cyangwa CBC 2026"
+                    placeholder="urugero: AMAKURU MASHYA cyangwa BREAKING"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
@@ -2482,7 +2400,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newSectionHeadline}
                     onChange={(e) => setNewSectionHeadline(e.target.value)}
-                    placeholder="urugero: Ikaze ku Masomo y'Igihembwe cya Kabiri muri GS GITUMBA"
+                    placeholder="urugero: Inkuru Zikomeye n'Isesengura ryo kuri uyu Munsi"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold"
                   />
                 </div>
@@ -2519,7 +2437,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newSectionBtnText}
                     onChange={(e) => setNewSectionBtnText(e.target.value)}
-                    placeholder="urugero: Kanda Hano / Tangira"
+                    placeholder="urugero: Soma Inkuru Zose"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
@@ -2531,12 +2449,12 @@ export const WebsiteDesignManager: React.FC = () => {
                     onChange={(e) => setNewSectionBtnLink(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
                   >
-                    <option value="dashboard">Teacher Dashboard</option>
-                    <option value="create">Lesson Preparation (Create Plan)</option>
-                    <option value="saved">Saved Schemes / Amasomo Yabitswe</option>
-                    <option value="nursery">Nursery Report Cards</option>
-                    <option value="about">About GS GITUMBA</option>
+                    <option value="home">Front Page (Home)</option>
+                    <option value="blog">All News &amp; Articles</option>
+                    <option value="about">About Us</option>
                     <option value="contact">Contact Us</option>
+                    <option value="privacy">Privacy Policy</option>
+                    <option value="terms">Terms &amp; Conditions</option>
                   </select>
                 </div>
               </div>
@@ -2574,12 +2492,12 @@ export const WebsiteDesignManager: React.FC = () => {
                         primaryButtonText: newSectionBtnText.trim() || undefined,
                         primaryButtonLink: newSectionBtnLink,
                         cards: newSectionType === 'custom_cards' ? [
-                          { id: 'c1', title: 'Icyiciro cya 1', description: 'Amakuru n\'imfashanyigisho z\'amasomo', badge: 'REB' },
-                          { id: 'c2', title: 'Icyiciro cya 2', description: 'Integanyanyigisho za CBC 2026', badge: 'CBC' },
-                          { id: 'c3', title: 'Icyiciro cya 3', description: 'Gusuzuma no gutanga amanota', badge: 'EVAL' }
+                          { id: 'c1', title: 'Amakuru Mashya', description: 'Inkuru zihutirwa kandi zizewe', badge: 'NEWS' },
+                          { id: 'c2', title: 'Ubukungu & Ikoreshabuhanga', description: 'Isesengura ry’amasoko n’udushya', badge: 'TECH' },
+                          { id: 'c3', title: 'Imyidagaduro & Siporo', description: 'Ibikorwa n’amarushanwa agezweho', badge: 'SPORTS' }
                         ] : newSectionType === 'faq' ? [
-                          { id: 'f1', title: 'Uburyo bwo gutegura isomo rya CBC?', description: 'Kanda kuri Lesson Preparation uhitemo ibipimo bya REB.' },
-                          { id: 'f2', title: 'Ese raporo z\'inshuke zirasaba amafaranga?', description: 'Oya, byose bikoreshwa ku buntu 100% nta kiguzi.' }
+                          { id: 'f1', title: 'Ese bisaba konti kugira ngo nsomye amakuru?', description: 'Oya, inkuru zose zifunguye ku basomyi ku buntu nta konti ikenewe.' },
+                          { id: 'f2', title: 'Nshobora kwandikira newsroom gute?', description: 'Koresha ipaji ya Contact Us cyangwa buto ya WhatsApp iri ku rubuga.' }
                         ] : undefined
                       }
                     };
@@ -2687,7 +2605,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       ...editingSection,
                       content: { ...editingSection.content, primaryButtonLink: e.target.value }
                     })}
-                    placeholder="dashboard, create, nursery, about, contact..."
+                    placeholder="home, blog, about, contact, privacy, terms..."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono"
                   />
                 </div>
@@ -2864,16 +2782,11 @@ export const WebsiteDesignManager: React.FC = () => {
                       <div className="mt-3.5 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                         {Object.entries(sec.options).map(([optKey, optVal]) => {
                           const optLabels: Record<string, string> = {
-                            showDateLocationTicker: "Garagaza Itariki n'Akarere (Date & Location Ticker)",
-                            showInstitutionalBadge: "Garagaza Ikimenyetso cy'Uburezi (Institutional Badge)",
-                            showLessonPlanButton: "Buto ya 'Tangira Gutegura Isomo'",
-                            showReportCardsButton: "Buto ya 'Indangamanota z'Inshuke'",
-                            showDashboardButton: "Buto ya 'Dashboard y'Uburezi'",
-                            showGuaranteeBadges: "Amagambo y'ubwishingizi (100% Free / CBC / Mobile)",
-                            showLessonPlannerCard: "Ikarita ya 'Lesson Preparation (8 Inkingi)'",
-                            showReportCardsCard: "Ikarita ya 'Nursery Report Cards (Ibipimo 22)'",
-                            showAboutButton: "Buto ya 'Ibyerekeye GS GITUMBA (About Us)'",
-                            showContactButton: "Buto ya 'Twandikire cyangwa Duhamagare'"
+                            showDateTicker: 'Garagaza Itariki (Edition Date Ticker)',
+                            showEditorialBadge: 'Garagaza Ikimenyetso cy’Ubwanditsi (Editorial Badge)',
+                            showAllNewsButton: "Buto ya 'Browse All News'",
+                            showAboutButton: "Buto ya 'About Us'",
+                            showContactButton: "Buto ya 'Contact Us'"
                           };
 
                           const labelText = optLabels[optKey] || optKey;
@@ -2978,7 +2891,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newNavLabel}
                     onChange={(e) => setNewNavLabel(e.target.value)}
-                    placeholder="urugero: Gahunda y'Amasomo cyangwa Blog"
+                    placeholder="urugero: All News cyangwa Business"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
                   />
                 </div>
@@ -2989,7 +2902,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newNavPath}
                     onChange={(e) => setNewNavPath(e.target.value)}
-                    placeholder="home, dashboard, create, nursery, about, contact..."
+                    placeholder="home, blog, about, contact, privacy, terms..."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono"
                   />
                 </div>
@@ -3014,11 +2927,10 @@ export const WebsiteDesignManager: React.FC = () => {
                     onChange={(e) => setNewNavIcon(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
                   >
+                    <option value="FileText">FileText (Inkuru)</option>
                     <option value="BookOpen">BookOpen (Igitabo)</option>
-                    <option value="Award">Award (Igihembo / Nursery)</option>
                     <option value="ShieldCheck">ShieldCheck (Umutekano / Admin)</option>
-                    <option value="FileText">FileText (Inyandiko)</option>
-                    <option value="GraduationCap">GraduationCap (Uburezi)</option>
+                    <option value="Award">Award (Igihembo)</option>
                     <option value="User">User (Umwirondoro)</option>
                   </select>
                 </div>
@@ -3029,7 +2941,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     type="text"
                     value={newNavBadge}
                     onChange={(e) => setNewNavBadge(e.target.value)}
-                    placeholder="urugero: GISHYA, N1-N3, CBC..."
+                    placeholder="urugero: LIVE, NEW, BREAKING..."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
@@ -3410,8 +3322,9 @@ export const WebsiteDesignManager: React.FC = () => {
 
                 <div className="hidden sm:flex items-center space-x-3 text-xs font-semibold">
                   <span style={{ color: draftSettings.colors.navLinkActive }}>Home</span>
-                  <span className="text-slate-500">Dashboard</span>
-                  <span className="text-slate-500">Lesson Plans</span>
+                  <span className="text-slate-500">All News</span>
+                  <span className="text-slate-500">About Us</span>
+                  <span className="text-slate-500">Contact Us</span>
                 </div>
               </div>
 
@@ -3425,7 +3338,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       color: draftSettings.colors.accentBadgeText
                     }}
                   >
-                    Rwanda CBC Education Platform
+                    Digital News &amp; Editorial Platform
                   </span>
                   
                   <h1 
@@ -3436,7 +3349,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       fontFamily: draftSettings.typography.headingFontFamily
                     }}
                   >
-                    Empowering Rwandan Educators
+                    Independent Journalism &amp; Community Updates
                   </h1>
 
                   <p 
@@ -3446,7 +3359,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       color: draftSettings.colors.bodyText 
                     }}
                   >
-                    Prepared for primary and secondary school teachers at GS GITUMBA to formulate official 8-column Competence-Based Curriculum (CBC) lesson plans aligned with REB standards.
+                    Breaking news, verified reporting, business analysis, technology coverage, and public announcements on ISEZERANO ONLINE.
                   </p>
                 </div>
 
@@ -3461,7 +3374,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       fontSize: `${draftSettings.typography.buttonSize}px`
                     }}
                   >
-                    Generate Lesson Plan
+                    Read Latest News
                   </button>
 
                   <button
@@ -3473,7 +3386,7 @@ export const WebsiteDesignManager: React.FC = () => {
                       fontSize: `${draftSettings.typography.buttonSize}px`
                     }}
                   >
-                    View CBC Subjects
+                    Browse Categories
                   </button>
                 </div>
 
@@ -3489,7 +3402,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     className="font-bold text-sm"
                     style={{ color: draftSettings.colors.headingSecondary }}
                   >
-                    Sample REB CBC Pedagogical Card
+                    Featured Editorial Dispatch
                   </h3>
                   <p 
                     className="text-xs leading-relaxed"
@@ -3498,14 +3411,14 @@ export const WebsiteDesignManager: React.FC = () => {
                       color: draftSettings.colors.bodyText 
                     }}
                   >
-                    Generic competences: Critical thinking, problem-solving, and communication in Kinyarwanda and English.
+                    Timely reporting in Kinyarwanda, English, and French with clear editorial typography across desktop and mobile.
                   </p>
                   <a 
                     href="#preview" 
                     className="text-xs font-semibold underline inline-block"
                     style={{ color: draftSettings.colors.linkColor }}
                   >
-                    Learn more about CBC inspection standards →
+                    Read full story →
                   </a>
                 </div>
               </div>
@@ -3542,7 +3455,7 @@ export const WebsiteDesignManager: React.FC = () => {
                         fontSize: `${draftSettings.typography.footerSize}px`
                       }}
                     >
-                      {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'} – {draftSettings.branding?.platformSubtitle || 'GS GITUMBA'}
+                      {draftSettings.branding?.platformTitle || 'ISEZERANO ONLINE'} – {draftSettings.branding?.platformSubtitle || 'News & Information Portal'}
                     </h6>
                   )}
                 </div>
@@ -3551,7 +3464,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     className="leading-relaxed opacity-90"
                     style={{ fontSize: `${draftSettings.typography.footerSize - 1}px` }}
                   >
-                    {draftSettings.branding?.websiteDescription || draftSettings.branding?.schoolLocation || 'Buyoga Sector, Rulindo District, Northern Province, Rwanda.'}
+                    {draftSettings.branding?.websiteDescription || draftSettings.branding?.footerTagline || 'Independent Digital News & Information Portal.'}
                   </p>
                 )}
               </div>

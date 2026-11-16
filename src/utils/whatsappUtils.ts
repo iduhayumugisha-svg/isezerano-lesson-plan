@@ -21,7 +21,7 @@ export const DEFAULT_WHATSAPP_CONTACT: WhatsAppContactSettings = {
   enabled: true,
   phoneNumber: '+250782971258',
   buttonText: 'Twandikire kuri WhatsApp',
-  defaultMessage: 'Muraho! Ndifuza kumenya byinshi kuri serivisi za ISEZERANO ONLINE – GS GITUMBA.',
+  defaultMessage: 'Muraho! Ndifuza kumenya byinshi kuri serivisi za ISEZERANO ONLINE.',
   backgroundColor: '#25D366',
   textColor: '#ffffff',
   position: 'bottom-right',
@@ -34,7 +34,7 @@ export const DEFAULT_WHATSAPP_CONTACT: WhatsAppContactSettings = {
 export const DEFAULT_WHATSAPP_NUMBER = '+250782971258';
 export const DEFAULT_WHATSAPP_BUTTON_TEXT = 'Twandikire kuri WhatsApp';
 export const DEFAULT_WHATSAPP_MESSAGE =
-  'Muraho! Ndifuza kumenya byinshi kuri serivisi za ISEZERANO ONLINE – GS GITUMBA.';
+  'Muraho! Ndifuza kumenya byinshi kuri serivisi za ISEZERANO ONLINE.';
 
 export interface WhatsAppValidationResult {
   valid: boolean;

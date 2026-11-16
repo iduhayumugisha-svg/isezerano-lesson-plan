@@ -155,7 +155,7 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
           origin,
           branding,
           '/blog',
-          'School Blog & Educational Articles'
+          'News & Editorial Articles'
         );
       } else {
         const branding = await loadBranding();

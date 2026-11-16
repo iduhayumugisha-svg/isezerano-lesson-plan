@@ -8,7 +8,7 @@ import {
   query,
   where
 } from 'firebase/firestore';
-import { initFirestoreIfConfigured, getFirebaseAuth } from './storageService';
+import { initFirestoreIfConfigured, getFirebaseAuth } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
 export type CommentModerationStatus = 'pending' | 'approved' | 'rejected';

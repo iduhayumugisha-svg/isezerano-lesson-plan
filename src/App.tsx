@@ -1,58 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  PlusCircle, 
-  FolderClock, 
-  Settings as SettingsIcon, 
-  LayoutDashboard,
-  ShieldCheck, 
-  Home,
-  ArrowLeft,
-  Award,
-  User
-} from 'lucide-react';
-import { LessonPlan } from './types/lessonPlan';
-import { 
-  getSavedLessonPlans, 
-  saveLessonPlanToFirestore, 
-  deleteLessonPlanFromFirestore, 
-  duplicateLessonPlanLocal,
-  createEmptyLessonPlan,
-  syncCloudLessonPlans
-} from './services/storageService';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 
-// Public Website Components & Views
+// Eager Public Shell & Homepage Components (Fast initial paint)
 import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
 import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
-import { BlogView } from './views/BlogView';
-import { AboutView, PrivacyPolicyView, TermsConditionsView } from './views/InfoPagesView';
-import { ContactView } from './views/ContactView';
 import { AdSlot } from './components/AdSlot';
+import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 
-// Central Protected Education Application Views
-import { DashboardView } from './views/DashboardView';
-import { CreateLessonPlanView } from './views/CreateLessonPlanView';
-import { SavedLessonPlansView } from './views/SavedLessonPlansView';
-import { SettingsView } from './views/SettingsView';
-import { NurseryReportsView } from './views/NurseryReportsView';
-import { TeacherProfileView } from './views/TeacherProfileView';
-import { PrintLessonPlanModal } from './components/PrintLessonPlanModal';
-import { AdminPortalGateway } from './views/AdminPortalGateway';
-import { LessonPlanAuthGate } from './components/LessonPlanAuthGate';
+// Code-split Secondary Public Views & Modals
+const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
+const AboutView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.AboutView })));
+const PrivacyPolicyView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.PrivacyPolicyView })));
+const TermsConditionsView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.TermsConditionsView })));
+const ContactView = lazy(() => import('./views/ContactView').then((m) => ({ default: m.ContactView })));
 
-// Admin Portal & Modals
-import { AdminDashboardView } from './views/AdminDashboardView';
-import { AuthModal } from './components/AuthModal';
-import { AnnouncementDetailModal } from './components/AnnouncementDetailModal';
+// Code-split Admin & Announcement Views
+const AdminPortalGateway = lazy(() => import('./views/AdminPortalGateway').then((m) => ({ default: m.AdminPortalGateway })));
+const AdminDashboardView = lazy(() => import('./views/AdminDashboardView').then((m) => ({ default: m.AdminDashboardView })));
+const AnnouncementDetailModal = lazy(() => import('./components/AnnouncementDetailModal').then((m) => ({ default: m.AnnouncementDetailModal })));
+
 import { PushAnnouncement } from './types/platform';
-import { getAnnouncementById } from './services/fcmService';
-
-import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
-import { FEATURE_FLAGS } from './config/firebase';
-import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
-import { initGoogleAnalytics, trackPageView, trackEvent } from './services/analyticsService';
+import { initGoogleAnalytics, trackPageView } from './services/analyticsService';
 import { updateWebsiteBrandingSeo } from './services/seoService';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from './types/blog';
 import {
@@ -62,9 +33,9 @@ import {
 } from './services/blogService';
 import { subscribeToApprovedCommentCounts } from './services/commentService';
 
-export type AppPage = WebsitePage | 'admin';
+export type AppPage = WebsitePage;
 
-// Helper to determine initial page from browser URL or hash (/admin, /manage, #admin, etc.)
+// Helper to determine initial page from browser URL or hash
 const getPageFromUrl = (): AppPage => {
   if (typeof window === 'undefined') return 'home';
   const pathname = window.location.pathname.toLowerCase();
@@ -72,32 +43,17 @@ const getPageFromUrl = (): AppPage => {
   const search = new URLSearchParams(window.location.search);
 
   if (
-    pathname === '/admin' || 
-    pathname.startsWith('/admin/') || 
-    pathname === '/manage' || 
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/manage' ||
     pathname.startsWith('/manage/') ||
-    hash === '#admin' || 
+    hash === '#admin' ||
     hash === '#manage' ||
     search.get('page') === 'admin'
   ) {
     return 'admin';
   }
-  if (pathname === '/dashboard' || hash === '#dashboard' || search.get('page') === 'dashboard') return 'dashboard';
-  if (pathname === '/create' || hash === '#create' || search.get('page') === 'create') return 'create';
-  if (pathname === '/saved' || hash === '#saved' || search.get('page') === 'saved') return 'saved';
-  if (pathname === '/settings' || hash === '#settings' || search.get('page') === 'settings') return 'settings';
-  if (
-    pathname === '/nursery' || 
-    pathname.startsWith('/nursery/') || 
-    pathname === '/nursery-reports' || 
-    hash === '#nursery' || 
-    search.get('page') === 'nursery'
-  ) {
-    return 'nursery';
-  }
-  if (pathname === '/students' || hash === '#students' || search.get('page') === 'students') return 'dashboard';
   if (pathname === '/blog' || pathname.startsWith('/blog/') || hash === '#blog' || hash.startsWith('#blog/') || search.get('page') === 'blog') return 'blog';
-  if (pathname === '/profile' || pathname.startsWith('/profile') || hash === '#profile' || search.get('page') === 'profile') return 'profile';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -123,9 +79,8 @@ const getBlogSlugFromUrl = (): string | null => {
 };
 
 function AppContent() {
-  const { t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
-  const { colors, typography, branding } = useWebsiteDesign();
+  const { colors, branding } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -141,27 +96,7 @@ function AppContent() {
   const [selectedNewsCategory, setSelectedNewsCategory] = useState<string>('All Categories');
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [focusArticleComments, setFocusArticleComments] = useState<boolean>(false);
-
-  // Education state: Saved CBC Lesson Plans
-  const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
-  const [editingPlan, setEditingPlan] = useState<LessonPlan | null>(null);
-  const [printingPlan, setPrintingPlan] = useState<LessonPlan | null>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [selectedNotice, setSelectedNotice] = useState<PushAnnouncement | null>(null);
-
-  // Load saved lesson plans for authenticated user
-  const refreshData = () => {
-    setLessonPlans(getSavedLessonPlans(user?.uid));
-  };
-
-  useEffect(() => {
-    refreshData();
-    if (user?.uid) {
-      syncCloudLessonPlans(user.uid, isAdmin).then((synced: LessonPlan[]) => {
-        setLessonPlans(synced);
-      });
-    }
-  }, [user?.uid, isAdmin]);
 
   // Live newspaper articles and Firestore categories subscription
   useEffect(() => {
@@ -194,19 +129,21 @@ function AppContent() {
   );
 
   useEffect(() => {
-
     // Check if user arrived via FCM notification click (?notice=<id>)
     if (typeof window !== 'undefined' && window.location.search) {
       try {
         const noticeId = new URLSearchParams(window.location.search).get('notice');
         if (noticeId) {
-          getAnnouncementById(noticeId).then((notice) => {
-            if (notice) {
-              setSelectedNotice(notice);
-            }
-          }).catch((err) => {
-            console.warn('[FCM] Error loading notice deep-link:', err);
-          });
+          import('./services/fcmService')
+            .then(({ getAnnouncementById }) => getAnnouncementById(noticeId))
+            .then((notice) => {
+              if (notice) {
+                setSelectedNotice(notice);
+              }
+            })
+            .catch((err) => {
+              console.warn('[FCM] Error loading notice deep-link:', err);
+            });
         }
       } catch {
         // ignore
@@ -223,7 +160,7 @@ function AppContent() {
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
 
-    // Clean up unwanted tracking parameters (e.g. ?utm_source=chatgpt.com) from browser URL
+    // Clean up unwanted tracking parameters (e.g. ?utm_source=...) from browser URL
     if (typeof window !== 'undefined' && window.location.search) {
       try {
         const url = new URL(window.location.href);
@@ -243,12 +180,30 @@ function AppContent() {
       }
     }
 
-    // Initialize Google Analytics 4
-    initGoogleAnalytics();
+    // Defer Google Analytics 4 initialization until after initial paint/idle
+    let gaTimeoutId: number | undefined;
+    let gaIdleId: number | undefined;
+    const scheduleGa = () => initGoogleAnalytics();
+    type IdleWindow = Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const idleWin = typeof window !== 'undefined' ? (window as IdleWindow) : undefined;
+    if (idleWin?.requestIdleCallback) {
+      gaIdleId = idleWin.requestIdleCallback(scheduleGa, { timeout: 2000 });
+    } else if (idleWin) {
+      gaTimeoutId = idleWin.setTimeout(scheduleGa, 1200);
+    }
 
     return () => {
       window.removeEventListener('popstate', handleUrlChange);
       window.removeEventListener('hashchange', handleUrlChange);
+      if (gaIdleId !== undefined && idleWin?.cancelIdleCallback) {
+        idleWin.cancelIdleCallback(gaIdleId);
+      }
+      if (gaTimeoutId !== undefined && idleWin) {
+        idleWin.clearTimeout(gaTimeoutId);
+      }
     };
   }, []);
 
@@ -264,74 +219,8 @@ function AppContent() {
     updateWebsiteBrandingSeo(branding);
   }, [branding, currentPage, activeBlogSlug]);
 
-  // Lesson plan save handler with ownerUid binding
-  const handleSaveLessonPlan = async (plan: LessonPlan): Promise<{ success: boolean; error?: string }> => {
-    const enrichedPlan: LessonPlan = {
-      ...plan,
-      ownerUid: user?.uid || plan.ownerUid || 'guest-teacher',
-      ownerEmail: user?.email || plan.ownerEmail || 'teacher@isezerano.rw',
-      userId: user?.uid || plan.userId || 'guest-teacher'
-    };
-
-    const result = await saveLessonPlanToFirestore(enrichedPlan);
-    if (result.success) {
-      refreshData();
-      setEditingPlan(enrichedPlan);
-      trackEvent('lesson_plan_created', {
-        subject: enrichedPlan.subject,
-        grade: enrichedPlan.classGrade,
-        page: currentPage
-      });
-    }
-    return result;
-  };
-
-  // Lesson plan delete handler
-  const handleDeleteLessonPlan = async (id: string) => {
-    await deleteLessonPlanFromFirestore(id);
-    refreshData();
-  };
-
-  // Duplicate lesson plan
-  const handleDuplicateLessonPlan = (id: string) => {
-    const duplicated = duplicateLessonPlanLocal(id);
-    if (duplicated) {
-      refreshData();
-      setEditingPlan(duplicated);
-      setCurrentPage('create');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  // Navigation router helpers
-  const handleEditPlan = (plan: LessonPlan) => {
-    setEditingPlan(plan);
-    setCurrentPage('create');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handlePrintPlan = (plan: LessonPlan) => {
-    setPrintingPlan(plan);
-    trackEvent('lesson_plan_export_pdf', {
-      subject: plan.subject,
-      title: plan.lessonTitle,
-      page: currentPage
-    });
-  };
-
-  const handleCreateNew = (prefill?: Partial<LessonPlan>) => {
-    if (prefill) {
-      const newPlan = createEmptyLessonPlan();
-      setEditingPlan({ ...newPlan, ...prefill });
-    } else {
-      setEditingPlan(null);
-    }
-    setCurrentPage('create');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleNavigate = (page: WebsitePage | AppPage | 'admin' | 'students') => {
-    setCurrentPage(page as AppPage);
+  const handleNavigate = (page: WebsitePage | AppPage) => {
+    setCurrentPage(page);
     if (page === 'blog') {
       setActiveBlogSlug(null);
     }
@@ -339,16 +228,16 @@ function AppContent() {
 
     if (typeof window !== 'undefined') {
       try {
-        const targetPath = page === 'home' 
-          ? '/' 
-          : page === 'admin' 
-          ? '/admin' 
+        const targetPath = page === 'home'
+          ? '/'
+          : page === 'admin'
+          ? '/admin'
           : `/${page}`;
         if (window.location.pathname !== targetPath) {
           window.history.pushState({ page }, '', targetPath);
         }
       } catch {
-        // Fallback or hash
+        // ignore
       }
     }
   };
@@ -386,24 +275,18 @@ function AppContent() {
     }
   };
 
-  const isLessonPlanWorkspace = ['create', 'saved', 'settings', 'nursery'].includes(currentPage);
-
-
-
   return (
-    <div 
+    <div
       className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors overflow-x-hidden w-full"
       style={{
         backgroundColor: colors.bodyBg,
         color: colors.bodyText
       }}
     >
-      
-      {/* 1. Global Professional Newspaper & Platform Header */}
+      {/* 1. Global Professional Newspaper Header */}
       <WebsiteHeader
         currentPage={currentPage}
         onNavigate={handleNavigate}
-        savedCount={lessonPlans.length}
         onSelectAnnouncement={(notice) => setSelectedNotice(notice)}
         newsCategories={newsCategories}
         selectedCategory={selectedNewsCategory}
@@ -415,12 +298,10 @@ function AppContent() {
 
       {/* 2. Main Content Area */}
       <main className="flex-1 w-full overflow-x-hidden">
-        
         {/* PUBLIC PAGE 1: Online Newspaper Homepage (Default opening page at /) */}
         {currentPage === 'home' && (
           <HomeView
             onNavigate={handleNavigate}
-            savedPlansCount={lessonPlans.length}
             posts={publishedPosts}
             categories={newsCategories}
             commentCounts={commentCounts}
@@ -432,311 +313,87 @@ function AppContent() {
           />
         )}
 
-        {/* PUBLIC PAGE 1B: Public Blog & Article Reading View */}
-        {currentPage === 'blog' && (
-          <BlogView
-            initialSlug={activeBlogSlug}
-            onSelectPostSlug={handleSelectBlogPostSlug}
-            selectedCategory={selectedNewsCategory}
-            onSelectCategory={setSelectedNewsCategory}
-            onReturnHome={() => handleNavigate('home')}
-            commentCounts={commentCounts}
-            focusComments={focusArticleComments}
-            onConsumeFocusComments={() => setFocusArticleComments(false)}
-          />
-        )}
-
-        {/* PUBLIC PAGE 2: About Us View */}
-        {currentPage === 'about' && (
-          <AboutView onNavigate={handleNavigate} />
-        )}
-
-        {/* PUBLIC PAGE 3: Contact Us View */}
-        {currentPage === 'contact' && (
-          <ContactView onNavigate={handleNavigate} />
-        )}
-
-        {/* PUBLIC PAGE 4: Privacy Policy View */}
-        {currentPage === 'privacy' && (
-          <PrivacyPolicyView onNavigate={handleNavigate} />
-        )}
-
-        {/* PUBLIC PAGE 5: Terms and Conditions View */}
-        {currentPage === 'terms' && (
-          <TermsConditionsView onNavigate={handleNavigate} />
-        )}
-
-        {/* EDUCATION DASHBOARD VIEW: Open & Free for All Teachers */}
-        {currentPage === 'dashboard' && (
-          <DashboardView
-            lessonPlans={lessonPlans}
-            onNavigate={(page) => {
-              if (page === 'home') {
-                handleNavigate('home');
-              } else if (page === 'create' || page === 'saved' || page === 'settings' || page === 'nursery') {
-                handleNavigate(page);
-              } else if (page === 'admin') {
-                handleNavigate('admin');
-              } else if ((page as string) === 'profile') {
-                handleNavigate('profile');
-              } else {
-                handleNavigate('dashboard');
-              }
-            }}
-            onSelectPlanToEdit={handleEditPlan}
-            onSelectPlanToPrint={handlePrintPlan}
-          />
-        )}
-
-        {/* EDUCATION WORKSPACE: Lesson Plans, Report Cards & Settings - Free & Open */}
-        {isLessonPlanWorkspace && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            
-            {/* Dedicated Workspace Navigation Bar with Return to Home */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
-              <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto">
-                
-                {/* Return to Home */}
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('home')}
-                  className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shrink-0 text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer border border-slate-200"
-                  title="Return to Homepage"
-                >
-                  <Home className="w-4 h-4 text-teal-700" />
-                  <span>Ahabanza (Home)</span>
-                </button>
-
-                {/* Dashboard Home */}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('dashboard')}
-                  className="px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shrink-0 text-slate-700 hover:text-slate-900 hover:bg-slate-100 cursor-pointer border border-slate-200"
-                >
-                  <LayoutDashboard className="w-4 h-4 text-teal-700" />
-                  <span>Dashboard</span>
-                </button>
-
-                {/* Tab 1: Create Lesson Plan */}
-                <button
-                  type="button"
-                  onClick={() => handleCreateNew()}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                    currentPage === 'create'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <PlusCircle className="w-4 h-4 text-teal-400" />
-                  <span>{t.navCreate || 'Create Lesson Plan'}</span>
-                </button>
-
-                {/* Tab 2: Saved Plans */}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('saved')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                    currentPage === 'saved'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <FolderClock className="w-4 h-4 text-teal-400" />
-                  <span>{t.navSaved || 'Saved Plans'}</span>
-                  {lessonPlans.length > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-extrabold ${
-                      currentPage === 'saved'
-                        ? 'bg-teal-400 text-slate-950'
-                        : 'bg-teal-100 text-teal-900'
-                    }`}>
-                      {lessonPlans.length}
-                    </span>
-                  )}
-                </button>
-
-                {/* Tab 3: Nursery Student Report Cards */}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('nursery')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                    currentPage === 'nursery'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Award className="w-4 h-4 text-amber-400" />
-                  <span>Nursery Reports</span>
-                </button>
-
-                {/* Tab 4: Settings & Preferences */}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage('settings')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                    currentPage === 'settings'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <SettingsIcon className="w-4 h-4 text-teal-400" />
-                  <span>{t.navSettings || 'Preferences'}</span>
-                </button>
-
-                {/* Tab 5: Teacher Profile */}
-                {user && (
-                  <button
-                    type="button"
-                    onClick={() => handleNavigate('profile')}
-                    className="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all inline-flex items-center space-x-1.5 shrink-0 cursor-pointer text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                    title="Fungura umwirondoro wawe (Teacher Profile)"
-                  >
-                    <User className="w-4 h-4 text-teal-700" />
-                    <span>Profil ya Mwarimu</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Status info */}
-              <div className="hidden lg:flex items-center space-x-2 text-xs font-semibold text-slate-500 pr-2">
-                <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse" />
-                <span>Rwanda CBC 8-Column Official Generator</span>
-              </div>
+        <Suspense
+          fallback={
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center text-sm text-slate-500">
+              Loading page...
             </div>
+          }
+        >
+          {/* PUBLIC PAGE 1B: Public Blog & Article Reading View */}
+          {currentPage === 'blog' && (
+            <BlogView
+              initialSlug={activeBlogSlug}
+              onSelectPostSlug={handleSelectBlogPostSlug}
+              selectedCategory={selectedNewsCategory}
+              onSelectCategory={setSelectedNewsCategory}
+              onReturnHome={() => handleNavigate('home')}
+              commentCounts={commentCounts}
+              focusComments={focusArticleComments}
+              onConsumeFocusComments={() => setFocusArticleComments(false)}
+            />
+          )}
 
-            {/* Sub-View 1: Main Create Lesson Plan View (Requires Google Sign-In) */}
-            {currentPage === 'create' && (
-              !user ? (
-                <LessonPlanAuthGate
-                  onSuccess={() => refreshData()}
-                  onNavigateHome={() => handleNavigate('home')}
+          {/* PUBLIC PAGE 2: About Us View */}
+          {currentPage === 'about' && (
+            <AboutView onNavigate={handleNavigate} />
+          )}
+
+          {/* PUBLIC PAGE 3: Contact Us View */}
+          {currentPage === 'contact' && (
+            <ContactView onNavigate={handleNavigate} />
+          )}
+
+          {/* PUBLIC PAGE 4: Privacy Policy View */}
+          {currentPage === 'privacy' && (
+            <PrivacyPolicyView onNavigate={handleNavigate} />
+          )}
+
+          {/* PUBLIC PAGE 5: Terms and Conditions View */}
+          {currentPage === 'terms' && (
+            <TermsConditionsView onNavigate={handleNavigate} />
+          )}
+
+          {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or menu */}
+          {currentPage === 'admin' && (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+              {isAdmin && user ? (
+                <AdminDashboardView
+                  onNavigate={handleNavigate}
+                  onLogout={async () => {
+                    await signOutUser();
+                    handleNavigate('home');
+                  }}
                 />
               ) : (
-                <CreateLessonPlanView
-                  initialPlan={editingPlan}
-                  onSavePlan={handleSaveLessonPlan}
-                  onPrintPreview={handlePrintPlan}
-                  onCancelOrNew={handleCreateNew}
+                <AdminPortalGateway
+                  onNavigate={handleNavigate}
                 />
-              )
-            )}
-
-            {/* Sub-View 2: Saved Lesson Plans (Requires Google Sign-In) */}
-            {currentPage === 'saved' && (
-              !user ? (
-                <LessonPlanAuthGate
-                  onSuccess={() => refreshData()}
-                  onNavigateHome={() => handleNavigate('home')}
-                />
-              ) : (
-                <SavedLessonPlansView
-                  lessonPlans={lessonPlans}
-                  onEditPlan={handleEditPlan}
-                  onDeletePlan={handleDeleteLessonPlan}
-                  onDuplicatePlan={handleDuplicateLessonPlan}
-                  onPrintPlan={handlePrintPlan}
-                  onCreateNew={handleCreateNew}
-                />
-              )
-            )}
-
-            {/* Sub-View 3: Preferences / Settings */}
-            {currentPage === 'settings' && (
-              <SettingsView
-                totalPlansCount={lessonPlans.length}
-                onNavigate={(page) => {
-                  if (page === 'saved' || page === 'create' || page === 'settings' || (page as string) === 'nursery') {
-                    setCurrentPage(page as AppPage);
-                  } else {
-                    setCurrentPage('dashboard');
-                  }
-                }}
-                onDataImported={refreshData}
-              />
-            )}
-
-            {/* Sub-View 4: Nursery Student Report Cards System */}
-            {currentPage === 'nursery' && (
-              <NurseryReportsView
-                onNavigateHome={() => handleNavigate('home')}
-                onNavigateDashboard={() => handleNavigate('dashboard')}
-              />
-            )}
-
-          </div>
-        )}
-
-        {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or Header Admin button */}
-        {currentPage === 'admin' && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            {isAdmin && user ? (
-              <AdminDashboardView
-                lessonPlans={lessonPlans}
-                onNavigate={(page) => {
-                  if (page === 'create' || page === 'saved' || page === 'settings') {
-                    handleNavigate(page);
-                  } else {
-                    handleNavigate('dashboard');
-                  }
-                }}
-                onLogout={async () => {
-                  await signOutUser();
-                  handleNavigate('home');
-                }}
-              />
-            ) : (
-              <AdminPortalGateway
-                onNavigate={handleNavigate}
-                onOpenAuthModal={() => setIsAuthModalOpen(true)}
-              />
-            )}
-          </div>
-        )}
-
-        {/* TEACHER PROFILE VIEW: Private per Teacher & Saved to Firestore */}
-        {currentPage === 'profile' && (
-          <TeacherProfileView
-            onNavigateHome={() => handleNavigate('home')}
-            onNavigateDashboard={() => handleNavigate('dashboard')}
-          />
-        )}
-
-
-
+              )}
+            </div>
+          )}
+        </Suspense>
       </main>
-
-      {/* 3. Global Print / PDF Export Modal */}
-      {printingPlan && (
-        <PrintLessonPlanModal
-          plan={printingPlan}
-          onClose={() => setPrintingPlan(null)}
-        />
-      )}
 
       {/* Ad Placement: Above Footer */}
       <AdSlot placement="above_footer" />
 
-      {/* 4. Global Professional Public Website Footer */}
-      <WebsiteFooter 
-        onNavigate={handleNavigate}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
-      />
+      {/* 3. Global Professional Public Website Footer */}
+      <WebsiteFooter onNavigate={handleNavigate} />
 
-      {/* 5. Authentication Modal for Teachers & Admins */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
-
-      {/* 6. Dynamic Configurable WhatsApp Contact Button */}
+      {/* 4. Dynamic Configurable WhatsApp Contact Button */}
       <WhatsAppFloatingButton currentPage={currentPage} />
 
-      {/* 7. Push Announcement Detail & Auth Gate Modal (FCM) */}
-      <AnnouncementDetailModal
-        announcement={selectedNotice}
-        isOpen={!!selectedNotice}
-        onClose={() => setSelectedNotice(null)}
-      />
-
+      {/* 5. Push Alert Detail Modal */}
+      {selectedNotice && (
+        <Suspense fallback={null}>
+          <AnnouncementDetailModal
+            announcement={selectedNotice}
+            isOpen={!!selectedNotice}
+            onClose={() => setSelectedNotice(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

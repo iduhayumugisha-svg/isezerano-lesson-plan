@@ -42,6 +42,35 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
   }
 };
 
+// ==================== AUTH & FIREBASE CONNECTION TYPES ====================
+export type NavPage = 'home' | 'blog' | 'about' | 'contact' | 'privacy' | 'terms';
+export type SaasNavPage = NavPage | 'admin';
+
+export type UserRole = 'admin';
+export type UserStatus = 'active' | 'inactive';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FirebaseConnectionConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+  firestoreDatabaseId?: string;
+  enabled: boolean;
+}
+
 // ==================== ANNOUNCEMENTS & FCM TYPES ====================
 export interface PushAnnouncement {
   id: string;
@@ -50,7 +79,7 @@ export interface PushAnnouncement {
   sender: string;
   senderName: string;
   createdAt: string;
-  target: 'all_teachers' | string;
+  target: 'all_readers' | string;
   targetCount: number;
   priority: 'normal' | 'high' | 'urgent';
   requiresAuth: boolean;
@@ -83,7 +112,7 @@ export interface FcmConfigSettings {
 
 export const DEFAULT_VAPID_KEY = 'BCw07Y8f_isezerano_default_vapid_key_placeholder';
 
-// ==================== SLIDER TYPES ====================
+// ==================== SLIDER & PRESET IMAGE TYPES ====================
 export interface HeroSlide {
   id: string;
   headline: string;
@@ -103,65 +132,6 @@ export interface PresetImage {
   category: string;
   url: string;
 }
-
-// ==================== TEACHER PROFILE TYPES ====================
-export type TeacherGender = 'Gabo' | 'Gore' | 'Other' | '';
-
-export interface TeacherProfile {
-  id?: string;
-  ownerUid: string;
-  email: string;
-  fullName: string;
-  phone: string;
-  gender: TeacherGender;
-  schoolName: string;
-  qualification: string;
-  subjectsTaught: string[];
-  classesTaught: string[];
-  experienceYears?: string;
-  district?: string;
-  sector?: string;
-  bio?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export const RWANDA_CBC_SUBJECTS = [
-  'Kinyarwanda',
-  'English',
-  'Mathematics',
-  'Science & Elementary Technology (SET)',
-  'Social and Religious Studies (SRS)',
-  'Creative Arts',
-  'Physical Education',
-  'French',
-  'Biology',
-  'Chemistry',
-  'Physics',
-  'Geography',
-  'History & Citizenship',
-  'Entrepreneurship',
-  'Information & Communication Technology (ICT)',
-  'Literature in English',
-  'General Studies & Communication'
-];
-
-export const RWANDA_EDUCATION_CLASSES = [
-  'N1', 'N2', 'N3',
-  'P1', 'P2', 'P3', 'P4', 'P5', 'P6',
-  'S1', 'S2', 'S3', 'S4', 'S5', 'S6'
-];
-
-export const TEACHING_QUALIFICATIONS = [
-  'A2 – Secondary Teacher Certificate (TTC)',
-  'A1 – Higher Education Diploma in Education',
-  'A0 – Bachelor of Education (B.Ed)',
-  'Postgraduate Diploma in Education (PGDE)',
-  'Master of Education (M.Ed)',
-  'Bachelor of Science / Arts with Education',
-  'PhD in Education',
-  'Other Professional Certificate'
-];
 
 // ==================== WEBSITE PAGES TYPES ====================
 export type EditablePageId = 'home' | 'about' | 'contact' | 'privacy' | 'terms';

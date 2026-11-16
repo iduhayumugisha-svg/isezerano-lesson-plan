@@ -45,7 +45,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('high');
-  const [targetAudience, setTargetAudience] = useState<'all' | 'teachers'>('teachers');
+  const [targetAudience, setTargetAudience] = useState<'all' | 'subscribers'>('all');
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
   const [vapidKey, setVapidKey] = useState('');
@@ -128,7 +128,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
           title: title.trim(),
           body: body.trim(),
           priority,
-          targetAudience
+          targetAudience: targetAudience === 'subscribers' ? 'subscribers' : 'all'
         },
         user?.email || 'twizerefelix90@gmail.com',
         user?.displayName || 'Administrator'
@@ -139,7 +139,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
         setBody('');
         setSendResult({
           success: true,
-          message: `Push announcement broadcasted successfully! Delivered to ${result.deliveredCount} registered device(s).`
+          message: `Push alert broadcasted successfully! Registered subscribers: ${result.deliveredCount} device(s).`
         });
         refreshDevices();
       } else {
@@ -162,7 +162,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
   const handleTestLocal = async () => {
     const success = await sendLocalTestNotification(
       'Test Alert: ISEZERANO ONLINE',
-      'This is an instant preview test of how your announcement appears on device screens.'
+      'This is an instant preview test of how your breaking news alert appears on device screens.'
     );
     if (!success) {
       setSendResult({
@@ -184,8 +184,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
     }
   };
 
-  // Unique teachers count from tokens
-  const uniqueTeachersCount = new Set(deviceTokens.map((t) => t.ownerEmail).filter(Boolean)).size;
+  const uniqueSubscribersCount = new Set(deviceTokens.map((t) => t.ownerUid || t.token).filter(Boolean)).size;
 
   if (!isAdmin) {
     return (
@@ -212,11 +211,11 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
               Real Push Notifications (FCM)
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Broadcast System & Device Manager
+              News Alerts Broadcast &amp; Subscribers
             </h2>
             <p className="text-emerald-100/80 text-sm max-w-2xl">
-              Send announcements directly to teacher phone and computer screens via Firebase Cloud
-              Messaging. Notifications reach devices even when teachers are logged out or the website is closed.
+              Send breaking news alerts directly to subscriber phones and computers via Firebase Cloud
+              Messaging, even when visitors are not currently browsing the site. {!supported ? '(Browser Web Push unsupported here)' : ''}
             </p>
           </div>
 
@@ -254,17 +253,17 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
 
           <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-800/40">
             <div className="text-emerald-300 text-xs font-medium flex items-center gap-1.5">
-              <Users className="w-4 h-4" /> Connected Teachers
+              <Users className="w-4 h-4" /> Subscribed Readers
             </div>
             <div className="text-2xl sm:text-3xl font-black mt-1 text-white">
-              {uniqueTeachersCount}
+              {uniqueSubscribersCount}
             </div>
-            <div className="text-[11px] text-emerald-200/60 mt-0.5">Multi-device accounts</div>
+            <div className="text-[11px] text-emerald-200/60 mt-0.5">Active subscriber endpoints</div>
           </div>
 
           <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-800/40">
             <div className="text-emerald-300 text-xs font-medium flex items-center gap-1.5">
-              <Bell className="w-4 h-4" /> Announcements Sent
+              <Bell className="w-4 h-4" /> Alerts Published
             </div>
             <div className="text-2xl sm:text-3xl font-black mt-1 text-white">
               {announcements.length}
@@ -274,12 +273,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
 
           <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-800/40">
             <div className="text-emerald-300 text-xs font-medium flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" /> Auth Gate
+              <ShieldCheck className="w-4 h-4" /> Reader Access
             </div>
             <div className="text-xl sm:text-2xl font-black mt-1 text-emerald-200">
-              Active
+              Open
             </div>
-            <div className="text-[11px] text-emerald-200/60 mt-0.5">Login required upon click</div>
+            <div className="text-[11px] text-emerald-200/60 mt-0.5">No sign-in required</div>
           </div>
         </div>
       </div>
@@ -296,10 +295,10 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">
-                    Compose Push Announcement
+                    Compose Breaking News Alert
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Delivered with ISEZERANO ONLINE branding and school logo
+                    Delivered with ISEZERANO ONLINE branding
                   </p>
                 </div>
               </div>
@@ -317,11 +316,11 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                   </label>
                   <select
                     value={targetAudience}
-                    onChange={(e) => setTargetAudience(e.target.value as any)}
+                    onChange={(e) => setTargetAudience(e.target.value as 'all' | 'subscribers')}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   >
-                    <option value="teachers">All Registered Teachers ({deviceTokens.length} devices)</option>
-                    <option value="all">Entire School Community (Public)</option>
+                    <option value="all">All Readers &amp; Subscribers ({deviceTokens.length} devices)</option>
+                    <option value="subscribers">Push Subscribers Only</option>
                   </select>
                 </div>
 
@@ -331,12 +330,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                   </label>
                   <select
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as any)}
+                    onChange={(e) => setPriority(e.target.value as 'normal' | 'high' | 'urgent')}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                   >
-                    <option value="normal">Standard Announcement</option>
-                    <option value="high">High Priority (Audible alert)</option>
-                    <option value="urgent">Urgent / Immediate Action Required</option>
+                    <option value="normal">Standard News Alert</option>
+                    <option value="high">High Priority</option>
+                    <option value="urgent">Breaking News / Urgent</option>
                   </select>
                 </div>
               </div>
@@ -344,12 +343,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
               {/* Title */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Announcement Title *
+                  Alert Headline *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g., Staff Meeting Tomorrow at 8:00 AM or Term Reports Due"
+                  placeholder="e.g., Breaking News: Live Coverage Starting Now"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium"
@@ -359,18 +358,18 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
               {/* Body */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Announcement Message *
+                  Alert Summary *
                 </label>
                 <textarea
                   required
                   rows={4}
-                  placeholder="Provide complete details. When teachers click the screen notification, they will be prompted to log in before viewing this full announcement."
+                  placeholder="Provide complete news alert details for readers."
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
                 <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1">
-                  <span>HTML / markdown supported in web view</span>
+                  <span>Shown in the header bell &amp; news alert popup</span>
                   <span>{body.length} characters</span>
                 </div>
               </div>
@@ -400,7 +399,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-xs text-slate-500 flex items-center gap-1.5">
                   <Info className="w-4 h-4 text-slate-400" />
-                  Notification appears instantly on online & lockscreen devices.
+                  Alert appears instantly for visitors and subscribed devices.
                 </div>
                 <button
                   type="submit"
@@ -410,12 +409,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                   {isSending ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Broadcasting via FCM...
+                      Publishing Alert...
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      Broadcast Real Push Notification
+                      Publish News Alert
                     </>
                   )}
                 </button>
@@ -432,10 +431,10 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                 </div>
                 <div>
                   <h4 className="text-base font-bold text-slate-800">
-                    Sent Announcements History
+                    Published Alerts History
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Live synchronization with all teachers & devices
+                    Live synchronization with readers &amp; devices
                   </p>
                 </div>
               </div>
@@ -447,8 +446,8 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
             {announcements.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <Bell className="w-10 h-10 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
-                <p className="text-sm font-medium">No announcements broadcasted yet.</p>
-                <p className="text-xs mt-0.5">Use the form above to dispatch your first push notification.</p>
+                <p className="text-sm font-medium">No alerts published yet.</p>
+                <p className="text-xs mt-0.5">Use the form above to send your first news alert.</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100 mt-4">
@@ -485,7 +484,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                         <span>{new Date(item.createdAt).toLocaleString()}</span>
                         <span>•</span>
                         <span className="text-emerald-600 font-semibold">
-                          Target: {item.target === 'all_teachers' ? 'All Teachers' : item.target}
+                          Target: {item.target === 'all_readers' ? 'All Readers' : item.target}
                         </span>
                       </div>
                     </div>
@@ -495,12 +494,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                         onClick={() => onSelectAnnouncement?.(item)}
                         className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
                       >
-                        Preview Gate
+                        Preview
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete announcement"
+                        title="Delete alert"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -601,7 +600,7 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                 <Smartphone className="w-8 h-8 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
                 <p>No devices registered yet.</p>
                 <p className="text-[11px] mt-1 text-slate-500">
-                  Teachers register automatically when they click &apos;Enable Push Notifications&apos; in the header bell.
+                  Readers register automatically when they click Enable Breaking News Alerts in the header bell.
                 </p>
               </div>
             ) : (
@@ -615,14 +614,14 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                         ) : (
                           <Laptop className="w-3.5 h-3.5 text-blue-600" />
                         )}
-                        {dev.ownerName || 'Teacher'}
+                        {dev.ownerName || 'News Reader'}
                       </span>
                       <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
                         Active
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {dev.ownerEmail || 'Anonymous'}
+                      {dev.ownerEmail || 'Subscribed Device'}
                     </div>
                     <div className="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
                       {dev.browser} • {dev.os}

@@ -3,12 +3,11 @@ import {
   Globe,
   ShieldCheck,
   LogOut,
-  User,
   MoreVertical,
-  Award,
-  BookOpen,
   Newspaper,
-  ChevronRight
+  ChevronRight,
+  Info,
+  Mail
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
@@ -24,23 +23,16 @@ import {
 
 export type WebsitePage =
   | 'home'
-  | 'dashboard'
-  | 'create'
-  | 'saved'
-  | 'settings'
-  | 'nursery'
   | 'blog'
   | 'about'
   | 'contact'
   | 'privacy'
   | 'terms'
-  | 'admin'
-  | 'profile';
+  | 'admin';
 
 interface WebsiteHeaderProps {
   currentPage: string;
   onNavigate: (page: WebsitePage) => void;
-  savedCount?: number;
   onSelectAnnouncement?: (announcement: PushAnnouncement) => void;
   newsCategories?: BlogCategory[];
   selectedCategory?: string;
@@ -56,7 +48,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   onSelectCategory
 }) => {
   const { language, setLanguage } = useLanguage();
-  const { user, isAdmin, signInWithGoogle, signOutUser } = useAuth();
+  const { user, isAdmin, signOutUser } = useAuth();
   const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
   const [logoLoadError, setLogoLoadError] = useState(false);
 
@@ -165,12 +157,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* TIER 1: UPPER-LEFT BRANDING AREA (LOGO LEFT -> WEBSITE NAME & DESCRIPTION) & UPPER-RIGHT UTILITIES */}
-        <div className="flex items-center justify-between gap-3 pt-3 sm:pt-3.5 pb-2.5 border-b border-slate-200/80">
+        <div className="flex items-center justify-between gap-3 h-[78px] border-b border-slate-200/80">
           {/* Upper-Left Branding Area: Horizontal Logo FIRST, followed by Website Name & Description */}
           <div
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer group select-none min-w-0 flex-1"
-            title={`${branding?.platformTitle || 'ISEZERANO ONLINE'} – ${branding?.platformSubtitle || 'GS GITUMBA'}`}
+            title={`${branding?.platformTitle || 'ISEZERANO ONLINE'}${branding?.platformSubtitle ? ` – ${branding.platformSubtitle}` : ''}`}
           >
             {logoSettings?.showInHeader !== false && logoUrl && !logoLoadError && (
               <div
@@ -185,6 +177,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
                   className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
                   referrerPolicy="no-referrer"
+                  loading="eager"
+                  decoding="async"
                   onError={() => setLogoLoadError(true)}
                 />
               </div>
@@ -230,7 +224,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
             <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
 
-            {/* Three-Dot Overflow Menu (⋮): Language, Lesson Preparation, CBC Report Cards N1-N3, Admin Portal */}
+            {/* Three-Dot Overflow Menu (⋮): Language, Site Pages, Admin Portal */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -238,7 +232,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 aria-label="More sections menu"
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
-                title="Education Tools & Admin Menu"
+                title="Menu & Settings"
                 className={`min-w-[40px] min-h-[40px] px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   isMenuOpen
                     ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-teal-500/30'
@@ -259,38 +253,20 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
                   role="menu"
                 >
-                  {/* User Profile Identity or Google Sign In */}
-                  {user ? (
+                  {/* Admin Session Badge (Only shown when Admin is authenticated) */}
+                  {isAdmin && user && (
                     <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 mb-1">
                       <div className="flex items-center space-x-2.5">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                            isAdmin
-                              ? 'bg-amber-100 text-amber-900 border-amber-300'
-                              : 'bg-teal-100 text-teal-800 border-teal-200'
-                          }`}
-                        >
-                          {user.displayName ? (
-                            user.displayName.charAt(0).toUpperCase()
-                          ) : (
-                            <User className="w-4 h-4" />
-                          )}
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border bg-amber-100 text-amber-900 border-amber-300">
+                          {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'A'}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
                             <p className="text-xs font-bold text-slate-900 truncate">
-                              {user.displayName ||
-                                user.email?.split('@')[0] ||
-                                (isAdmin ? 'Administrator' : 'Teacher')}
+                              {user.displayName || user.email?.split('@')[0] || 'Administrator'}
                             </p>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                                isAdmin
-                                  ? 'bg-amber-100 text-amber-900'
-                                  : 'bg-teal-100 text-teal-900'
-                              }`}
-                            >
-                              {isAdmin ? 'Admin' : 'Mwarimu'}
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase bg-amber-100 text-amber-900">
+                              Admin
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 truncate font-mono">
@@ -298,42 +274,13 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                           </p>
                         </div>
                       </div>
-                      <div className="mt-2.5 pt-2 border-t border-slate-200/70">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => handleNavClick('profile')}
-                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200/80 transition-colors cursor-pointer text-left"
-                        >
-                          <span className="inline-flex items-center space-x-2">
-                            <User className="w-3.5 h-3.5 text-teal-700" />
-                            <span>Teacher Profile (Profil)</span>
-                          </span>
-                          <ChevronRight className="w-3.5 h-3.5 text-teal-700" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={async () => {
-                          setIsMenuOpen(false);
-                          await signInWithGoogle();
-                        }}
-                        className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                      >
-                        <User className="w-3.5 h-3.5" />
-                        <span>Sign In with Google</span>
-                      </button>
                     </div>
                   )}
 
-                  {/* Platform Tools & Sections moved into Overflow Menu */}
+                  {/* Quick Newsroom Sections */}
                   <div className="px-4 pt-2 pb-1">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Education &amp; School Tools
+                      Sections &amp; Pages
                     </p>
                   </div>
 
@@ -341,16 +288,16 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={() => handleNavClick('dashboard')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
-                        ['dashboard', 'create', 'saved', 'settings'].includes(currentPage)
+                      onClick={() => handleNavClick('home')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'home'
                           ? 'bg-teal-50 text-teal-900'
                           : 'text-slate-800 hover:bg-teal-50 hover:text-teal-900'
                       }`}
                     >
                       <span className="flex items-center space-x-3">
-                        <BookOpen className="w-4 h-4 text-teal-700 shrink-0" />
-                        <span>Lesson Preparation</span>
+                        <Newspaper className="w-4 h-4 text-teal-700 shrink-0" />
+                        <span>All News (Front Page)</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
@@ -358,16 +305,33 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={() => handleNavClick('nursery')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
-                        currentPage === 'nursery'
-                          ? 'bg-amber-50 text-amber-950'
-                          : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
+                      onClick={() => handleNavClick('about')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'about'
+                          ? 'bg-teal-50 text-teal-900'
+                          : 'text-slate-800 hover:bg-slate-100'
                       }`}
                     >
                       <span className="flex items-center space-x-3">
-                        <Award className="w-4 h-4 text-amber-700 shrink-0" />
-                        <span>CBC Report Cards N1-N3</span>
+                        <Info className="w-4 h-4 text-slate-600 shrink-0" />
+                        <span>About Us</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleNavClick('contact')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'contact'
+                          ? 'bg-teal-50 text-teal-900'
+                          : 'text-slate-800 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="flex items-center space-x-3">
+                        <Mail className="w-4 h-4 text-slate-600 shrink-0" />
+                        <span>Contact Us</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
@@ -425,29 +389,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     >
                       <span className="flex items-center space-x-3">
                         <ShieldCheck className="w-4 h-4 text-slate-700 shrink-0" />
-                        <span>Admin Portal</span>
+                        <span>{isAdmin ? 'Admin Dashboard' : 'Admin Portal'}</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
-
-                    {currentPage !== 'home' && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => handleNavClick('home')}
-                        className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50 rounded-xl transition-colors text-left cursor-pointer"
-                      >
-                        <span className="flex items-center space-x-3">
-                          <Newspaper className="w-4 h-4 text-teal-700 shrink-0" />
-                          <span>All News (Front Page)</span>
-                        </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-teal-600" />
-                      </button>
-                    )}
                   </div>
 
-                  {/* Sign Out */}
-                  {user && (
+                  {/* Admin Sign Out */}
+                  {isAdmin && user && (
                     <>
                       <div className="my-1 border-t border-slate-100" />
                       <div className="px-1.5 py-0.5">
@@ -470,13 +419,13 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         </div>
 
         {/* TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR (DYNAMICALLY LOADED FROM FIRESTORE) */}
-        <div className="flex items-center overflow-x-auto no-scrollbar">
-          <nav aria-label="News categories" className="flex items-center space-x-5 sm:space-x-6 min-w-full">
+        <div className="flex items-center h-[44px] overflow-x-auto no-scrollbar">
+          <nav aria-label="News categories" className="flex items-center space-x-5 sm:space-x-6 min-w-full h-full">
             <button
               type="button"
               onClick={() => handleCategoryClick('All Categories')}
               style={{ fontSize: `${typography.navMenuSize}px` }}
-              className={`py-2.5 border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
+              className={`h-full border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
                 isNewsFeedPage && selectedCategory === 'All Categories'
                   ? 'border-teal-700 text-teal-800 font-bold'
                   : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'
@@ -493,7 +442,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   type="button"
                   onClick={() => handleCategoryClick(category.name)}
                   style={{ fontSize: `${typography.navMenuSize}px` }}
-                  className={`py-2.5 border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
+                  className={`h-full border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
                     isCurrent
                       ? 'border-teal-700 text-teal-800 font-bold'
                       : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'

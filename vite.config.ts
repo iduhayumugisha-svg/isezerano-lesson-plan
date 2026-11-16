@@ -100,6 +100,7 @@ function imageResolverPlugin(): Plugin {
               if (
                 payload.email &&
                 payload.email.toLowerCase() === 'twizerefelix90@gmail.com' &&
+                payload.email_verified === true &&
                 payload.exp &&
                 payload.exp * 1000 > Date.now()
               ) {
@@ -147,16 +148,16 @@ function imageResolverPlugin(): Plugin {
                 body: JSON.stringify({
                   registration_ids: targetTokens,
                   notification: {
-                    title: title || 'ISEZERANO ONLINE – GS GITUMBA',
-                    body: body || 'Itangazo rishya ry\'Abarimu',
+                    title: title || 'ISEZERANO ONLINE',
+                    body: body || 'Amakuru mashya kuri ISEZERANO ONLINE',
                     click_action: url || `/?notice=${noticeId}`
                   },
                   data: {
-                    title: title || 'ISEZERANO ONLINE – GS GITUMBA',
+                    title: title || 'ISEZERANO ONLINE',
                     body: body || '',
                     noticeId: noticeId || '',
                     url: url || `/?notice=${noticeId}`,
-                    requiresAuth: 'true'
+                    requiresAuth: 'false'
                   },
                   priority: 'high'
                 })
@@ -200,5 +201,24 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('@firebase/firestore') || id.includes('firebase/firestore')) return 'vendor-firestore';
+              if (id.includes('@firebase/auth') || id.includes('firebase/auth')) return 'vendor-firebase-auth';
+              if (id.includes('@firebase/storage') || id.includes('firebase/storage')) return 'vendor-firebase-storage';
+              if (id.includes('@firebase/messaging') || id.includes('firebase/messaging')) return 'vendor-firebase-messaging';
+              if (id.includes('@firebase/') || id.includes('/firebase/')) return 'vendor-firebase-core';
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
+                return 'vendor-react';
+              }
+            }
+          }
+        }
+      }
+    }
   };
 });

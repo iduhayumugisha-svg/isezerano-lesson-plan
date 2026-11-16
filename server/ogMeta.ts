@@ -6,9 +6,9 @@ import type { WebsiteBrandingSettings } from '../src/types/websiteDesign.ts';
 
 export const FIREBASE_PROJECT_ID = 'isezerano-news';
 export const DEFAULT_PUBLIC_ORIGIN = 'https://isezerano.online';
-export const DEFAULT_SITE_TITLE = 'ISEZERANO ONLINE – GS GITUMBA';
+export const DEFAULT_SITE_TITLE = 'ISEZERANO ONLINE';
 export const DEFAULT_SITE_DESCRIPTION =
-  'ISEZERANO ONLINE – Rwanda CBC lesson planning, nursery report cards, education resources and articles for teachers and educators.';
+  'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
 
 export interface DecodedImageAsset {
   buffer: Buffer;
@@ -766,12 +766,12 @@ export function renderBlogArticleHtml(
 
   const hasImage = Boolean(imageUrl);
   const imageAlt = (post.thumbnailAlt || articleTitle).trim();
-  const authorName = post.author?.name || 'GS GITUMBA Editorial Team';
-  const authorRole = post.author?.role || 'Educator';
+  const authorName = post.author?.name || 'ISEZERANO Editorial Team';
+  const authorRole = post.author?.role || 'Editor';
 
   const structuredData: Record<string, unknown> = {
     '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
+    '@type': 'NewsArticle',
     mainEntityOfPage: {
       '@type': 'WebPage',
       '@id': articleUrl
@@ -787,7 +787,7 @@ export function renderBlogArticleHtml(
       jobTitle: authorRole
     },
     publisher: {
-      '@type': 'EducationalOrganization',
+      '@type': 'NewsMediaOrganization',
       name: siteName
     }
   };
@@ -854,27 +854,14 @@ export function renderWebsiteDefaultHtml(
 
   const structuredData = {
     '@context': 'https://schema.org',
-    '@type': 'WebApplication',
+    '@type': 'WebSite',
     name: fullTitle,
     alternateName: branding?.platformTitle?.trim() || 'ISEZERANO ONLINE',
-    applicationCategory: 'EducationalApplication',
-    operatingSystem: 'All',
     description: siteDescription,
     url: `${cleanOrigin}/`,
-    offers: {
-      '@type': 'Offer',
-      price: '0',
-      priceCurrency: 'RWF'
-    },
-    creator: {
-      '@type': 'Organization',
-      name: branding?.schoolName?.trim() || 'GS GITUMBA',
-      location: {
-        '@type': 'Place',
-        name:
-          branding?.schoolLocation?.trim() ||
-          'Buyoga Sector, Rulindo District, Northern Province, Rwanda'
-      }
+    publisher: {
+      '@type': 'NewsMediaOrganization',
+      name: branding?.platformTitle?.trim() || 'ISEZERANO ONLINE'
     }
   };
 

@@ -25,6 +25,8 @@ import {
 import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
 import { 
   getWebsiteDesignSettings, 
+  getPublicWebsiteDesignSettings,
+  getCachedWebsiteDesignSettingsSync,
   saveWebsiteDesignSettings, 
   restoreWebsiteDesignVersion,
   applyDesignCssVariables,
@@ -112,9 +114,17 @@ interface WebsiteDesignContextType {
 const WebsiteDesignContext = createContext<WebsiteDesignContextType | undefined>(undefined);
 
 export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const [publishedSettings, setPublishedSettings] = useState<WebsiteDesignSettings>(DEFAULT_WEBSITE_DESIGN);
-  const [draftSettings, setDraftSettings] = useState<WebsiteDesignSettings>(DEFAULT_WEBSITE_DESIGN);
+  const { user, isAdmin } = useAuth();
+  const [publishedSettings, setPublishedSettings] = useState<WebsiteDesignSettings>(() => {
+    const cached = getCachedWebsiteDesignSettingsSync();
+    if (typeof document !== 'undefined') {
+      applyDesignCssVariables(cached);
+    }
+    return cached;
+  });
+  const [draftSettings, setDraftSettings] = useState<WebsiteDesignSettings>(() =>
+    getCachedWebsiteDesignSettingsSync()
+  );
   const [isDraftDirty, setIsDraftDirty] = useState<boolean>(false);
   const [isPreviewingDraft, setIsPreviewingDraft] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -127,15 +137,18 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = isDraftDirty;
   }, [isDraftDirty]);
 
-  // Initial load and real-time Firestore synchronization - runs ONCE on mount
+  // Fast 16KB initial load for public visitors; full doc + real-time listener when admin/user signs in
   useEffect(() => {
+    loadPublicSettings();
+  }, []);
+
+  useEffect(() => {
+    if (!user && !isAdmin) return;
+
     loadSettings();
 
-    // Attach real-time snapshot listener
     const unsubscribe = subscribeToWebsiteDesign((remoteSettings) => {
       setPublishedSettings(remoteSettings);
-      
-      // If the admin does not have uncommitted local draft changes, keep draft in sync
       if (!isDraftDirtyRef.current) {
         setDraftSettings(remoteSettings);
         applyDesignCssVariables(remoteSettings);
@@ -145,7 +158,23 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       unsubscribe();
     };
-  }, []); // Run once on mount to prevent slider/picker reversion
+  }, [user?.uid, isAdmin]);
+
+  const loadPublicSettings = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getPublicWebsiteDesignSettings();
+      setPublishedSettings(data);
+      if (!isDraftDirtyRef.current) {
+        setDraftSettings(data);
+      }
+      applyDesignCssVariables(data);
+    } catch (err) {
+      console.error('Error loading public design settings:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loadSettings = async () => {
     setIsLoading(true);

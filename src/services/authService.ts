@@ -1,56 +1,27 @@
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as fbSignOut, 
+import {
+  signInWithEmailAndPassword,
+  signOut as fbSignOut,
   onAuthStateChanged,
-  updateProfile as fbUpdateProfile,
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
   User as FirebaseUser
 } from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  collection, 
-  getDocs, 
-  query, 
-  orderBy 
-} from 'firebase/firestore';
-import { UserProfile, UserRole, UserStatus } from '../types/lessonPlan';
-import { 
-  initFirestoreIfConfigured, 
-  getFirebaseApp, 
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { UserProfile, UserStatus } from '../types/platform';
+import {
+  initFirestoreIfConfigured,
   getFirebaseAuth as getStorageFirebaseAuth,
-  getFirebaseConfig,
-  isFirebaseConfigured
-} from './storageService';
+  getFirebaseConfig
+} from '../config/firebase';
 
 const LOCAL_USER_KEY = 'isezerano_user_session';
-const LOCAL_USERS_TABLE_KEY = 'isezerano_registered_users';
 
-// Helper to get local mock users when Firestore isn't connected
-const getLocalUsers = (): UserProfile[] => {
-  try {
-    const raw = localStorage.getItem(LOCAL_USERS_TABLE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveLocalUsers = (users: UserProfile[]) => {
-  try {
-    localStorage.setItem(LOCAL_USERS_TABLE_KEY, JSON.stringify(users));
-  } catch (e) {
-    console.error('Failed to save local users cache', e);
-  }
-};
-
-export const SUPER_ADMIN_EMAIL = ((import.meta as any).env?.VITE_ADMIN_EMAIL || 'twizerefelix90@gmail.com').toLowerCase().trim();
+export const SUPER_ADMIN_EMAIL = (
+  (import.meta as any).env?.VITE_ADMIN_EMAIL || 'twizerefelix90@gmail.com'
+)
+  .toLowerCase()
+  .trim();
 
 export const isAuthorizedAdminEmail = (email?: string | null): boolean => {
   if (!email) return false;
@@ -61,248 +32,144 @@ export const getFirebaseAuth = () => {
   return getStorageFirebaseAuth();
 };
 
+const verifyAdminSessionUser = async (fbUser: FirebaseUser): Promise<boolean> => {
+  if (!fbUser || fbUser.isAnonymous) return false;
+  let hasAdminClaim = false;
+  try {
+    const tokenResult = await fbUser.getIdTokenResult();
+    hasAdminClaim = Boolean(tokenResult.claims && tokenResult.claims.admin === true);
+  } catch {
+    // ignore token claim inspection errors
+  }
+  return hasAdminClaim || isAuthorizedAdminEmail(fbUser.email);
+};
+
 /**
- * Fetch a user's profile from Firestore `users/{uid}`
+ * Fetch the verified Administrator profile for an active Firebase Auth session.
+ * Non-admin accounts are not granted profiles or portal access.
  */
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   const auth = getFirebaseAuth();
-  // Strictly require an active authenticated Firebase user matching this uid
   if (!auth?.currentUser || auth.currentUser.uid !== uid) {
     return null;
   }
 
-  let hasAdminClaim = false;
-  try {
-    const tokenResult = await auth.currentUser.getIdTokenResult();
-    hasAdminClaim = Boolean(tokenResult.claims && tokenResult.claims.admin === true);
-  } catch {
-    // ignore
+  const isAdminUser = await verifyAdminSessionUser(auth.currentUser);
+  if (!isAdminUser) {
+    return null;
   }
 
   const userEmail = auth.currentUser.email || '';
-  const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
-
   const db = initFirestoreIfConfigured();
+
   if (db) {
     try {
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
-        const resolvedRole: UserRole = (isSuperAdmin || data.role === 'admin') ? 'admin' : 'teacher';
-
-        // Self-heal Firestore document if authorized admin was previously stored as teacher
-        if (isSuperAdmin && data.role !== 'admin') {
-          try {
-            await updateDoc(doc(db, 'users', uid), {
-              role: 'admin',
-              status: 'active',
-              updatedAt: new Date().toISOString()
-            });
-          } catch (e) {
-            console.warn('Could not auto-promote admin in Firestore:', e);
-          }
-        }
-
         return {
           uid,
           email: userEmail,
-          displayName: data.displayName || auth.currentUser.displayName || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-          role: resolvedRole,
-          status: (data.status === 'inactive' && !isSuperAdmin ? 'inactive' : 'active') as UserStatus,
-          schoolName: data.schoolName || '',
+          displayName: data.displayName || auth.currentUser.displayName || 'Administrator',
+          role: 'admin',
+          status: 'active' as UserStatus,
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString()
         };
       }
     } catch (err) {
-      console.warn('Could not read user profile from Firestore:', err);
+      console.warn('Could not read admin profile from Firestore:', err);
     }
   }
 
-  // Fallback to verified profile from active Firebase Auth session
   return {
     uid,
     email: userEmail,
-    displayName: auth.currentUser.displayName || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-    role: isSuperAdmin ? 'admin' : 'teacher',
+    displayName: auth.currentUser.displayName || 'Administrator',
+    role: 'admin',
     status: 'active',
-    schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 };
 
 /**
- * Register a new user. Defaults to teacher unless authorized admin.
- */
-export const signUp = async (
-  email: string, 
-  password: string, 
-  displayName: string,
-  schoolName?: string
-): Promise<{ success: boolean; user?: UserProfile; error?: string }> => {
-  const auth = getFirebaseAuth();
-  const db = initFirestoreIfConfigured();
-  const cleanEmail = email.trim();
-  const isSuperAdmin = isAuthorizedAdminEmail(cleanEmail);
-
-  if (auth && db) {
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const user = credential.user;
-
-      if (displayName) {
-        await fbUpdateProfile(user, { displayName });
-      }
-
-      const newProfile: UserProfile = {
-        uid: user.uid,
-        email: user.email || cleanEmail,
-        displayName: displayName || user.email?.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-        role: isSuperAdmin ? 'admin' : 'teacher',
-        status: 'active',
-        schoolName: schoolName || (isSuperAdmin ? 'GS GITUMBA' : ''),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      // Persist to Firestore `users/{uid}`
-      await setDoc(doc(db, 'users', user.uid), newProfile);
-
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(newProfile));
-      return { success: true, user: newProfile };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Registration failed';
-      return { success: false, error: message };
-    }
-  }
-
-  // Offline / Local development fallback
-  const localUsers = getLocalUsers();
-  if (localUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
-    return { success: false, error: 'A user with this email already exists' };
-  }
-
-  const mockUid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  const newProfile: UserProfile = {
-    uid: mockUid,
-    email: email.trim(),
-    displayName: displayName || email.split('@')[0],
-    role: 'teacher', // ALWAYS teacher
-    status: 'active',
-    schoolName: schoolName || '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  localUsers.push(newProfile);
-  saveLocalUsers(localUsers);
-  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(newProfile));
-
-  return { success: true, user: newProfile };
-};
-
-/**
- * Sign In with email & password
+ * Admin-only email & password sign in
  */
 export const signIn = async (
-  email: string, 
+  email: string,
   password: string
 ): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string }> => {
   const auth = getFirebaseAuth();
+  if (!auth) {
+    return { success: false, error: 'Firebase Authentication is not configured.' };
+  }
 
-  if (auth) {
-    try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const user = credential.user;
+  try {
+    const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const fbUser = credential.user;
+    const isAdminUser = await verifyAdminSessionUser(fbUser);
 
-      // Check Custom Claims on token
-      let hasAdminClaim = false;
-      try {
-        const idTokenResult = await user.getIdTokenResult();
-        hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
-      } catch {
-        // ignore
-      }
-
-      // Load Firestore profile to get verified role
-      const profile = await getUserProfile(user.uid);
-      if (profile) {
-        if (profile.status === 'inactive') {
-          await fbSignOut(auth);
-          return { success: false, error: 'Your account has been deactivated by an Administrator.' };
-        }
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
-        return { success: true, user: profile, isAdmin: hasAdminClaim || profile.role === 'admin' };
-      }
-
-      // If document does not exist yet in Firestore, create default profile record
-      const db = initFirestoreIfConfigured();
-      const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(user.email || email);
-      const defaultProfile: UserProfile = {
-        uid: user.uid,
-        email: user.email || email.trim(),
-        displayName: user.displayName || user.email?.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-        role: isSuperAdmin ? 'admin' : 'teacher',
-        status: 'active',
-        schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+    if (!isAdminUser) {
+      await fbSignOut(auth);
+      localStorage.removeItem(LOCAL_USER_KEY);
+      return {
+        success: false,
+        error: 'Access Denied: Administrator authorization is required.'
       };
+    }
 
-      if (db) {
-        try {
-          await setDoc(doc(db, 'users', user.uid), defaultProfile);
-        } catch (e) {
-          console.warn('Failed to auto-create user document in Firestore:', e);
-        }
+    const profile = (await getUserProfile(fbUser.uid)) || {
+      uid: fbUser.uid,
+      email: fbUser.email || email.trim(),
+      displayName: fbUser.displayName || 'Administrator',
+      role: 'admin',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const db = initFirestoreIfConfigured();
+    if (db) {
+      try {
+        await setDoc(doc(db, 'users', fbUser.uid), profile, { merge: true });
+      } catch {
+        // non-blocking
       }
-
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultProfile));
-      return { success: true, user: defaultProfile, isAdmin: isSuperAdmin };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Invalid email or password';
-      return { success: false, error: message };
     }
-  }
 
-  // Local fallback sign in for offline teachers
-  const localUsers = getLocalUsers();
-  const found = localUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-  if (found) {
-    if (found.status === 'inactive') {
-      return { success: false, error: 'Your account has been deactivated by an Administrator.' };
-    }
-    // Security: Local mock fallback accounts are strictly teacher role; admin requires verified Firebase Authentication
-    const safeTeacherUser: UserProfile = { ...found, role: 'teacher' };
-    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(safeTeacherUser));
-    return { success: true, user: safeTeacherUser, isAdmin: false };
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profile));
+    return { success: true, user: profile, isAdmin: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Invalid email or password';
+    return { success: false, error: message };
   }
-
-  return { success: false, error: 'Invalid credentials or user not found. Please sign up or configure Firebase.' };
 };
 
 /**
- * Sign In with Google Popup (With account picker prompt)
- * - Every teacher can sign in immediately with their Google account.
- * - Sole administrator is twizerefelix90@gmail.com.
- * - All other accounts receive the 'teacher' role with active status.
- * - Teachers cannot promote themselves to admin.
+ * Admin-only Google Sign-In
  */
-export const signInWithGoogle = async (): Promise<{ success: boolean; user?: UserProfile; isAdmin?: boolean; error?: string; code?: string }> => {
+export const signInWithGoogle = async (): Promise<{
+  success: boolean;
+  user?: UserProfile;
+  isAdmin?: boolean;
+  error?: string;
+  code?: string;
+}> => {
   const auth = getFirebaseAuth();
 
   if (!auth) {
     const config = getFirebaseConfig();
     if (!config.apiKey) {
-      return { 
-        success: false, 
-        error: 'Firebase Web API Key is missing for project "isezerano-news". Please configure your Firebase Web App credentials.',
+      return {
+        success: false,
+        error:
+          'Firebase Web API Key is missing for project "isezerano-news". Please configure your Firebase Web App credentials.',
         code: 'MISSING_API_KEY'
       };
     }
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Firebase Authentication is not configured or failed to initialize.',
       code: 'AUTH_UNAVAILABLE'
     };
@@ -310,104 +177,93 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
 
   try {
     const provider = new GoogleAuthProvider();
-    // Forces Google to show account selection picker so user can choose which Google account to use
     provider.setCustomParameters({ prompt: 'select_account' });
     const credential = await signInWithPopup(auth, provider);
-    const user = credential.user;
+    const fbUser = credential.user;
 
-    // Check Custom Claims on verified Firebase ID Token
     let hasAdminClaim = false;
     try {
-      const idTokenResult = await user.getIdTokenResult(true);
+      const idTokenResult = await fbUser.getIdTokenResult(true);
       hasAdminClaim = Boolean(idTokenResult.claims && idTokenResult.claims.admin === true);
     } catch (claimErr) {
       console.warn('Could not read ID token claims:', claimErr);
     }
 
-    const userEmail = (user.email || '').toLowerCase().trim();
-    const isSuperAdmin = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
-    const resolvedRole: UserRole = isSuperAdmin ? 'admin' : 'teacher';
+    const userEmail = (fbUser.email || '').toLowerCase().trim();
+    const isAdminUser = hasAdminClaim || isAuthorizedAdminEmail(userEmail);
 
-    const db = initFirestoreIfConfigured();
-
-    // Check existing profile in Firestore
-    let existingProfile: UserProfile | null = null;
-    if (db) {
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const d = userDoc.data();
-          if (d.status === 'inactive' && !isSuperAdmin) {
-            await fbSignOut(auth);
-            return { success: false, error: 'Your account has been deactivated by an Administrator.' };
-          }
-          existingProfile = {
-            uid: user.uid,
-            email: userEmail,
-            displayName: user.displayName || d.displayName || userEmail.split('@')[0],
-            role: resolvedRole, // Strictly enforced: only authorized admin can be admin
-            status: 'active',
-            schoolName: d.schoolName || (isSuperAdmin ? 'GS GITUMBA' : ''),
-            createdAt: d.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-        }
-      } catch (e) {
-        console.warn('Could not read user profile during Google sign-in:', e);
-      }
+    if (!isAdminUser) {
+      await fbSignOut(auth);
+      localStorage.removeItem(LOCAL_USER_KEY);
+      return {
+        success: false,
+        isAdmin: false,
+        error:
+          'Access Denied: This Google account is not authorized to access the Administrator Portal.'
+      };
     }
 
-    const finalProfile: UserProfile = existingProfile || {
-      uid: user.uid,
+    const finalProfile: UserProfile = {
+      uid: fbUser.uid,
       email: userEmail,
-      displayName: user.displayName || userEmail.split('@')[0] || (isSuperAdmin ? 'Administrator' : 'Teacher'),
-      role: resolvedRole,
+      displayName: fbUser.displayName || 'Administrator',
+      role: 'admin',
       status: 'active',
-      schoolName: isSuperAdmin ? 'GS GITUMBA' : '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    // Persist or sync user document to Firestore users/{uid}
+    const db = initFirestoreIfConfigured();
     if (db) {
       try {
-        await setDoc(doc(db, 'users', user.uid), finalProfile, { merge: true });
+        await setDoc(doc(db, 'users', fbUser.uid), finalProfile, { merge: true });
       } catch (e) {
-        console.warn('Failed to sync user document in Firestore:', e);
+        console.warn('Failed to sync admin document in Firestore:', e);
       }
     }
 
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(finalProfile));
-    return { success: true, user: finalProfile, isAdmin: isSuperAdmin };
+    return { success: true, user: finalProfile, isAdmin: true };
   } catch (err: unknown) {
     const fbError = err as { code?: string; message?: string };
     const errCode = fbError.code || '';
 
     if (errCode === 'auth/popup-closed-by-user') {
-      return { success: false, error: 'Google sign-in was cancelled (the account selection window was closed).', code: errCode };
+      return {
+        success: false,
+        error: 'Google sign-in was cancelled (the account selection window was closed).',
+        code: errCode
+      };
     }
     if (errCode === 'auth/popup-blocked') {
-      return { success: false, error: 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.', code: errCode };
+      return {
+        success: false,
+        error:
+          'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.',
+        code: errCode
+      };
     }
     if (errCode === 'auth/unauthorized-domain') {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: `Domain authorization required: "${currentHost}" is not yet added to Authorized Domains for project "isezerano-news". Please add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`,
         code: errCode
       };
     }
     if (errCode === 'auth/operation-not-allowed') {
-      return { 
-        success: false, 
-        error: 'Google Sign-In is not enabled as an Authentication provider. Please go to Firebase Console > Authentication > Sign-in method and enable Google.',
+      return {
+        success: false,
+        error:
+          'Google Sign-In is not enabled as an Authentication provider. Please go to Firebase Console > Authentication > Sign-in method and enable Google.',
         code: errCode
       };
     }
     if (errCode === 'auth/invalid-api-key') {
-      return { 
-        success: false, 
-        error: 'The Firebase Web API Key is invalid. Please check the Web API Key in Firebase Console for project "isezerano-news".',
+      return {
+        success: false,
+        error:
+          'The Firebase Web API Key is invalid. Please check the Web API Key in Firebase Console for project "isezerano-news".',
         code: errCode
       };
     }
@@ -418,7 +274,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Use
 };
 
 /**
- * Sign out (Completely terminates session with NO automatic anonymous login)
+ * Sign out completely
  */
 export const signOut = async (): Promise<void> => {
   const auth = getFirebaseAuth();
@@ -433,108 +289,7 @@ export const signOut = async (): Promise<void> => {
 };
 
 /**
- * Admin action: Update a user's active/inactive status
- */
-export const setUserStatus = async (
-  uid: string, 
-  status: UserStatus
-): Promise<{ success: boolean; error?: string }> => {
-  const db = initFirestoreIfConfigured();
-  if (db) {
-    try {
-      await updateDoc(doc(db, 'users', uid), {
-        status,
-        updatedAt: new Date().toISOString()
-      });
-      return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to update user status in Firestore';
-      return { success: false, error: message };
-    }
-  }
-
-  // Local fallback
-  const localUsers = getLocalUsers();
-  const index = localUsers.findIndex(u => u.uid === uid);
-  if (index >= 0) {
-    localUsers[index].status = status;
-    localUsers[index].updatedAt = new Date().toISOString();
-    saveLocalUsers(localUsers);
-    return { success: true };
-  }
-
-  return { success: false, error: 'User not found' };
-};
-
-/**
- * Admin action: Update a user's role
- */
-export const setUserRole = async (
-  uid: string, 
-  role: UserRole
-): Promise<{ success: boolean; error?: string }> => {
-  const db = initFirestoreIfConfigured();
-  if (db) {
-    try {
-      await updateDoc(doc(db, 'users', uid), {
-        role,
-        updatedAt: new Date().toISOString()
-      });
-      return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to update user role in Firestore';
-      return { success: false, error: message };
-    }
-  }
-
-  // Local fallback
-  const localUsers = getLocalUsers();
-  const index = localUsers.findIndex(u => u.uid === uid);
-  if (index >= 0) {
-    localUsers[index].role = role;
-    localUsers[index].updatedAt = new Date().toISOString();
-    saveLocalUsers(localUsers);
-    return { success: true };
-  }
-
-  return { success: false, error: 'User not found' };
-};
-
-/**
- * Admin action: List all users from Firestore `users` collection
- */
-export const listUsers = async (): Promise<UserProfile[]> => {
-  const db = initFirestoreIfConfigured();
-  if (db) {
-    try {
-      const snapshot = await getDocs(collection(db, 'users'));
-      const list: UserProfile[] = [];
-      snapshot.forEach(docSnap => {
-        const d = docSnap.data();
-        list.push({
-          uid: docSnap.id,
-          email: d.email || '',
-          displayName: d.displayName || d.email?.split('@')[0] || 'Teacher',
-          role: (d.role === 'admin' ? 'admin' : 'teacher') as UserRole,
-          status: (d.status === 'inactive' ? 'inactive' : 'active') as UserStatus,
-          schoolName: d.schoolName || '',
-          createdAt: d.createdAt || new Date().toISOString(),
-          updatedAt: d.updatedAt || new Date().toISOString()
-        });
-      });
-      return list;
-    } catch (err) {
-      console.warn('Failed to query users from Firestore:', err);
-    }
-  }
-
-  return getLocalUsers();
-};
-
-/**
- * Subscribe to Auth State changes
- * Provides authenticated profile for teachers and administrators.
- * Returns null if user is signed out.
+ * Subscribe to Admin Auth state changes
  */
 export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (() => void) => {
   const auth = getFirebaseAuth();
@@ -548,13 +303,11 @@ export const subscribeToAuth = (callback: (user: UserProfile | null) => void): (
           return;
         }
       }
-      // When Firebase user is null or unauthenticated, clear local session and signal null
       localStorage.removeItem(LOCAL_USER_KEY);
       callback(null);
     });
   }
 
-  // If Firebase Auth instance is not initialized, session is unauthenticated
   localStorage.removeItem(LOCAL_USER_KEY);
   callback(null);
   return () => {};

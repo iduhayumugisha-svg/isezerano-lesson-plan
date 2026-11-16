@@ -7,7 +7,7 @@ interface LanguageContextProps {
   t: Translations;
 }
 
-const LANGUAGE_STORAGE_KEY = 'rwanda_cbc_app_lang';
+const LANGUAGE_STORAGE_KEY = 'isezerano_news_lang';
 
 const LanguageContext = createContext<LanguageContextProps | undefined>(undefined);
 

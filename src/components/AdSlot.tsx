@@ -1,6 +1,11 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { AdPlacement, AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
-import { getAdsSettings, subscribeToAdsSettings } from '../services/siteSettingsService';
+import { AdPlacement, AdsSettings } from '../types/platform';
+import {
+  getAdsSettings,
+  getCachedAdsSettingsSync,
+  hasCachedAdsSettingsSync,
+  subscribeToAdsSettings
+} from '../services/siteSettingsService';
 import { ExternalLink, Sparkles } from 'lucide-react';
 
 interface AdSlotProps {
@@ -8,18 +13,36 @@ interface AdSlotProps {
   className?: string;
 }
 
+const isDocumentWriteOrAtOptionsSnippet = (code: string): boolean =>
+  /atOptions\s*=|document\.write/i.test(code);
+
+const parseAtOptionsDimensions = (code: string): { width: number; height: number } => {
+  const widthMatch = code.match(/['"]?width['"]?\s*:\s*(\d{2,4})/i);
+  const heightMatch = code.match(/['"]?height['"]?\s*:\s*(\d{2,4})/i);
+  const parsedW = widthMatch ? Number(widthMatch[1]) : 0;
+  const parsedH = heightMatch ? Number(heightMatch[1]) : 0;
+  return {
+    width: parsedW > 0 ? parsedW : 728,
+    height: parsedH > 0 ? parsedH : 90
+  };
+};
+
 export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => {
-  const [adsSettings, setAdsSettings] = useState<AdsSettings>(DEFAULT_ADS_SETTINGS);
+  const [adsSettings, setAdsSettings] = useState<AdsSettings>(() => getCachedAdsSettingsSync());
+  const [isAdsResolved, setIsAdsResolved] = useState<boolean>(() => hasCachedAdsSettingsSync());
   const outerWrapperRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load initial settings
-    getAdsSettings().then(setAdsSettings);
+    getAdsSettings().then((fresh) => {
+      setAdsSettings(fresh);
+      setIsAdsResolved(true);
+    });
 
-    // Subscribe to real-time updates from admin dashboard
+    // Subscribe to shared real-time updates from admin dashboard
     const unsubscribe = subscribeToAdsSettings((fresh) => {
       setAdsSettings(fresh);
+      setIsAdsResolved(true);
     });
 
     return () => unsubscribe();
@@ -62,7 +85,6 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
     // Fallback check for wide non-iframe fixed elements injected by ad networks
     if (targetWidth <= availableWidth) {
-      // Clear transform temporarily to read real unscaled scrollWidth
       container.style.transform = '';
       container.style.width = '';
       if (container.scrollWidth > availableWidth + 2) {
@@ -110,31 +132,65 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
         outer.style.height = '';
       }
 
-      // Create a temporary container to parse HTML and preserve exact DOM + script order
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = slotConfig.code;
+      if (isDocumentWriteOrAtOptionsSnippet(slotConfig.code)) {
+        // Render document.write / atOptions ad tags inside a dedicated srcdoc iframe so
+        // document.write() works reliably after React hydration on both mobile and desktop,
+        // without window.atOptions collisions or blocking browser interventions.
+        const { width, height } = parseAtOptionsDimensions(slotConfig.code);
+        const iframe = document.createElement('iframe');
+        iframe.title = slotConfig.label || 'Sponsored Advertisement';
+        iframe.setAttribute('width', String(width));
+        iframe.setAttribute('height', String(height));
+        iframe.setAttribute('scrolling', 'no');
+        iframe.setAttribute('frameborder', '0');
+        iframe.style.width = `${width}px`;
+        iframe.style.height = `${height}px`;
+        iframe.style.border = '0';
+        iframe.style.maxWidth = 'none';
+        iframe.style.overflow = 'hidden';
+        iframe.style.display = 'block';
+        iframe.style.margin = '0 auto';
+        iframe.srcdoc = [
+          '<!doctype html><html><head><meta charset="utf-8">',
+          '<meta name="viewport" content="width=device-width,initial-scale=1">',
+          '<base target="_top" />',
+          '<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden;display:flex;justify-content:center;align-items:center;}</style>',
+          '</head><body>',
+          slotConfig.code,
+          '</body></html>'
+        ].join('');
+        container.appendChild(iframe);
+      } else {
+        // Standard DOM + async script injector (Monetag native/banner containers, etc.)
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = slotConfig.code;
 
-      const scripts = Array.from(tempDiv.querySelectorAll('script'));
-      // Append non-script nodes first so target containers exist in DOM
-      while (tempDiv.firstChild) {
-        if (tempDiv.firstChild.nodeName !== 'SCRIPT') {
-          container.appendChild(tempDiv.firstChild);
-        } else {
-          tempDiv.removeChild(tempDiv.firstChild);
+        const scripts = Array.from(tempDiv.querySelectorAll('script'));
+        while (tempDiv.firstChild) {
+          if (tempDiv.firstChild.nodeName !== 'SCRIPT') {
+            container.appendChild(tempDiv.firstChild);
+          } else {
+            tempDiv.removeChild(tempDiv.firstChild);
+          }
         }
+
+        scripts.forEach((oldScript) => {
+          if (cancelled) return;
+          const newScript = document.createElement('script');
+          Array.from(oldScript.attributes).forEach((attr) => {
+            newScript.setAttribute(attr.name, attr.value);
+          });
+          newScript.async = oldScript.hasAttribute('async');
+          newScript.textContent = oldScript.textContent;
+          container.appendChild(newScript);
+        });
       }
 
-      // Execute scripts sequentially while preserving explicit async attributes
-      scripts.forEach((oldScript) => {
-        if (cancelled) return;
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach((attr) => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-        newScript.async = oldScript.hasAttribute('async');
-        newScript.textContent = oldScript.textContent;
-        container.appendChild(newScript);
-      });
+      const handleCaptureLoad = () => {
+        if (!cancelled) {
+          syncResponsiveEmbedLayout();
+        }
+      };
 
       const mutationObserver = new MutationObserver(() => {
         if (!cancelled) {
@@ -158,12 +214,14 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
         resizeObserver.observe(outer);
       }
 
+      container.addEventListener('load', handleCaptureLoad, true);
       window.addEventListener('resize', syncResponsiveEmbedLayout);
       const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
       const lateCheckId = window.setTimeout(syncResponsiveEmbedLayout, 600);
 
       return () => {
         cancelled = true;
+        container.removeEventListener('load', handleCaptureLoad, true);
         mutationObserver.disconnect();
         resizeObserver?.disconnect();
         window.removeEventListener('resize', syncResponsiveEmbedLayout);
@@ -183,8 +241,23 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     slotConfig?.enabled,
     slotConfig?.type,
     slotConfig?.code,
+    slotConfig?.label,
     syncResponsiveEmbedLayout
   ]);
+
+  // Hold matching below-header slot space during initial cold fetch so <main> does not shift down
+  if (!isAdsResolved) {
+    if (placement === 'below_header') {
+      return (
+        <div
+          className={`w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 my-2 min-h-[124px] sm:min-h-[140px] ${className}`}
+          data-ad-placement={placement}
+          aria-hidden="true"
+        />
+      );
+    }
+    return null;
+  }
 
   // Master disabled or slot disabled: render nothing
   if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {

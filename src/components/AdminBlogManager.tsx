@@ -85,7 +85,7 @@ const createEmptyDraft = (
   title: '',
   slug: '',
   category: defaultCategory,
-  authorName: adminName || (adminEmail ? adminEmail.split('@')[0] : 'GS GITUMBA Admin'),
+  authorName: adminName || (adminEmail ? adminEmail.split('@')[0] : 'ISEZERANO Admin'),
   authorRole: 'Administrator',
   excerpt: '',
   content: '',
@@ -134,7 +134,7 @@ export const AdminBlogManager: React.FC = () => {
   // Editor state
   const [mode, setMode] = useState<'list' | 'editor'>('list');
   const [draft, setDraft] = useState<EditorDraft>(() =>
-    createEmptyDraft(user?.displayName || 'GS GITUMBA Admin', user?.email)
+    createEmptyDraft(user?.displayName || 'ISEZERANO Admin', user?.email)
   );
   const [isEditingExisting, setIsEditingExisting] = useState(false);
 
@@ -206,7 +206,7 @@ export const AdminBlogManager: React.FC = () => {
 
   const handleStartNewArticle = () => {
     const defaultCat = categoryNames[0] || DEFAULT_AI_BLOG_CATEGORIES[0].name;
-    setDraft(createEmptyDraft(user?.displayName || 'GS GITUMBA Admin', user?.email, defaultCat));
+    setDraft(createEmptyDraft(user?.displayName || 'ISEZERANO Admin', user?.email, defaultCat));
     setIsEditingExisting(false);
     setStorageNotice(null);
     setStatusBanner(null);
@@ -226,7 +226,7 @@ export const AdminBlogManager: React.FC = () => {
       title: post.title,
       slug: post.slug,
       category: post.category || categoryNames[0] || DEFAULT_AI_BLOG_CATEGORIES[0].name,
-      authorName: post.author?.name || user?.displayName || 'GS GITUMBA Admin',
+      authorName: post.author?.name || user?.displayName || 'ISEZERANO Admin',
       authorRole: post.author?.role || 'Administrator',
       excerpt: post.excerpt || '',
       content: post.content || '',
@@ -346,7 +346,7 @@ export const AdminBlogManager: React.FC = () => {
       thumbnailIsCustomOverride: draft.thumbnailIsCustomOverride,
       category: draft.category,
       author: {
-        name: draft.authorName.trim() || 'GS GITUMBA Editorial',
+        name: draft.authorName.trim() || 'ISEZERANO Editorial',
         role: draft.authorRole.trim() || 'Administrator',
         ...(user?.email ? { email: user.email } : {})
       },
@@ -943,7 +943,7 @@ export const AdminBlogManager: React.FC = () => {
                         maxLength={60}
                         value={catName}
                         onChange={(e) => setCatName(e.target.value)}
-                        placeholder="e.g., School News, STEM Education"
+                        placeholder="e.g., Top Stories, Business, Technology"
                         className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
                       />
                     </div>

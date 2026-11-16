@@ -21,11 +21,10 @@ import {
   saveFirebaseConfig, 
   isFirebaseConfigured, 
   parseFirebaseConfigSnippet 
-} from '../services/storageService';
+} from '../config/firebase';
 
 interface AdminPortalGatewayProps {
   onNavigate: (page: WebsitePage) => void;
-  onOpenAuthModal?: () => void;
 }
 
 export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({ 
@@ -49,8 +48,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
     setFirebaseReady(isFirebaseConfigured());
   }, []);
 
-  // Requirement: If an unauthorized person selects another account or opens admin without permission,
-  // deny access and return them to the public website.
+  // If an unauthorized account signs in, deny access and return to the public news site.
   useEffect(() => {
     if (user && !isAdmin) {
       setErrorMsg('Access Denied: This Google account is not authorized to access the Admin Portal. Returning to public website...');
@@ -155,16 +153,8 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
     setIsSubmitting(true);
     try {
       const res = await signInWithGoogle();
-      if (res.success) {
-        if (res.isAdmin) {
-          setSuccessMsg('Authenticated successfully as Administrator! Opening Dashboard...');
-        } else {
-          // If a teacher signs in from the admin gateway, route them to their Nursery workspace
-          setSuccessMsg('Konti ya Mwarimu yemejwe neza! Birimo gufungura Nursery Reports...');
-          setTimeout(() => {
-            onNavigate('nursery');
-          }, 1500);
-        }
+      if (res.success && res.isAdmin) {
+        setSuccessMsg('Authenticated successfully as Administrator! Opening Dashboard...');
       } else {
         if (res.code === 'auth/unauthorized-domain') {
           setUnauthorizedDomainHost(typeof window !== 'undefined' ? window.location.hostname : 'this domain');
@@ -174,7 +164,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         if (res.code === 'MISSING_API_KEY' || res.code === 'AUTH_UNAVAILABLE') {
           setShowConfigHelper(true);
         }
-        setErrorMsg(res.error || 'Google sign-in was not completed.');
+        setErrorMsg(res.error || 'Access denied: only the authorized administrator can sign in.');
       }
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Google sign-in failed');
@@ -193,7 +183,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
           className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Return to Public Website</span>
+          <span>Return to Public News Website</span>
         </button>
 
         <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">
@@ -233,7 +223,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
                 {branding?.platformTitle || 'ISEZERANO ONLINE'}
               </h1>
               <span className="text-xs font-semibold text-teal-400 tracking-wider uppercase">
-                {branding?.platformSubtitle || 'GS GITUMBA'} • Administrator Portal
+                {branding?.platformSubtitle || 'Newsroom'} • Administrator Portal
               </span>
             </div>
           </div>
@@ -244,7 +234,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
           </div>
 
           <p className="text-xs text-slate-300 mt-3 leading-relaxed">
-            This management gateway is strictly restricted to the authorized platform administrator. All visitors and teachers can freely access and use the public lesson planning tools without signing in.
+            This management gateway is strictly restricted to the authorized platform administrator. Public visitors can freely read, browse, and share published news without an account.
           </p>
         </div>
 
@@ -252,13 +242,13 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between text-xs text-slate-600">
           <span className="flex items-center space-x-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-            <span>Public visitors and teachers require no account</span>
+            <span>Readers require no account to browse news</span>
           </span>
           <button
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('home')}
             className="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer underline text-[11px]"
           >
-            Lesson Planner →
+            Front Page →
           </button>
         </div>
 
@@ -435,7 +425,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
 
         {/* Footer info inside card */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500">
-          <span>Official CBC Lesson Planning Portal • GS GITUMBA, Buyoga, Rulindo District</span>
+          <span>ISEZERANO ONLINE • Official Newsroom Administration</span>
         </div>
 
       </div>
