@@ -8,6 +8,7 @@ import {
 import { WebsitePage } from './WebsiteHeader';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 
 interface WebsiteFooterProps {
   onNavigate: (page: WebsitePage) => void;
@@ -16,6 +17,7 @@ interface WebsiteFooterProps {
 export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
   const { logoUrl, logoSettings, colors, typography, branding, navigationMenus } = useWebsiteDesign();
+  const allNewsLabel = resolveAllNewsLabel(branding);
 
   const handleLink = (page: WebsitePage) => {
     onNavigate(page);
@@ -156,7 +158,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                       onClick={() => handleLink(item.path as WebsitePage)}
                       className="text-slate-300 hover:text-white transition-colors cursor-pointer inline-flex items-center space-x-1.5 text-left"
                     >
-                      <span>{item.label}</span>
+                      <span>{item.id === 'nav-blog' && item.label === 'All News' ? allNewsLabel : item.label}</span>
                       {item.badge && (
                         <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
                           item.badgeColor === 'amber'
@@ -174,20 +176,22 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
           </div>
 
           {/* Column 3: Static Information Pages (About Us, Contact Us, Privacy Policy, Terms) */}
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
               <Info className="w-3.5 h-3.5 text-teal-400" />
               <span>About &amp; Governance</span>
             </h3>
-            <ul className="space-y-2.5 text-xs sm:text-sm">
+            <ul className="space-y-3 text-xs sm:text-sm">
               <li>
                 <button
                   type="button"
                   onClick={() => handleLink('about')}
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  className="group flex items-center space-x-2.5 text-white hover:text-teal-300 transition-colors cursor-pointer text-left"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-transform" />
-                  <span className="font-semibold text-white group-hover:underline">{t.navAbout || 'About Us'}</span>
+                  <span className="w-2 h-2 rounded-full bg-teal-400 group-hover:scale-125 transition-transform shrink-0" />
+                  <span className="text-base sm:text-lg font-extrabold tracking-wide text-white group-hover:text-teal-300 group-hover:underline decoration-teal-400/70 underline-offset-4">
+                    {t.navAbout || 'About Us'}
+                  </span>
                 </button>
               </li>
               <li>
@@ -235,9 +239,9 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             <button
               type="button"
               onClick={() => handleLink('about')}
-              className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
+              className="text-sm font-bold text-white hover:text-teal-300 underline decoration-teal-400/60 underline-offset-4 transition-colors cursor-pointer"
             >
-              About Us
+              {t.navAbout || 'About Us'}
             </button>
             <span className="text-slate-600">•</span>
             <button
@@ -245,7 +249,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
               onClick={() => handleLink('contact')}
               className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
             >
-              Contact Us
+              {t.navContact || 'Contact Us'}
             </button>
             <span className="text-slate-600">•</span>
             <button
@@ -253,7 +257,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
               onClick={() => handleLink('privacy')}
               className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
             >
-              Privacy Policy
+              {t.navPrivacy || 'Privacy Policy'}
             </button>
             <span className="text-slate-600">•</span>
             <button
@@ -261,7 +265,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
               onClick={() => handleLink('terms')}
               className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
             >
-              Terms &amp; Conditions
+              {t.navTerms || 'Terms & Conditions'}
             </button>
           </div>
         </div>

@@ -5,8 +5,8 @@ import {
   WebsiteTypographySettings, 
   WebsiteLogoSettings,
   WebsiteBrandingSettings,
-  AnnouncementStripSettings,
-  AnnouncementItem,
+  CategoryNavAppearanceSettings,
+  CategoryItemStyle,
   HomepageSectionConfig,
   SectionCustomContent,
   NavigationMenuItem,
@@ -17,12 +17,13 @@ import {
   DEFAULT_WEBSITE_TYPOGRAPHY,
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_WEBSITE_BRANDING,
-  DEFAULT_ANNOUNCEMENT_STRIP,
+  DEFAULT_CATEGORY_NAV_APPEARANCE,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
   DEFAULT_WHATSAPP_CONTACT
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
+import { normalizeCategoryNavSettings } from '../utils/categoryStyleUtils';
 import { 
   getWebsiteDesignSettings, 
   getPublicWebsiteDesignSettings,
@@ -53,11 +54,10 @@ interface WebsiteDesignContextType {
   updateDraftColors: (colors: Partial<WebsiteColorSettings>) => void;
   updateDraftTypography: (typography: Partial<WebsiteTypographySettings>) => void;
   updateDraftLogo: (logo: Partial<WebsiteLogoSettings>) => void;
-  updateDraftAnnouncements: (announcements: Partial<AnnouncementStripSettings>) => void;
-  addAnnouncementMessage: (text: string, badge?: string, linkUrl?: string) => void;
-  updateAnnouncementMessage: (id: string, updates: Partial<AnnouncementItem>) => void;
-  deleteAnnouncementMessage: (id: string) => void;
-  reorderAnnouncementMessage: (id: string, direction: 'up' | 'down') => void;
+  updateDraftCategoryNav: (categoryNav: Partial<CategoryNavAppearanceSettings>) => void;
+  updateIndividualCategoryStyle: (categoryKey: string, styleUpdates: Partial<CategoryItemStyle>) => void;
+  resetIndividualCategoryStyle: (categoryKey: string) => void;
+  resetAllIndividualCategoryStyles: () => void;
 
   // No-Code Section Actions
   updateDraftHomepageSections: (sections: HomepageSectionConfig[]) => void;
@@ -87,8 +87,8 @@ interface WebsiteDesignContextType {
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Reset & Undo Actions
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
-  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
+  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   undoDraftChanges: () => void;
@@ -100,7 +100,7 @@ interface WebsiteDesignContextType {
 
   // Convenience Getters
   branding: WebsiteBrandingSettings;
-  announcements: AnnouncementStripSettings;
+  categoryNav: CategoryNavAppearanceSettings;
   homepageSections: HomepageSectionConfig[];
   navigationMenus: NavigationMenuItem[];
   whatsappContact: WhatsAppContactSettings;
@@ -252,70 +252,65 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const updateDraftAnnouncements = (partialAnnouncements: Partial<AnnouncementStripSettings>) => {
+  const updateDraftCategoryNav = (partialCategoryNav: Partial<CategoryNavAppearanceSettings>) => {
     setDraftSettings(prev => {
-      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
-      const nextAnnouncements: AnnouncementStripSettings = {
+      const current = normalizeCategoryNavSettings(prev.categoryNav);
+      const merged = normalizeCategoryNavSettings({
         ...current,
-        ...partialAnnouncements
-      };
-      const next = {
-        ...prev,
-        announcements: nextAnnouncements,
-        // Also keep legacy branding fields synchronized
-        branding: {
-          ...prev.branding,
-          headerAnnouncement: nextAnnouncements.messages[0]?.text || prev.branding?.headerAnnouncement || '',
-          headerAnnouncementEnabled: nextAnnouncements.enabled
-        }
-      };
-      return next;
-    });
-    setIsDraftDirty(true);
-    isDraftDirtyRef.current = true;
-  };
-
-  const addAnnouncementMessage = (text: string, badge?: string, linkUrl?: string) => {
-    if (!text.trim()) return;
-    setDraftSettings(prev => {
-      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
-      const newMsg: AnnouncementItem = {
-        id: `ann-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        text: text.trim(),
-        badge: badge?.trim() || undefined,
-        linkUrl: linkUrl?.trim() || undefined,
-        active: true
-      };
-      const updatedMessages = [...current.messages, newMsg];
-      const nextAnnouncements = { ...current, messages: updatedMessages };
+        ...partialCategoryNav,
+        perCategory: partialCategoryNav.perCategory !== undefined
+          ? partialCategoryNav.perCategory
+          : current.perCategory
+      });
       return {
         ...prev,
-        announcements: nextAnnouncements,
-        branding: {
-          ...prev.branding,
-          headerAnnouncement: updatedMessages[0]?.text || '',
-          headerAnnouncementEnabled: nextAnnouncements.enabled
-        }
+        categoryNav: merged
       };
     });
     setIsDraftDirty(true);
     isDraftDirtyRef.current = true;
   };
 
-  const updateAnnouncementMessage = (id: string, updates: Partial<AnnouncementItem>) => {
+  const updateIndividualCategoryStyle = (
+    categoryKey: string,
+    styleUpdates: Partial<CategoryItemStyle>
+  ) => {
+    const cleanKey = categoryKey.trim();
+    if (!cleanKey) return;
     setDraftSettings(prev => {
-      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
-      const updatedMessages = current.messages.map(msg => 
-        msg.id === id ? { ...msg, ...updates } : msg
-      );
-      const nextAnnouncements = { ...current, messages: updatedMessages };
+      const current = normalizeCategoryNavSettings(prev.categoryNav);
+      const existingOverride = current.perCategory[cleanKey] || {};
+      const nextPerCategory = {
+        ...current.perCategory,
+        [cleanKey]: {
+          ...existingOverride,
+          ...styleUpdates
+        }
+      };
       return {
         ...prev,
-        announcements: nextAnnouncements,
-        branding: {
-          ...prev.branding,
-          headerAnnouncement: updatedMessages[0]?.text || '',
-          headerAnnouncementEnabled: nextAnnouncements.enabled
+        categoryNav: normalizeCategoryNavSettings({
+          ...current,
+          perCategory: nextPerCategory
+        })
+      };
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const resetIndividualCategoryStyle = (categoryKey: string) => {
+    const cleanKey = categoryKey.trim();
+    if (!cleanKey) return;
+    setDraftSettings(prev => {
+      const current = normalizeCategoryNavSettings(prev.categoryNav);
+      const nextPerCategory = { ...current.perCategory };
+      delete nextPerCategory[cleanKey];
+      return {
+        ...prev,
+        categoryNav: {
+          ...current,
+          perCategory: nextPerCategory
         }
       };
     });
@@ -323,45 +318,15 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const deleteAnnouncementMessage = (id: string) => {
+  const resetAllIndividualCategoryStyles = () => {
     setDraftSettings(prev => {
-      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
-      const filtered = current.messages.filter(msg => msg.id !== id);
-      const nextAnnouncements = { ...current, messages: filtered };
+      const current = normalizeCategoryNavSettings(prev.categoryNav);
       return {
         ...prev,
-        announcements: nextAnnouncements,
-        branding: {
-          ...prev.branding,
-          headerAnnouncement: filtered[0]?.text || '',
-          headerAnnouncementEnabled: nextAnnouncements.enabled
+        categoryNav: {
+          ...current,
+          perCategory: {}
         }
-      };
-    });
-    setIsDraftDirty(true);
-    isDraftDirtyRef.current = true;
-  };
-
-  const reorderAnnouncementMessage = (id: string, direction: 'up' | 'down') => {
-    setDraftSettings(prev => {
-      const current = prev.announcements || DEFAULT_ANNOUNCEMENT_STRIP;
-      const msgs = [...current.messages];
-      const index = msgs.findIndex(m => m.id === id);
-      if (index === -1) return prev;
-      if (direction === 'up' && index > 0) {
-        const temp = msgs[index];
-        msgs[index] = msgs[index - 1];
-        msgs[index - 1] = temp;
-      } else if (direction === 'down' && index < msgs.length - 1) {
-        const temp = msgs[index];
-        msgs[index] = msgs[index + 1];
-        msgs[index + 1] = temp;
-      } else {
-        return prev;
-      }
-      return {
-        ...prev,
-        announcements: { ...current, messages: msgs }
       };
     });
     setIsDraftDirty(true);
@@ -725,7 +690,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -740,8 +705,8 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       if (section === 'logo' || section === 'all') {
         updated.logo = { ...DEFAULT_WEBSITE_LOGO };
       }
-      if (section === 'announcements' || section === 'all') {
-        updated.announcements = { ...DEFAULT_ANNOUNCEMENT_STRIP };
+      if (section === 'categoryNav' || section === 'all') {
+        updated.categoryNav = { ...DEFAULT_CATEGORY_NAV_APPEARANCE, perCategory: {} };
       }
       if (section === 'layout' || section === 'all') {
         updated.homepageSections = [...DEFAULT_HOMEPAGE_SECTIONS];
@@ -759,7 +724,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'announcements' | 'layout', fieldKey: string) => {
+  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => {
     setDraftSettings(prev => {
       const updated = { ...prev };
       if (section === 'branding') {
@@ -770,8 +735,10 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         (updated.typography as any)[fieldKey] = (DEFAULT_WEBSITE_TYPOGRAPHY as any)[fieldKey];
       } else if (section === 'logo') {
         (updated.logo as any)[fieldKey] = (DEFAULT_WEBSITE_LOGO as any)[fieldKey];
-      } else if (section === 'announcements') {
-        (updated.announcements as any)[fieldKey] = (DEFAULT_ANNOUNCEMENT_STRIP as any)[fieldKey];
+      } else if (section === 'categoryNav') {
+        const current = normalizeCategoryNavSettings(updated.categoryNav);
+        (current as any)[fieldKey] = (DEFAULT_CATEGORY_NAV_APPEARANCE as any)[fieldKey];
+        updated.categoryNav = current;
       } else if (section === 'layout') {
         updated.homepageSections = [...DEFAULT_HOMEPAGE_SECTIONS];
       }
@@ -916,11 +883,10 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         updateDraftColors,
         updateDraftTypography,
         updateDraftLogo,
-        updateDraftAnnouncements,
-        addAnnouncementMessage,
-        updateAnnouncementMessage,
-        deleteAnnouncementMessage,
-        reorderAnnouncementMessage,
+        updateDraftCategoryNav,
+        updateIndividualCategoryStyle,
+        resetIndividualCategoryStyle,
+        resetAllIndividualCategoryStyles,
         updateDraftHomepageSections,
         addHomepageSection,
         updateHomepageSection,
@@ -950,7 +916,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         removeLogoFile,
         reloadSettings: loadSettings,
         branding: activeSettings.branding || DEFAULT_WEBSITE_BRANDING,
-        announcements: activeSettings.announcements || DEFAULT_ANNOUNCEMENT_STRIP,
+        categoryNav: normalizeCategoryNavSettings(activeSettings.categoryNav),
         homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: activeSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS,
         whatsappContact: normalizeWhatsAppSettings(publishedSettings.whatsappContact),

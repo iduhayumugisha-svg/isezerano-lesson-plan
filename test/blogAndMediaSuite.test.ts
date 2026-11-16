@@ -946,8 +946,10 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(tier1OverflowSection.includes("handleNavClick('admin')"), true);
   assert.equal(tier1OverflowSection.includes('MoreVertical'), true);
   assert.equal(headerCode.includes('subscribeToBlogCategories'), true);
-  assert.equal(headerCode.includes('mergeCategoriesForDisplay'), true);
-  assert.equal(tier2NavSection.includes('All News'), true);
+  assert.equal(headerCode.includes('resolveAllNewsLabel'), true);
+  assert.equal(headerCode.includes('resolveCategoryNavItemStyle'), true);
+  assert.equal(tier2NavSection.includes('{allNewsLabel}'), true);
+  assert.equal(tier2NavSection.includes('All News'), false);
   assert.equal(tier2NavSection.includes('resolvedCategories.map'), true);
   assert.equal(tier2NavSection.includes('whitespace-nowrap shrink-0'), true);
 

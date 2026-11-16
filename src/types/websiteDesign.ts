@@ -6,15 +6,31 @@ import {
   WhatsAppContactSettings,
   DEFAULT_WHATSAPP_CONTACT
 } from '../utils/whatsappUtils';
+import {
+  CategoryFontWeight,
+  CategoryStylingMode,
+  CategoryItemStyle,
+  CategoryNavAppearanceSettings,
+  DEFAULT_ALL_NEWS_LABEL,
+  DEFAULT_CATEGORY_NAV_APPEARANCE
+} from '../utils/categoryStyleUtils';
 
 export type {
   WhatsAppButtonPosition,
   WhatsAppButtonSize,
   WhatsAppButtonShape,
   WhatsAppButtonDisplayMode,
-  WhatsAppContactSettings
+  WhatsAppContactSettings,
+  CategoryFontWeight,
+  CategoryStylingMode,
+  CategoryItemStyle,
+  CategoryNavAppearanceSettings
 };
-export { DEFAULT_WHATSAPP_CONTACT };
+export {
+  DEFAULT_WHATSAPP_CONTACT,
+  DEFAULT_ALL_NEWS_LABEL,
+  DEFAULT_CATEGORY_NAV_APPEARANCE
+};
 
 export interface WebsiteColorSettings {
   // Header and Navigation Bar
@@ -109,51 +125,19 @@ export interface WebsiteBrandingSettings {
   platformTitle: string;          // Main website name in header, footer, meta
   platformSubtitle: string;       // Subtitle (e.g. News & Information Portal)
   websiteDescription: string;     // Public website description displayed in branding & SEO metadata
+  allNewsLabel?: string;          // Editable public label replacing default "All News"
   showWebsiteName: boolean;       // Visibility toggle: show/hide website name on public website
   showWebsiteDescription: boolean;// Visibility toggle: show/hide website description on public website
-  headerAnnouncement: string;     // Top banner announcement text
-  headerAnnouncementEnabled: boolean; // Whether top announcement is active
   footerTagline: string;          // Footer description/tagline
   footerCopyright: string;        // Copyright statement in footer
   homepageWelcomeHeadline?: string; // Optional custom administrator headline
   homepageCustomNote?: string;      // Optional custom administrator note/content
 }
 
-export interface AnnouncementItem {
-  id: string;
-  text: string;
-  linkUrl?: string; // Optional internal (/blog/slug) or external URL
-  badge?: string;   // Optional badge (e.g. "AMAKURU", "UBUREZI", "URWANDA", "CBC")
-  active?: boolean; // Whether this specific message is active
-}
-
-export interface AnnouncementStripSettings {
-  enabled: boolean;
-  messages: AnnouncementItem[];
-  
-  // Animation & Behavior
-  transitionEffect: 'slide' | 'fade'; // Slide or Fade animation
-  rotationIntervalSeconds: number;     // Seconds between auto-rotations (e.g. 5)
-  pauseOnHover: boolean;
-  showDismissButton: boolean;
-  showNavigationArrows: boolean;
-  showBadgePill: boolean;
-
-  // Typography & Appearance
-  fontSize: number;                   // In px: 11px to 18px (default 13)
-  fontFamily: string;                 // Font family string
-  textColor: string;                  // Hex code, e.g. #ffffff
-  backgroundColor: string;            // Hex code, e.g. #0f766e
-  textAlign: 'left' | 'center' | 'right';
-  fontWeight: 'normal' | 'medium' | 'semibold' | 'bold';
-  heightPadding: 'compact' | 'normal' | 'spacious';
-}
-
 export type SectionType = 
   | 'masthead' 
   | 'hero' 
   | 'editorial_profile' 
-  | 'announcement_banner' 
   | 'callout' 
   | 'rich_text' 
   | 'custom_cards' 
@@ -228,7 +212,7 @@ export interface WebsiteDesignSettings {
   colors: WebsiteColorSettings;
   typography: WebsiteTypographySettings;
   logo: WebsiteLogoSettings;
-  announcements?: AnnouncementStripSettings;
+  categoryNav?: CategoryNavAppearanceSettings;
   homepageSections?: HomepageSectionConfig[];
   navigationMenus?: NavigationMenuItem[];
   whatsappContact?: WhatsAppContactSettings;
@@ -241,10 +225,9 @@ export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
   platformTitle: 'ISEZERANO ONLINE',
   platformSubtitle: 'News & Information Portal',
   websiteDescription: 'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.',
+  allNewsLabel: DEFAULT_ALL_NEWS_LABEL,
   showWebsiteName: true,
   showWebsiteDescription: true,
-  headerAnnouncement: '',
-  headerAnnouncementEnabled: false,
   footerTagline: 'ISEZERANO ONLINE – Independent digital news, timely reporting, and public announcements.',
   footerCopyright: '© 2026 ISEZERANO ONLINE. All rights reserved.',
   homepageWelcomeHeadline: '',
@@ -308,43 +291,6 @@ export const DEFAULT_WEBSITE_TYPOGRAPHY: WebsiteTypographySettings = {
   lineHeight: 'normal',
   fontScale: 1.0,
   fontSizePreset: 'normal'
-};
-
-export const DEFAULT_ANNOUNCEMENT_STRIP: AnnouncementStripSettings = {
-  enabled: true,
-  messages: [
-    {
-      id: 'ann-1',
-      text: 'Ikaze kuri ISEZERANO ONLINE – Soma amakuru mashya, inkuru zicukumbuye n’isesengura rigezweho!',
-      badge: 'AMAKURU',
-      active: true
-    },
-    {
-      id: 'ann-2',
-      text: 'Amakuru ya buri munsi mu Rwanda no mu mahanga, ubukungu, imyidagaduro, siporo n’ikoranabuhanga.',
-      badge: 'BREAKING',
-      active: true
-    },
-    {
-      id: 'ann-3',
-      text: 'Fungura inkuru zose ku buntu kuri telefoni no kuri mudasobwa ahantu hose uri.',
-      badge: 'ISEZERANO',
-      active: true
-    }
-  ],
-  transitionEffect: 'slide',
-  rotationIntervalSeconds: 5,
-  pauseOnHover: true,
-  showDismissButton: true,
-  showNavigationArrows: true,
-  showBadgePill: true,
-  fontSize: 13,
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  textColor: '#ffffff',
-  backgroundColor: '#0f766e',
-  textAlign: 'center',
-  fontWeight: 'semibold',
-  heightPadding: 'normal'
 };
 
 export const DEFAULT_WEBSITE_LOGO: WebsiteLogoSettings = {
@@ -498,7 +444,7 @@ export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   colors: DEFAULT_WEBSITE_COLORS,
   typography: DEFAULT_WEBSITE_TYPOGRAPHY,
   logo: DEFAULT_WEBSITE_LOGO,
-  announcements: DEFAULT_ANNOUNCEMENT_STRIP,
+  categoryNav: DEFAULT_CATEGORY_NAV_APPEARANCE,
   homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
   navigationMenus: DEFAULT_NAVIGATION_MENUS,
   whatsappContact: DEFAULT_WHATSAPP_CONTACT,

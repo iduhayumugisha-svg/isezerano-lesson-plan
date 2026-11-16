@@ -28,6 +28,7 @@ import {
   extractPlainTextExcerpt,
   getSingleArticleThumbnailUrl
 } from '../utils/thumbnailUtils';
+import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 
 interface BlogViewProps {
   initialSlug?: string | null;
@@ -50,7 +51,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
   focusComments = false,
   onConsumeFocusComments
 }) => {
-  const { branding } = useWebsiteDesign();
+  const { branding, categoryNav } = useWebsiteDesign();
+  const allNewsLabel = resolveAllNewsLabel(branding);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
   const [categoriesInitialized, setCategoriesInitialized] = useState(false);
@@ -485,24 +487,24 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
       {/* Category Filter Tabs (Live Firestore categories) */}
       <div className="space-y-2.5">
-        <div className="flex items-center space-x-5 overflow-x-auto border-b border-slate-200 pb-0.5 no-scrollbar">
-          {categoryTabs.map((category) => {
-            const active = selectedCategory === category;
-            return (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setSelectedCategory(category)}
-                className={`pb-3 text-xs sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                  active
-                    ? 'border-teal-700 text-teal-800 font-bold'
-                    : 'border-transparent text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                {category}
-              </button>
-            );
-          })}
+        <div className="overflow-x-auto border-b border-slate-200 py-1.5 no-scrollbar">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-max">
+            {categoryTabs.map((category) => {
+              const active = selectedCategory === category;
+              const displayLabel = category === 'All Categories' ? allNewsLabel : category;
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setSelectedCategory(category)}
+                  style={resolveCategoryNavItemStyle(category, categoryNav, active)}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg border-b-2 whitespace-nowrap shrink-0 transition-all cursor-pointer inline-flex items-center"
+                >
+                  {displayLabel}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {selectedCategoryObj?.description && (

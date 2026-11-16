@@ -355,6 +355,151 @@ async function testStaticInfoPagesCleanAndAdminGated() {
   console.log('✓ 6. Static info pages empty defaults, rich text CMS, four admin sections & rules verified');
 }
 
+// =========================================================================
+// PART 7: EDITABLE ALL NEWS LABEL, CATEGORY STYLING, FOOTER & TICKER REMOVAL
+// =========================================================================
+
+async function testCategoryCustomizationFooterAndAnnouncementRemoval() {
+  const {
+    DEFAULT_ALL_NEWS_LABEL,
+    DEFAULT_CATEGORY_NAV_APPEARANCE,
+    normalizeCategoryNavSettings,
+    resolveAllNewsLabel,
+    resolveCategoryNavItemStyle
+  } = await import('../src/utils/categoryStyleUtils');
+
+  // 1. Editable All News label resolution & no hardcoded "All News" in public feed views
+  assert.equal(resolveAllNewsLabel(undefined), DEFAULT_ALL_NEWS_LABEL);
+  assert.equal(resolveAllNewsLabel({ allNewsLabel: '   ' }), DEFAULT_ALL_NEWS_LABEL);
+  assert.equal(resolveAllNewsLabel({ allNewsLabel: 'Amakuru Yose' }), 'Amakuru Yose');
+
+  const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
+  const homeSrc = fs.readFileSync(path.resolve('src/views/HomeView.tsx'), 'utf8');
+  const blogSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
+  assert.doesNotMatch(headerSrc, />All News/);
+  assert.doesNotMatch(homeSrc, />View All News</);
+  assert.doesNotMatch(blogSrc, />All News</);
+  assert.match(headerSrc, /resolveAllNewsLabel/);
+  assert.match(homeSrc, /resolveAllNewsLabel/);
+  assert.match(blogSrc, /resolveAllNewsLabel/);
+
+  // 2. Category typography & color normalization + style resolution
+  const normalizedGlobal = normalizeCategoryNavSettings({
+    mode: 'all',
+    fontSize: 18,
+    textColor: '#1d4ed8',
+    backgroundColor: '#e0f2fe',
+    fontWeight: 'bold',
+    activeTextColor: '#ffffff',
+    activeBackgroundColor: '#0f766e',
+    perCategory: {}
+  });
+  assert.equal(normalizedGlobal.fontSize, 18);
+  assert.equal(normalizedGlobal.fontWeight, 'bold');
+
+  const clamped = normalizeCategoryNavSettings({ fontSize: 99, backgroundColor: 'transparent' });
+  assert.equal(clamped.fontSize, 22);
+  assert.equal(clamped.backgroundColor, 'transparent');
+
+  const normalStyle = resolveCategoryNavItemStyle('News', normalizedGlobal, false);
+  assert.equal(normalStyle.fontSize, '18px');
+  assert.equal(normalStyle.fontWeight, 700);
+  assert.equal(normalStyle.color, '#1d4ed8');
+  assert.equal(normalStyle.backgroundColor, '#e0f2fe');
+
+  const activeStyle = resolveCategoryNavItemStyle('News', normalizedGlobal, true);
+  assert.equal(activeStyle.color, '#ffffff');
+  assert.equal(activeStyle.backgroundColor, '#0f766e');
+
+  const weightNormal = resolveCategoryNavItemStyle(
+    'Sports',
+    { ...DEFAULT_CATEGORY_NAV_APPEARANCE, fontWeight: 'normal' },
+    false
+  );
+  const weightMedium = resolveCategoryNavItemStyle(
+    'Sports',
+    { ...DEFAULT_CATEGORY_NAV_APPEARANCE, fontWeight: 'medium' },
+    false
+  );
+  assert.equal(weightNormal.fontWeight, 400);
+  assert.equal(weightMedium.fontWeight, 500);
+
+  // Per-category individual override mode vs consistent mode
+  const perCatSettings = normalizeCategoryNavSettings({
+    mode: 'individual',
+    fontSize: 14,
+    textColor: '#334155',
+    backgroundColor: 'transparent',
+    fontWeight: 'medium',
+    perCategory: {
+      Sports: {
+        fontSize: 20,
+        textColor: '#ffffff',
+        backgroundColor: '#b91c1c',
+        fontWeight: 'bold'
+      }
+    }
+  });
+  const sportsOverride = resolveCategoryNavItemStyle('Sports', perCatSettings, false);
+  const techFallback = resolveCategoryNavItemStyle('Technology', perCatSettings, false);
+  assert.equal(sportsOverride.fontSize, '20px');
+  assert.equal(sportsOverride.backgroundColor, '#b91c1c');
+  assert.equal(sportsOverride.fontWeight, 700);
+  assert.equal(techFallback.fontSize, '14px');
+  assert.equal(techFallback.backgroundColor, 'transparent');
+
+  // When switched back to 'all', individual overrides are ignored consistently
+  const switchedToAll = { ...perCatSettings, mode: 'all' as const };
+  assert.equal(resolveCategoryNavItemStyle('Sports', switchedToAll, false).fontSize, '14px');
+
+  // Admin UI Manager & dual dashboard wiring
+  const catMgrSrc = fs.readFileSync(path.resolve('src/components/CategoryAppearanceManager.tsx'), 'utf8');
+  assert.match(catMgrSrc, /if \(!isAdmin\)/);
+  assert.match(catMgrSrc, /publishSettings/);
+  assert.match(catMgrSrc, /Live Preview Before Saving/);
+  assert.match(catMgrSrc, /Desktop/);
+  assert.match(catMgrSrc, /Tablet/);
+  assert.match(catMgrSrc, /Mobile/);
+  assert.match(catMgrSrc, /allNewsLabel/);
+  assert.match(catMgrSrc, /fontWeight/);
+
+  const designMgrSrc = fs.readFileSync(path.resolve('src/components/WebsiteDesignManager.tsx'), 'utf8');
+  const blogMgrSrc = fs.readFileSync(path.resolve('src/components/AdminBlogManager.tsx'), 'utf8');
+  assert.match(designMgrSrc, /CategoryAppearanceManager/);
+  assert.match(blogMgrSrc, /CategoryAppearanceManager/);
+
+  // 3. Footer About link prominence
+  const footerSrc = fs.readFileSync(path.resolve('src/components/WebsiteFooter.tsx'), 'utf8');
+  assert.match(footerSrc, /text-base sm:text-lg font-extrabold/);
+  assert.match(footerSrc, /space-y-3/);
+  assert.match(footerSrc, /text-sm font-bold text-white/);
+  assert.doesNotMatch(footerSrc, /GS GITUMBA/);
+
+  // 4. Permanent removal of Top Announcement Strip & Animated Ticker
+  assert.equal(fs.existsSync(path.resolve('src/components/TopAnnouncementStripManager.tsx')), false);
+  const designSvcSrc = fs.readFileSync(path.resolve('src/services/websiteDesignService.ts'), 'utf8');
+  const designCtxSrc = fs.readFileSync(path.resolve('src/context/WebsiteDesignContext.tsx'), 'utf8');
+  const designTypesSrc = fs.readFileSync(path.resolve('src/types/websiteDesign.ts'), 'utf8');
+
+  assert.match(designSvcSrc, /mask\.fieldPaths=categoryNav/);
+  assert.doesNotMatch(designSvcSrc, /mask\.fieldPaths=announcements/);
+
+  for (const [label, content] of [
+    ['WebsiteDesignManager.tsx', designMgrSrc],
+    ['websiteDesignService.ts', designSvcSrc],
+    ['WebsiteDesignContext.tsx', designCtxSrc],
+    ['websiteDesign.ts', designTypesSrc]
+  ]) {
+    assert.doesNotMatch(
+      content,
+      /TopAnnouncementStrip|AnnouncementStripSettings|AnnouncementItem|DEFAULT_ANNOUNCEMENT_STRIP|updateDraftAnnouncements|announcement_banner|headerAnnouncement/,
+      `Leftover top announcement strip reference found in ${label}`
+    );
+  }
+
+  console.log('✓ 7. Editable All News label, category styling, footer prominence & announcement ticker removal verified');
+}
+
 async function runSuite(): Promise<void> {
   testFcmPushSystemAudit();
   testWhatsAppContactSettings();
@@ -362,7 +507,8 @@ async function runSuite(): Promise<void> {
   testHeaderLanguageMovedToMenu();
   await testWebsiteNameTypographyControls();
   await testStaticInfoPagesCleanAndAdminGated();
-  console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES) TESTS PASSED!');
+  await testCategoryCustomizationFooterAndAnnouncementRemoval();
+  console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES, CATEGORIES, FOOTER) TESTS PASSED!');
 }
 
 runSuite().catch((err) => {

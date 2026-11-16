@@ -20,6 +20,7 @@ import {
   subscribeToBlogCategories,
   mergeCategoriesForDisplay
 } from '../services/blogService';
+import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 
 export type WebsitePage =
   | 'home'
@@ -49,8 +50,9 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const { language, setLanguage } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
-  const { logoUrl, logoSettings, colors, typography, branding } = useWebsiteDesign();
+  const { logoUrl, logoSettings, colors, typography, branding, categoryNav } = useWebsiteDesign();
   const [logoLoadError, setLogoLoadError] = useState(false);
+  const allNewsLabel = resolveAllNewsLabel(branding);
 
   // Fallback live subscription when WebsiteHeader is rendered without newsCategories prop
   const [fallbackRawCategories, setFallbackRawCategories] = useState<BlogCategory[]>(
@@ -297,7 +299,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     >
                       <span className="flex items-center space-x-3">
                         <Newspaper className="w-4 h-4 text-teal-700 shrink-0" />
-                        <span>All News (Front Page)</span>
+                        <span>{allNewsLabel} (Front Page)</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
@@ -419,19 +421,19 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         </div>
 
         {/* TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR (DYNAMICALLY LOADED FROM FIRESTORE) */}
-        <div className="flex items-center h-[44px] overflow-x-auto no-scrollbar">
-          <nav aria-label="News categories" className="flex items-center space-x-5 sm:space-x-6 min-w-full h-full">
+        <div className="flex items-center min-h-[48px] py-1.5 overflow-x-auto no-scrollbar">
+          <nav aria-label="News categories" className="flex items-center gap-2 sm:gap-3 min-w-max">
             <button
               type="button"
               onClick={() => handleCategoryClick('All Categories')}
-              style={{ fontSize: `${typography.navMenuSize}px` }}
-              className={`h-full border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
+              style={resolveCategoryNavItemStyle(
+                'All Categories',
+                categoryNav,
                 isNewsFeedPage && selectedCategory === 'All Categories'
-                  ? 'border-teal-700 text-teal-800 font-bold'
-                  : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'
-              }`}
+              )}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg border-b-2 transition-all cursor-pointer inline-flex items-center whitespace-nowrap shrink-0"
             >
-              All News
+              {allNewsLabel}
             </button>
 
             {resolvedCategories.map((category) => {
@@ -441,12 +443,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   key={category.id || category.name}
                   type="button"
                   onClick={() => handleCategoryClick(category.name)}
-                  style={{ fontSize: `${typography.navMenuSize}px` }}
-                  className={`h-full border-b-2 transition-colors cursor-pointer inline-flex items-center whitespace-nowrap shrink-0 text-xs sm:text-sm ${
-                    isCurrent
-                      ? 'border-teal-700 text-teal-800 font-bold'
-                      : 'border-transparent text-slate-600 hover:text-slate-950 font-semibold'
-                  }`}
+                  style={resolveCategoryNavItemStyle(category.name, categoryNav, isCurrent)}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg border-b-2 transition-all cursor-pointer inline-flex items-center whitespace-nowrap shrink-0"
                 >
                   {category.name}
                 </button>

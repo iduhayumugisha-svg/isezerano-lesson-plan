@@ -55,7 +55,8 @@ import {
   WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
-import { TopAnnouncementStripManager } from './TopAnnouncementStripManager';
+import { CategoryAppearanceManager } from './CategoryAppearanceManager';
+import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 
 // Preset palettes for 1-click theme switching
 const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
@@ -309,7 +310,7 @@ export const WebsiteDesignManager: React.FC = () => {
     isPreviewingDraft
   } = useWebsiteDesign();
 
-  const [activeTab, setActiveTab] = useState<'branding' | 'announcements' | 'logo' | 'colors' | 'typography' | 'layout' | 'menus' | 'preview' | 'history'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'categories' | 'logo' | 'colors' | 'typography' | 'layout' | 'menus' | 'preview' | 'history'>('branding');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -604,18 +605,15 @@ export const WebsiteDesignManager: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('announcements')}
+            onClick={() => setActiveTab('categories')}
             className={`px-4 py-3 text-xs sm:text-sm font-bold inline-flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'announcements'
+              activeTab === 'categories'
                 ? 'border-teal-600 text-teal-800'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>2. Top Announcement Strip</span>
-            {draftSettings.announcements?.enabled && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            )}
+            <Sparkles className="w-4 h-4 text-teal-600" />
+            <span>2. Categories &amp; Navigation</span>
           </button>
 
           <button
@@ -1227,39 +1225,35 @@ export const WebsiteDesignManager: React.FC = () => {
 
 
 
-          {/* Top Announcement Strip Gateway Card */}
+          {/* Category Label, Fonts & Colors Gateway Card */}
           <div className="bg-gradient-to-r from-teal-50 via-slate-50 to-emerald-50 p-5 rounded-2xl border border-teal-200 space-y-3 shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-teal-100">
               <div className="flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
+                <Sparkles className="w-4 h-4 text-teal-700" />
                 <h4 className="text-xs font-bold uppercase tracking-wider text-teal-950">
-                  Top Announcement Strip &amp; Animated Ticker
+                  Category Navigation Label, Typography &amp; Colors
                 </h4>
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto ${
-                draftSettings.announcements?.enabled
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  : 'bg-slate-200 text-slate-600'
-              }`}>
-                {draftSettings.announcements?.enabled ? 'Strip Visible (Live)' : 'Strip Hidden'}
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto bg-teal-100 text-teal-900 border border-teal-200">
+                Primary Label: {resolveAllNewsLabel(draftSettings.branding)}
               </span>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Manage multiple rotating announcements, customize font size, typeface, colors, sliding or fading transitions, and rotation speed.
+              Customize the editable primary category label, adjust category font sizes and weights, set consistent or per-category colors, and preview before saving.
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <span className="text-[11px] text-slate-500 font-medium">
-                {draftSettings.announcements?.messages?.length || 0} announcement message(s) configured
+                Mode: {draftSettings.categoryNav?.mode === 'individual' ? 'Individual Category Styling' : 'Consistent All-Categories Style'}
               </span>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('announcements')}
+                onClick={() => setActiveTab('categories')}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
               >
-                <span>Customize Announcement Ticker &amp; Fonts</span>
+                <span>Customize Categories &amp; Fonts</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1337,9 +1331,9 @@ export const WebsiteDesignManager: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: TOP ANNOUNCEMENT STRIP MANAGER */}
-      {activeTab === 'announcements' && (
-        <TopAnnouncementStripManager />
+      {/* TAB 2: CATEGORY LABEL, TYPOGRAPHY & COLOR MANAGER */}
+      {activeTab === 'categories' && (
+        <CategoryAppearanceManager />
       )}
 
       {/* TAB 3: WEBSITE LOGO MANAGER */}
@@ -2365,7 +2359,6 @@ export const WebsiteDesignManager: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium cursor-pointer"
                   >
                     <option value="callout">Callout Banner (Ubutumwa buhebuje bufite buto)</option>
-                    <option value="announcement_banner">Announcement Strip (Itegeko cyangwa itangazo)</option>
                     <option value="rich_text">Rich Text / Itangazo rirerire (Editorial / Text)</option>
                     <option value="custom_cards">Custom Cards Grid (Amakarita 3 y'amasomo/amakuru)</option>
                     <option value="faq">FAQ (Ibibazo Bikunze Kubazwa)</option>
@@ -3322,7 +3315,12 @@ export const WebsiteDesignManager: React.FC = () => {
 
                 <div className="hidden sm:flex items-center space-x-3 text-xs font-semibold">
                   <span style={{ color: draftSettings.colors.navLinkActive }}>Home</span>
-                  <span className="text-slate-500">All News</span>
+                  <span
+                    className="px-2 py-0.5 rounded-md border-b-2"
+                    style={resolveCategoryNavItemStyle('All Categories', draftSettings.categoryNav, true)}
+                  >
+                    {resolveAllNewsLabel(draftSettings.branding)}
+                  </span>
                   <span className="text-slate-500">About Us</span>
                   <span className="text-slate-500">Contact Us</span>
                 </div>

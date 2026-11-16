@@ -25,6 +25,7 @@ import {
   getSingleArticleThumbnailUrl,
   extractPlainTextExcerpt
 } from '../utils/thumbnailUtils';
+import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
@@ -53,6 +54,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenArticleComments
 }) => {
   const { colors, branding, typography } = useWebsiteDesign();
+  const allNewsLabel = resolveAllNewsLabel(branding);
 
   // Fallback self-subscriptions if HomeView is mounted standalone
   const [internalPosts, setInternalPosts] = useState<BlogPost[]>([]);
@@ -196,7 +198,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     (c) => c.name.toLowerCase() === activeCategory.toLowerCase()
   );
 
-  // Front Page Tier Slices (when showing All News without search)
+  // Front Page Tier Slices (when showing default unfiltered front page without search)
   const leadPost = resolvedPosts[0] || null;
   const headlineWirePosts = resolvedPosts.slice(1, 5);
   const recentGridPosts = resolvedPosts.slice(5, 11);
@@ -369,7 +371,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 }}
                 className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 cursor-pointer"
               >
-                <span>View All News</span>
+                <span>View {allNewsLabel}</span>
               </button>
             </div>
           ) : (

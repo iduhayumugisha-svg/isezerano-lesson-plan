@@ -49,6 +49,7 @@ import {
   deleteArticleComment
 } from '../services/commentService';
 import { RichTextEditor } from './RichTextEditor';
+import { CategoryAppearanceManager } from './CategoryAppearanceManager';
 import { formatPublicationDate } from '../utils/dateUtils';
 import {
   extractFirstImageFromContent,
@@ -1062,6 +1063,8 @@ export const AdminBlogManager: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              <CategoryAppearanceManager />
             </div>
           ) : (
             <>

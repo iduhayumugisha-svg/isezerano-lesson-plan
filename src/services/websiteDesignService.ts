@@ -3,13 +3,13 @@ import { getAuth } from 'firebase/auth';
 import { 
   WebsiteDesignSettings, 
   DEFAULT_WEBSITE_DESIGN,
-  DEFAULT_ANNOUNCEMENT_STRIP,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
   NavigationMenuItem,
   WebsiteDesignVersion
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
+import { normalizeCategoryNavSettings, resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -139,12 +139,17 @@ export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
     const cached = localStorage.getItem(DESIGN_STORAGE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
+      const mergedBranding = {
+        ...DEFAULT_WEBSITE_DESIGN.branding,
+        ...(parsed.branding || {}),
+        allNewsLabel: resolveAllNewsLabel(parsed.branding)
+      };
       return {
-        branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(parsed.branding || {}) },
+        branding: mergedBranding,
         colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
         typography: mergeTypographyWithDefaults(parsed.typography, parsed.colors),
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
-        announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(parsed.announcements || {}) },
+        categoryNav: normalizeCategoryNavSettings(parsed.categoryNav),
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: ensureBlogNavItem(parsed.navigationMenus),
         whatsappContact: normalizeWhatsAppSettings(parsed.whatsappContact),
@@ -183,7 +188,7 @@ const parseDesignRestValue = (val: any): any => {
 const DESIGN_PUBLIC_REST_URL =
   'https://firestore.googleapis.com/v1/projects/isezerano-news/databases/(default)/documents/appSettings/website_design' +
   '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=typography' +
-  '&mask.fieldPaths=logo&mask.fieldPaths=announcements&mask.fieldPaths=homepageSections' +
+  '&mask.fieldPaths=logo&mask.fieldPaths=categoryNav&mask.fieldPaths=homepageSections' +
   '&mask.fieldPaths=navigationMenus&mask.fieldPaths=whatsappContact' +
   '&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
 
@@ -191,11 +196,15 @@ const normalizeWebsiteDesignPayload = (
   data: Partial<WebsiteDesignSettings>,
   fallbackHistory: WebsiteDesignVersion[] = []
 ): WebsiteDesignSettings => ({
-  branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
+  branding: {
+    ...DEFAULT_WEBSITE_DESIGN.branding,
+    ...(data.branding || {}),
+    allNewsLabel: resolveAllNewsLabel(data.branding)
+  },
   colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
   typography: mergeTypographyWithDefaults(data.typography, data.colors),
   logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
-  announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
+  categoryNav: normalizeCategoryNavSettings(data.categoryNav),
   homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
   navigationMenus: ensureBlogNavItem(data.navigationMenus),
   whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
@@ -320,19 +329,7 @@ export const subscribeToWebsiteDesign = (
     const unsubscribe = onSnapshot(docRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
-        const merged: WebsiteDesignSettings = {
-          branding: { ...DEFAULT_WEBSITE_DESIGN.branding, ...(data.branding || {}) },
-          colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
-          typography: mergeTypographyWithDefaults(data.typography, data.colors),
-          logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
-          announcements: { ...DEFAULT_ANNOUNCEMENT_STRIP, ...(data.announcements || {}) },
-          homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-          navigationMenus: ensureBlogNavItem(data.navigationMenus),
-          whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
-          versionHistory: data.versionHistory || [],
-          updatedAt: data.updatedAt || new Date().toISOString(),
-          updatedBy: data.updatedBy || 'admin'
-        };
+        const merged = normalizeWebsiteDesignPayload(data, data.versionHistory || []);
         // Prevent stale remote snapshot from overwriting newer locally saved settings
         try {
           const localRaw = localStorage.getItem(DESIGN_STORAGE_KEY);
@@ -381,11 +378,14 @@ export const saveWebsiteDesignSettings = async (
 ): Promise<{ success: boolean; error?: string; code?: string; versionId?: string }> => {
   const versionId = `v_${Date.now()}`;
   const rawSnapshot: WebsiteDesignSettings = {
-    branding: { ...settings.branding },
+    branding: {
+      ...settings.branding,
+      allNewsLabel: resolveAllNewsLabel(settings.branding)
+    },
     colors: { ...settings.colors },
     typography: { ...settings.typography },
     logo: { ...settings.logo },
-    ...(settings.announcements ? { announcements: { ...settings.announcements } } : {}),
+    categoryNav: normalizeCategoryNavSettings(settings.categoryNav),
     homepageSections: settings.homepageSections ? JSON.parse(JSON.stringify(settings.homepageSections)) : [],
     navigationMenus: settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : [],
     whatsappContact: normalizeWhatsAppSettings(settings.whatsappContact),
@@ -408,6 +408,8 @@ export const saveWebsiteDesignSettings = async (
 
   const payload: WebsiteDesignSettings = stripUndefinedDeep({
     ...settings,
+    branding: rawSnapshot.branding,
+    categoryNav: rawSnapshot.categoryNav,
     versionHistory: updatedHistory,
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
