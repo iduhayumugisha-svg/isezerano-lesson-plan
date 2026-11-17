@@ -251,7 +251,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
       .slice(0, 3);
 
     return (
-      <article className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+      <article className="max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-10 sm:pt-7 sm:pb-12 space-y-7">
         {/* Top Back Navigation, Comments Shortcut & Share */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
@@ -454,7 +454,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const portalSubtitleLabel = branding?.platformSubtitle?.trim() || 'Newsroom';
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-10 sm:pt-7 sm:pb-12 space-y-7">
       {/* Editorial Section Header */}
       <div className="border-b border-slate-200 pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1.5">

@@ -107,7 +107,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
     <section
       id="article-comments"
       aria-labelledby="article-comments-heading"
-      className="pt-8 border-t border-slate-200 space-y-6"
+      className="pt-8 border-t border-slate-200 space-y-6 scroll-mt-36 sm:scroll-mt-40"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center space-x-2.5">

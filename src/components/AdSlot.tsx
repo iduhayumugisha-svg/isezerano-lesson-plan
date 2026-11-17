@@ -384,12 +384,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     syncResponsiveEmbedLayout
   ]);
 
-  // Hold matching below-header slot space during initial cold fetch so <main> does not shift down
+  // Hold compact below-header slot space during initial cold fetch to minimize layout shift
   if (!isAdsResolved) {
     if (placement === 'below_header') {
       return (
         <div
-          className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 py-1.5 sm:py-2 min-h-[104px] sm:min-h-[118px] ${className}`}
+          className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 py-1.5 min-h-[76px] sm:min-h-[84px] ${className}`}
           data-ad-placement={placement}
           aria-hidden="true"
         />
@@ -405,16 +405,16 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
   const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
   const outerSpacingClasses =
-    placement === 'below_header' ? 'py-1.5 sm:py-2 my-0' : 'py-2.5 sm:py-3 my-2';
+    placement === 'below_header' ? 'pt-2 pb-1 sm:pt-2.5 sm:pb-1' : 'pt-2 pb-3 sm:pt-3 sm:pb-4';
 
   return (
     <div
       className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 ${outerSpacingClasses} transition-all relative z-0 ${className}`}
       data-ad-placement={placement}
     >
-      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl px-0 py-2 min-[360px]:p-2.5 sm:p-4 shadow-2xs overflow-hidden relative">
+      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl px-0 py-1.5 min-[360px]:p-2 sm:px-3 sm:py-2.5 shadow-2xs overflow-hidden relative">
         {/* Subtle Ad Disclosure Header */}
-        <div className="flex items-center justify-between px-2.5 min-[360px]:px-0 pb-2 mb-2 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+        <div className="flex items-center justify-between px-2.5 min-[360px]:px-0 pb-1.5 mb-1.5 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
           <span className="flex items-center space-x-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
             <span>{slotConfig.label || placementLabel}</span>

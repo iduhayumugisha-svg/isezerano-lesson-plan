@@ -522,43 +522,48 @@ async function testCategoryCustomizationFooterAndAnnouncementRemoval() {
 }
 
 // =========================================================================
-// PART 8: INDEPENDENT SCROLLING LAYOUT (STATIONARY HEADER & AD + SCROLLABLE BODY)
+// PART 8: HEADER-ONLY FIXED LAYOUT & NATURAL DOCUMENT SCROLLING FOR ADS
 // =========================================================================
 
-async function testIndependentScrollingLayout() {
+async function testHeaderOnlyFixedAndNaturalAdScrolling() {
   const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
   const cssSrc = fs.readFileSync(path.resolve('src/index.css'), 'utf8');
   const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
   const footerSrc = fs.readFileSync(path.resolve('src/components/WebsiteFooter.tsx'), 'utf8');
   const homeSrc = fs.readFileSync(path.resolve('src/views/HomeView.tsx'), 'utf8');
   const blogSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
+  const commentsSrc = fs.readFileSync(path.resolve('src/components/ArticleCommentsSection.tsx'), 'utf8');
   const scrollUtilsSrc = fs.readFileSync(path.resolve('src/utils/scrollUtils.ts'), 'utf8');
 
-  // CSS rules for viewport-locked shell & single scrollable main region with min-height: 0
-  assert.match(cssSrc, /\.app-viewport-shell\s*\{[\s\S]*height:\s*100dvh;/);
-  assert.match(cssSrc, /\.app-main-scroll\s*\{[\s\S]*min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
-  assert.match(cssSrc, /overscroll-behavior-y:\s*contain/);
-  assert.match(cssSrc, /@media\s*\(max-height:\s*460px\)/);
+  // CSS preserves responsive ad container sizing without locking body into 100dvh container scroll
+  assert.doesNotMatch(cssSrc, /\.app-viewport-shell/);
+  assert.doesNotMatch(cssSrc, /\.app-main-scroll/);
+  assert.match(cssSrc, /\.ad-slot-wrapper\s*\{[\s\S]*min-height:\s*50px;/);
+  assert.match(cssSrc, /\.ad-slot-content\s*\{[\s\S]*min-height:\s*50px;/);
 
-  // App shell DOM ordering: Header (stationary) -> AdSlot below_header (stationary) -> Scroll container (Main + above_footer + Footer)
+  // Only WebsiteHeader stays fixed/sticky at top; ads sit directly in natural document scroll flow
+  assert.match(headerSrc, /sticky top-0 z-40/);
+  assert.match(headerSrc, /max-h-\[calc\(100dvh-5\.5rem\)\]\s+overflow-y-auto/);
+  assert.match(appSrc, /min-h-screen flex flex-col w-full antialiased overflow-x-clip/);
+  assert.doesNotMatch(appSrc, /app-viewport-shell|app-main-scroll|MAIN_SCROLL_CONTAINER_ID/);
+
   const headerPos = appSrc.indexOf('<WebsiteHeader');
   const belowAdPos = appSrc.indexOf('<AdSlot placement="below_header"');
-  const scrollBoxPos = appSrc.indexOf('id={MAIN_SCROLL_CONTAINER_ID}');
   const mainPos = appSrc.indexOf('<main ');
   const aboveFooterAdPos = appSrc.indexOf('<AdSlot placement="above_footer"');
   const footerPos = appSrc.indexOf('<WebsiteFooter');
 
-  assert.ok(headerPos > 0 && belowAdPos > headerPos);
-  assert.ok(scrollBoxPos > belowAdPos, 'below_header AdSlot must stay outside and above the scrollable container');
-  assert.ok(mainPos > scrollBoxPos && aboveFooterAdPos > mainPos && footerPos > aboveFooterAdPos);
+  assert.ok(
+    headerPos > 0 &&
+      belowAdPos > headerPos &&
+      mainPos > belowAdPos &&
+      aboveFooterAdPos > mainPos &&
+      footerPos > aboveFooterAdPos,
+    'Layout order must place sticky header first, then natural-scrolling below_header ad, main, above_footer ad, and footer'
+  );
 
-  assert.match(appSrc, /app-viewport-shell/);
-  assert.match(appSrc, /app-main-scroll\s+flex-1\s+min-h-0/);
-  assert.match(headerSrc, /shrink-0 relative z-40/);
-  assert.match(headerSrc, /max-h-\[calc\(100dvh-5\.5rem\)\]\s+overflow-y-auto/);
-
-  // Programmatic scroll-to-top across all navigation targets uses scrollMainContentToTop
-  assert.match(scrollUtilsSrc, /MAIN_SCROLL_CONTAINER_ID\s*=\s*'main-scroll-container'/);
+  // Programmatic scroll-to-top delegates cleanly to natural window scrolling
+  assert.match(scrollUtilsSrc, /window\.scrollTo\(\{\s*top:\s*0,\s*behavior\s*\}\)/);
   for (const [name, src] of [
     ['App.tsx', appSrc],
     ['WebsiteHeader.tsx', headerSrc],
@@ -567,10 +572,12 @@ async function testIndependentScrollingLayout() {
     ['BlogView.tsx', blogSrc]
   ]) {
     assert.match(src, /scrollMainContentToTop/, `${name} must use scrollMainContentToTop`);
-    assert.doesNotMatch(src, /window\.scrollTo\(/, `${name} must not bypass scroll container with raw window.scrollTo`);
   }
 
-  console.log('✓ 8. Independent scrolling layout (stationary header & below-header ad, single scrollable main body) verified');
+  // Comments anchor leaves scroll margin so sticky header never hides comments heading
+  assert.match(commentsSrc, /scroll-mt-36/);
+
+  console.log('✓ 8. Header-only fixed/sticky layout & natural document scrolling for ads and content verified');
 }
 
 async function runSuite(): Promise<void> {
@@ -581,7 +588,7 @@ async function runSuite(): Promise<void> {
   await testWebsiteNameTypographyControls();
   await testStaticInfoPagesCleanAndAdminGated();
   await testCategoryCustomizationFooterAndAnnouncementRemoval();
-  await testIndependentScrollingLayout();
+  await testHeaderOnlyFixedAndNaturalAdScrolling();
   console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES, CATEGORIES, FOOTER, SCROLLING) TESTS PASSED!');
 }
 

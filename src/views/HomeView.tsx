@@ -216,7 +216,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   }, [resolvedCategories, resolvedPosts]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-8 sm:space-y-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3.5 pb-6 sm:pt-5 sm:pb-8 space-y-6 sm:space-y-8">
       {/* Newsroom Edition Bar & Search */}
       <section className="border-b border-slate-200 pb-4 min-h-[108px] md:min-h-[54px] flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center content-start gap-x-2.5 gap-y-1 text-xs text-slate-600 min-h-[36px] md:min-h-0">

@@ -151,7 +151,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
   return (
     <header
-      className="no-print shrink-0 relative z-40 border-b shadow-2xs transition-colors backdrop-blur-md"
+      className="no-print sticky top-0 z-40 border-b shadow-2xs transition-colors backdrop-blur-md"
       style={{
         backgroundColor: colors.headerBg,
         borderColor: colors.headerBorder,
