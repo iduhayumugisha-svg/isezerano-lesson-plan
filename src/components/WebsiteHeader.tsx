@@ -21,6 +21,7 @@ import {
   mergeCategoriesForDisplay
 } from '../services/blogService';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
+import { scrollMainContentToTop } from '../utils/scrollUtils';
 
 export type WebsitePage =
   | 'home'
@@ -116,7 +117,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     }
     onNavigate(page);
     setIsMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
   };
 
   const handleCategoryClick = (categoryName: string) => {
@@ -125,7 +126,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       onNavigate('home');
     }
     setIsMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
   };
 
   const handleSignOut = async () => {
@@ -150,7 +151,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
   return (
     <header
-      className="no-print sticky top-0 z-50 border-b shadow-2xs transition-colors backdrop-blur-md"
+      className="no-print shrink-0 relative z-40 border-b shadow-2xs transition-colors backdrop-blur-md"
       style={{
         backgroundColor: colors.headerBg,
         borderColor: colors.headerBorder,
@@ -252,7 +253,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
               {isMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
+                  className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
                   role="menu"
                 >
                   {/* Admin Session Badge (Only shown when Admin is authenticated) */}

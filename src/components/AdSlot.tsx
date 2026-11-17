@@ -13,25 +13,80 @@ interface AdSlotProps {
   className?: string;
 }
 
-const isDocumentWriteOrAtOptionsSnippet = (code: string): boolean =>
+const AD_EXECUTION_TIMEOUT_MS = 4000;
+let adExecutionQueue: Promise<void> = Promise.resolve();
+
+const needsSerializedAdExecution = (code: string): boolean =>
   /atOptions\s*=|document\.write/i.test(code);
 
-const parseAtOptionsDimensions = (code: string): { width: number; height: number } => {
-  const widthMatch = code.match(/['"]?width['"]?\s*:\s*(\d{2,4})/i);
-  const heightMatch = code.match(/['"]?height['"]?\s*:\s*(\d{2,4})/i);
-  const parsedW = widthMatch ? Number(widthMatch[1]) : 0;
-  const parsedH = heightMatch ? Number(heightMatch[1]) : 0;
-  return {
-    width: parsedW > 0 ? parsedW : 728,
-    height: parsedH > 0 ? parsedH : 90
-  };
-};
+function enqueueAdSlotExecution(task: () => Promise<void>): void {
+  adExecutionQueue = adExecutionQueue
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await task();
+      } catch {
+        // Keep queue alive if an external ad script throws
+      }
+    });
+}
+
+function appendWrittenHtmlFragment(
+  rawHtml: string,
+  container: HTMLElement,
+  isCancelled: () => boolean,
+  pendingScripts: Promise<void>[]
+): void {
+  if (!rawHtml || isCancelled()) return;
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = rawHtml;
+
+  const nodes = Array.from(tempDiv.childNodes);
+  for (const node of nodes) {
+    if (isCancelled()) return;
+    if (node.nodeName === 'SCRIPT') {
+      const oldScript = node as HTMLScriptElement;
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.async = oldScript.hasAttribute('async');
+      newScript.referrerPolicy = 'no-referrer-when-downgrade';
+
+      const src = oldScript.getAttribute('src');
+      if (src) {
+        const scriptDone = new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timerId);
+            resolve();
+          };
+          const timerId = window.setTimeout(finish, AD_EXECUTION_TIMEOUT_MS);
+          newScript.addEventListener('load', finish, { once: true });
+          newScript.addEventListener('error', finish, { once: true });
+          container.appendChild(newScript);
+        });
+        pendingScripts.push(scriptDone);
+      } else {
+        if (oldScript.textContent) {
+          newScript.textContent = oldScript.textContent;
+        }
+        container.appendChild(newScript);
+      }
+    } else {
+      container.appendChild(node);
+    }
+  }
+}
 
 export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => {
   const [adsSettings, setAdsSettings] = useState<AdsSettings>(() => getCachedAdsSettingsSync());
   const [isAdsResolved, setIsAdsResolved] = useState<boolean>(() => hasCachedAdsSettingsSync());
   const outerWrapperRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
+  const appliedCodeSignatureRef = useRef<string>('');
 
   useEffect(() => {
     getAdsSettings().then((fresh) => {
@@ -52,7 +107,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     ? adsSettings.belowHeaderAd
     : adsSettings.aboveFooterAd;
 
-  // Responsive mobile scaling for fixed-width injected ad iframes/embeds (e.g., 728x90)
+  // Responsive mobile layout fit for Adsterra banners (320x50, 728x90) & Native Banners
   const syncResponsiveEmbedLayout = useCallback(() => {
     const outer = outerWrapperRef.current;
     const container = codeContainerRef.current;
@@ -61,7 +116,6 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     const availableWidth = outer.clientWidth;
     if (availableWidth <= 0) return;
 
-    // Reset temporary wrapper styles before checking natural dimensions
     let targetWidth = 0;
     let targetHeight = 0;
 
@@ -87,6 +141,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     if (targetWidth <= availableWidth) {
       container.style.transform = '';
       container.style.width = '';
+      outer.style.height = '';
       if (container.scrollWidth > availableWidth + 2) {
         targetWidth = container.scrollWidth;
         targetHeight = container.scrollHeight;
@@ -95,8 +150,9 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
     if (targetWidth > availableWidth + 1) {
       const scale = Math.max(0.25, availableWidth / targetWidth);
-      const measuredHeight = Math.max(targetHeight, container.offsetHeight, 50);
+      outer.style.height = '';
       container.style.width = `${targetWidth}px`;
+      const measuredHeight = Math.max(targetHeight, container.scrollHeight, container.offsetHeight, 50);
       container.style.transformOrigin = 'top left';
       container.style.transform = `scale(${scale})`;
       container.style.margin = '0';
@@ -110,9 +166,19 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     }
   }, []);
 
-  // Handle script / code execution inside DOM safely (called unconditionally before returns)
+  // Handle script / code execution inside the real document DOM safely (called unconditionally before returns)
   useEffect(() => {
-    if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
+    const rawCode = slotConfig?.code || '';
+    const isCodeSlotActive = Boolean(
+      adsSettings.masterEnabled &&
+        slotConfig &&
+        slotConfig.enabled &&
+        slotConfig.type === 'code' &&
+        rawCode.trim().length > 0
+    );
+
+    if (!isCodeSlotActive || !codeContainerRef.current) {
+      appliedCodeSignatureRef.current = '';
       if (codeContainerRef.current) {
         codeContainerRef.current.innerHTML = '';
       }
@@ -122,126 +188,199 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
       return;
     }
 
-    if (slotConfig.type === 'code' && slotConfig.code && codeContainerRef.current) {
-      const container = codeContainerRef.current;
-      const outer = outerWrapperRef.current;
-      let cancelled = false;
+    const container = codeContainerRef.current;
+    const outer = outerWrapperRef.current;
+    const nextSignature = `${placement}::${rawCode}`;
+    let cancelled = false;
 
+    if (appliedCodeSignatureRef.current !== nextSignature || container.childNodes.length === 0) {
+      appliedCodeSignatureRef.current = nextSignature;
       container.innerHTML = '';
       if (outer) {
         outer.style.height = '';
       }
 
-      if (isDocumentWriteOrAtOptionsSnippet(slotConfig.code)) {
-        // Render document.write / atOptions ad tags inside a dedicated srcdoc iframe so
-        // document.write() works reliably after React hydration on both mobile and desktop,
-        // without window.atOptions collisions or blocking browser interventions.
-        const { width, height } = parseAtOptionsDimensions(slotConfig.code);
-        const iframe = document.createElement('iframe');
-        iframe.title = slotConfig.label || 'Sponsored Advertisement';
-        iframe.setAttribute('width', String(width));
-        iframe.setAttribute('height', String(height));
-        iframe.setAttribute('scrolling', 'no');
-        iframe.setAttribute('frameborder', '0');
-        iframe.style.width = `${width}px`;
-        iframe.style.height = `${height}px`;
-        iframe.style.border = '0';
-        iframe.style.maxWidth = 'none';
-        iframe.style.overflow = 'hidden';
-        iframe.style.display = 'block';
-        iframe.style.margin = '0 auto';
-        iframe.srcdoc = [
-          '<!doctype html><html><head><meta charset="utf-8">',
-          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-          '<base target="_top" />',
-          '<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden;display:flex;justify-content:center;align-items:center;}</style>',
-          '</head><body>',
-          slotConfig.code,
-          '</body></html>'
-        ].join('');
-        container.appendChild(iframe);
-      } else {
-        // Standard DOM + async script injector (Monetag native/banner containers, etc.)
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = slotConfig.code;
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = rawCode;
 
-        const scripts = Array.from(tempDiv.querySelectorAll('script'));
-        while (tempDiv.firstChild) {
-          if (tempDiv.firstChild.nodeName !== 'SCRIPT') {
-            container.appendChild(tempDiv.firstChild);
-          } else {
-            tempDiv.removeChild(tempDiv.firstChild);
-          }
+      const scriptNodes: HTMLScriptElement[] = [];
+      const childNodes = Array.from(tempDiv.childNodes);
+      for (const child of childNodes) {
+        if (child.nodeName === 'SCRIPT') {
+          scriptNodes.push(child as HTMLScriptElement);
+        } else {
+          container.appendChild(child);
         }
+      }
 
-        scripts.forEach((oldScript) => {
-          if (cancelled) return;
-          const newScript = document.createElement('script');
-          Array.from(oldScript.attributes).forEach((attr) => {
-            newScript.setAttribute(attr.name, attr.value);
+      if (scriptNodes.length > 0) {
+        if (needsSerializedAdExecution(rawCode)) {
+          enqueueAdSlotExecution(async () => {
+            if (cancelled || !container.isConnected) return;
+
+            const originalWrite = document.write.bind(document);
+            const originalWriteln = document.writeln.bind(document);
+            const pendingWrittenScripts: Promise<void>[] = [];
+            let writeBuffer = '';
+
+            const flushWriteBuffer = (force = false) => {
+              if (!writeBuffer) return;
+              const openScripts = (writeBuffer.match(/<script\b/gi) || []).length;
+              const closeScripts = (writeBuffer.match(/<\/script>/gi) || []).length;
+              if (!force && openScripts > closeScripts) {
+                return;
+              }
+              const htmlToInsert = writeBuffer;
+              writeBuffer = '';
+              appendWrittenHtmlFragment(
+                htmlToInsert,
+                container,
+                () => cancelled,
+                pendingWrittenScripts
+              );
+              syncResponsiveEmbedLayout();
+            };
+
+            document.write = (...args: string[]) => {
+              if (cancelled || !container.isConnected) return;
+              writeBuffer += args.join('');
+              flushWriteBuffer(false);
+            };
+
+            document.writeln = (...args: string[]) => {
+              if (cancelled || !container.isConnected) return;
+              writeBuffer += `${args.join('')}\n`;
+              flushWriteBuffer(false);
+            };
+
+            try {
+              for (const oldScript of scriptNodes) {
+                if (cancelled || !container.isConnected) break;
+
+                const newScript = document.createElement('script');
+                Array.from(oldScript.attributes).forEach((attr) => {
+                  newScript.setAttribute(attr.name, attr.value);
+                });
+                newScript.async = oldScript.hasAttribute('async');
+                newScript.referrerPolicy = 'no-referrer-when-downgrade';
+
+                const src = oldScript.getAttribute('src');
+                if (src) {
+                  await new Promise<void>((resolve) => {
+                    let settled = false;
+                    const finish = () => {
+                      if (settled) return;
+                      settled = true;
+                      window.clearTimeout(timeoutId);
+                      resolve();
+                    };
+                    const timeoutId = window.setTimeout(finish, AD_EXECUTION_TIMEOUT_MS);
+                    newScript.addEventListener('load', finish, { once: true });
+                    newScript.addEventListener('error', finish, { once: true });
+                    container.appendChild(newScript);
+                  });
+                } else {
+                  newScript.textContent = oldScript.textContent;
+                  container.appendChild(newScript);
+                }
+              }
+
+              // Wait for any nested <script src="..."> tags injected via document.write
+              while (pendingWrittenScripts.length > 0 && !cancelled) {
+                const batch = pendingWrittenScripts.splice(0, pendingWrittenScripts.length);
+                await Promise.all(batch);
+              }
+              flushWriteBuffer(true);
+            } finally {
+              document.write = originalWrite;
+              document.writeln = originalWriteln;
+              if (!cancelled) {
+                syncResponsiveEmbedLayout();
+              }
+            }
           });
-          newScript.async = oldScript.hasAttribute('async');
-          newScript.textContent = oldScript.textContent;
-          container.appendChild(newScript);
-        });
+        } else {
+          // Async container tags (e.g. Adsterra Native Banner) inject immediately without blocking other slots
+          scriptNodes.forEach((oldScript) => {
+            if (cancelled || !container.isConnected) return;
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach((attr) => {
+              newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.async = oldScript.hasAttribute('async');
+            newScript.referrerPolicy = 'no-referrer-when-downgrade';
+            if (oldScript.textContent) {
+              newScript.textContent = oldScript.textContent;
+            }
+            container.appendChild(newScript);
+          });
+        }
       }
-
-      const handleCaptureLoad = () => {
-        if (!cancelled) {
-          syncResponsiveEmbedLayout();
-        }
-      };
-
-      const mutationObserver = new MutationObserver(() => {
-        if (!cancelled) {
-          syncResponsiveEmbedLayout();
-        }
-      });
-      mutationObserver.observe(container, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['width', 'height', 'style']
-      });
-
-      let resizeObserver: ResizeObserver | null = null;
-      if (outer && typeof ResizeObserver !== 'undefined') {
-        resizeObserver = new ResizeObserver(() => {
-          if (!cancelled) {
-            syncResponsiveEmbedLayout();
-          }
-        });
-        resizeObserver.observe(outer);
-      }
-
-      container.addEventListener('load', handleCaptureLoad, true);
-      window.addEventListener('resize', syncResponsiveEmbedLayout);
-      const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
-      const lateCheckId = window.setTimeout(syncResponsiveEmbedLayout, 600);
-
-      return () => {
-        cancelled = true;
-        container.removeEventListener('load', handleCaptureLoad, true);
-        mutationObserver.disconnect();
-        resizeObserver?.disconnect();
-        window.removeEventListener('resize', syncResponsiveEmbedLayout);
-        window.cancelAnimationFrame(rafId);
-        window.clearTimeout(lateCheckId);
-        container.innerHTML = '';
-        container.style.width = '';
-        container.style.transform = '';
-        container.style.transformOrigin = '';
-        if (outer) {
-          outer.style.height = '';
-        }
-      };
     }
+
+    const handleCaptureLoad = () => {
+      if (!cancelled) {
+        syncResponsiveEmbedLayout();
+      }
+    };
+
+    const mutationObserver = new MutationObserver(() => {
+      if (!cancelled) {
+        syncResponsiveEmbedLayout();
+      }
+    });
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['width', 'height', 'style']
+    });
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (!cancelled) {
+          syncResponsiveEmbedLayout();
+        }
+      });
+      if (outer) resizeObserver.observe(outer);
+      resizeObserver.observe(container);
+    }
+
+    container.addEventListener('load', handleCaptureLoad, true);
+    window.addEventListener('resize', syncResponsiveEmbedLayout);
+    const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
+    const lateTimers = [150, 600, 1500, 3000].map((delay) =>
+      window.setTimeout(() => {
+        if (!cancelled) {
+          syncResponsiveEmbedLayout();
+        }
+      }, delay)
+    );
+
+    return () => {
+      cancelled = true;
+      container.removeEventListener('load', handleCaptureLoad, true);
+      mutationObserver.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', syncResponsiveEmbedLayout);
+      window.cancelAnimationFrame(rafId);
+      lateTimers.forEach((timerId) => window.clearTimeout(timerId));
+      appliedCodeSignatureRef.current = '';
+      container.innerHTML = '';
+      container.style.width = '';
+      container.style.transform = '';
+      container.style.transformOrigin = '';
+      if (outer) {
+        outer.style.height = '';
+      }
+    };
   }, [
+    placement,
     adsSettings.masterEnabled,
     slotConfig?.enabled,
     slotConfig?.type,
     slotConfig?.code,
-    slotConfig?.label,
     syncResponsiveEmbedLayout
   ]);
 
@@ -250,7 +389,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     if (placement === 'below_header') {
       return (
         <div
-          className={`w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 my-2 min-h-[124px] sm:min-h-[140px] ${className}`}
+          className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 py-1.5 sm:py-2 min-h-[104px] sm:min-h-[118px] ${className}`}
           data-ad-placement={placement}
           aria-hidden="true"
         />
@@ -265,15 +404,17 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   }
 
   const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
+  const outerSpacingClasses =
+    placement === 'below_header' ? 'py-1.5 sm:py-2 my-0' : 'py-2.5 sm:py-3 my-2';
 
   return (
     <div
-      className={`w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 my-2 transition-all relative z-0 ${className}`}
+      className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 ${outerSpacingClasses} transition-all relative z-0 ${className}`}
       data-ad-placement={placement}
     >
-      <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-2.5 sm:p-4 shadow-2xs overflow-hidden relative">
+      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl px-0 py-2 min-[360px]:p-2.5 sm:p-4 shadow-2xs overflow-hidden relative">
         {/* Subtle Ad Disclosure Header */}
-        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+        <div className="flex items-center justify-between px-2.5 min-[360px]:px-0 pb-2 mb-2 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
           <span className="flex items-center space-x-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
             <span>{slotConfig.label || placementLabel}</span>
@@ -285,7 +426,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
         {/* Ad Format 1: Banner Image with Link */}
         {slotConfig.type === 'banner' && slotConfig.imageUrl && (
-          <div className="flex justify-center items-center w-full">
+          <div className="flex justify-center items-center w-full px-2.5 min-[360px]:px-0">
             {slotConfig.linkUrl ? (
               <a
                 href={slotConfig.linkUrl}
@@ -317,10 +458,10 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
         {/* Ad Format 2: Custom Script / Embed Code (Responsive block wrapper prevents 0px mobile flex collapse) */}
         {slotConfig.type === 'code' && (
-          <div ref={outerWrapperRef} className="ad-slot-wrapper w-full overflow-hidden">
+          <div ref={outerWrapperRef} className="ad-slot-wrapper w-full min-w-0 min-h-[50px] overflow-hidden">
             <div
               ref={codeContainerRef}
-              className="ad-slot-content block w-full min-h-[50px] text-xs text-slate-700 text-center"
+              className="ad-slot-content block w-full min-w-0 min-h-[50px] text-xs text-slate-700 text-center"
             />
           </div>
         )}

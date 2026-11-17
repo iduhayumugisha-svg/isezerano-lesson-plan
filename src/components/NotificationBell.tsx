@@ -151,7 +151,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
       {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
+          className="absolute right-0 mt-2 w-80 sm:w-96 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
           role="dialog"
         >
           {/* Header */}

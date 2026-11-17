@@ -26,6 +26,7 @@ import {
   extractPlainTextExcerpt
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
+import { scrollMainContentToTop } from '../utils/scrollUtils';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
@@ -135,7 +136,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     } else {
       setInternalSelectedCategory(category);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
   };
 
   const handleOpenPost = (post: BlogPost) => {

@@ -56,12 +56,16 @@
   display: block;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
+  min-height: 50px;
   position: relative;
 }
 
 .ad-slot-content {
   display: block;
   width: 100%;
+  min-width: 0;
+  min-height: 50px;
 }
 
 .ad-slot-content > div,
@@ -80,10 +84,52 @@
 
 .ad-slot-content img {
   max-width: 100%;
-  height: auto;
 }
 
 .offscreen-section {
   content-visibility: auto;
   contain-intrinsic-size: 400px;
+}
+
+/* Independent Scrolling Viewport Shell (Stationary Header + Below-Header Ad, Scrollable Main Body) */
+.app-viewport-shell {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.app-main-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+/* Preserve full readability on ultra-short landscape mobile screens */
+@media (max-height: 460px) {
+  .app-viewport-shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .app-main-scroll {
+    overflow-y: visible;
+    overscroll-behavior-y: auto;
+  }
+}
+
+@media print {
+  .app-viewport-shell {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .app-main-scroll {
+    overflow: visible !important;
+  }
 }

@@ -29,6 +29,7 @@ import {
   getSingleArticleThumbnailUrl
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
+import { scrollMainContentToTop } from '../utils/scrollUtils';
 
 interface BlogViewProps {
   initialSlug?: string | null;
@@ -171,7 +172,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
         scrollToCommentsSection();
       }, 150);
     } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollMainContentToTop('auto');
     }
   };
 
@@ -183,7 +184,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
     } else {
       onSelectPostSlug?.(null);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
   };
 
   const filteredPosts = posts.filter((post) => {

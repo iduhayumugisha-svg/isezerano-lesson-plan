@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ShieldCheck,
-  Info,
+  FileText,
   Newspaper,
   Globe
 } from 'lucide-react';
@@ -9,10 +9,20 @@ import { WebsitePage } from './WebsiteHeader';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
+import { scrollMainContentToTop } from '../utils/scrollUtils';
 
 interface WebsiteFooterProps {
   onNavigate: (page: WebsitePage) => void;
 }
+
+const isLegacyAboutFooterItem = (item: { id?: string; path?: string; label?: string }): boolean => {
+  const id = (item.id || '').trim().toLowerCase();
+  const path = (item.path || '').trim().toLowerCase();
+  const label = (item.label || '').trim();
+  if (id === 'nav-about' || path === 'about') return true;
+  if (/ibyerekeye|gs\s*gitumba|^about(\s+us)?$/i.test(label)) return true;
+  return false;
+};
 
 export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
   const { t } = useLanguage();
@@ -21,14 +31,15 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
 
   const handleLink = (page: WebsitePage) => {
     onNavigate(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
   };
 
-  // Dynamic footer links filtered to valid news-only routes or external URLs
-  const validInternalPages = new Set<string>(['home', 'blog', 'about', 'contact', 'privacy', 'terms', 'admin']);
+  // Dynamic footer links filtered to valid news-only routes or external URLs (never rendering About/Ibyerekeye)
+  const validInternalPages = new Set<string>(['home', 'blog', 'contact', 'privacy', 'terms', 'admin']);
   const footerNavItems = (navigationMenus || [])
     .filter((item) => {
       if (!item.enabled || (item.location !== 'footer' && item.location !== 'both')) return false;
+      if (isLegacyAboutFooterItem(item)) return false;
       const isExternal = item.isExternal || item.path.startsWith('http://') || item.path.startsWith('https://');
       return isExternal || validInternalPages.has(item.path);
     })
@@ -45,11 +56,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* Main 4-Column Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
+        {/* Main 4-Column Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
 
           {/* Column 1: Brand & Editorial Identity */}
-          <div className="md:col-span-2 space-y-4">
+          <div className="sm:col-span-2 space-y-4">
             <div
               onClick={() => handleLink('home')}
               className="cursor-pointer group inline-flex items-center gap-3"
@@ -175,25 +186,13 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             </ul>
           </div>
 
-          {/* Column 3: Static Information Pages (About Us, Contact Us, Privacy Policy, Terms) */}
-          <div className="space-y-3.5">
+          {/* Column 3: Contact & Legal Pages */}
+          <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
-              <Info className="w-3.5 h-3.5 text-teal-400" />
-              <span>About &amp; Governance</span>
+              <FileText className="w-3.5 h-3.5 text-teal-400" />
+              <span>Contact &amp; Legal</span>
             </h3>
-            <ul className="space-y-3 text-xs sm:text-sm">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('about')}
-                  className="group flex items-center space-x-2.5 text-white hover:text-teal-300 transition-colors cursor-pointer text-left"
-                >
-                  <span className="w-2 h-2 rounded-full bg-teal-400 group-hover:scale-125 transition-transform shrink-0" />
-                  <span className="text-base sm:text-lg font-extrabold tracking-wide text-white group-hover:text-teal-300 group-hover:underline decoration-teal-400/70 underline-offset-4">
-                    {t.navAbout || 'About Us'}
-                  </span>
-                </button>
-              </li>
+            <ul className="space-y-2.5 text-xs sm:text-sm">
               <li>
                 <button
                   type="button"
@@ -221,7 +220,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                   className="group flex items-center space-x-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-transform" />
-                  <span className="font-semibold text-white group-hover:underline">Terms &amp; Conditions</span>
+                  <span className="font-semibold text-white group-hover:underline">{t.navTerms || 'Terms & Conditions'}</span>
                 </button>
               </li>
             </ul>
@@ -236,14 +235,6 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs">
-            <button
-              type="button"
-              onClick={() => handleLink('about')}
-              className="text-sm font-bold text-white hover:text-teal-300 underline decoration-teal-400/60 underline-offset-4 transition-colors cursor-pointer"
-            >
-              {t.navAbout || 'About Us'}
-            </button>
-            <span className="text-slate-600">•</span>
             <button
               type="button"
               onClick={() => handleLink('contact')}

@@ -326,21 +326,12 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     location: 'both'
   },
   {
-    id: 'nav-about',
-    label: 'About Us',
-    path: 'about',
-    icon: 'Compass',
-    enabled: true,
-    order: 3,
-    location: 'footer'
-  },
-  {
     id: 'nav-contact',
     label: 'Contact Us',
     path: 'contact',
     icon: 'MapPin',
     enabled: true,
-    order: 4,
+    order: 3,
     location: 'footer'
   },
   {
@@ -349,7 +340,7 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     path: 'privacy',
     icon: 'ShieldCheck',
     enabled: true,
-    order: 5,
+    order: 4,
     location: 'footer'
   },
   {
@@ -358,7 +349,7 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     path: 'terms',
     icon: 'FileText',
     enabled: true,
-    order: 6,
+    order: 5,
     location: 'footer'
   },
   {
@@ -367,7 +358,7 @@ export const DEFAULT_NAVIGATION_MENUS: NavigationMenuItem[] = [
     path: 'admin',
     icon: 'ShieldCheck',
     enabled: true,
-    order: 7,
+    order: 6,
     location: 'both'
   }
 ];

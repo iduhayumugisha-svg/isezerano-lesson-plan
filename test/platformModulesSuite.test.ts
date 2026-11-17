@@ -178,7 +178,18 @@ function testMobileAdDisplay() {
   assert.match(adSlotSrc, /new ResizeObserver/);
   assert.match(adSlotSrc, /new MutationObserver/);
   assert.match(adSlotSrc, /newScript\.async\s*=\s*oldScript\.hasAttribute\('async'\)/);
+  assert.match(adSlotSrc, /newScript\.referrerPolicy\s*=\s*'no-referrer-when-downgrade'/);
+  assert.match(adSlotSrc, /enqueueAdSlotExecution/);
+  assert.match(adSlotSrc, /needsSerializedAdExecution/);
+  assert.match(adSlotSrc, /pendingWrittenScripts/);
+  assert.match(adSlotSrc, /appliedCodeSignatureRef/);
+  assert.match(adSlotSrc, /min-\[360px\]:px-2/);
   assert.match(adSlotSrc, /object-contain/);
+  assert.doesNotMatch(
+    adSlotSrc,
+    /iframe\.srcdoc/,
+    'AdSlot must execute code in the real document DOM rather than about:srcdoc so domain verification succeeds'
+  );
   assert.doesNotMatch(
     adSlotSrc,
     /ref=\{codeContainerRef\}[^>]*className="[^"]*\bflex\b/,
@@ -186,11 +197,14 @@ function testMobileAdDisplay() {
   );
 
   const cssSrc = fs.readFileSync(path.resolve('src/index.css'), 'utf8');
-  assert.match(cssSrc, /\.ad-slot-wrapper\s*\{/);
-  assert.match(cssSrc, /\.ad-slot-content\s*\{/);
+  assert.match(cssSrc, /\.ad-slot-wrapper\s*\{[\s\S]*min-height:\s*50px;/);
+  assert.match(cssSrc, /\.ad-slot-content\s*\{[\s\S]*min-height:\s*50px;/);
   assert.match(cssSrc, /\.ad-slot-content\s+iframe/);
 
-  console.log('✓ 3. Mobile AdSlot layout containment, script preservation & CSS verified');
+  const htmlSrc = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  assert.match(htmlSrc, /name="referrer"\s+content="no-referrer-when-downgrade"/);
+
+  console.log('✓ 3. Mobile AdSlot real-DOM execution, referrer policy, 320px width fit & CSS verified');
 }
 
 // =========================================================================
@@ -468,12 +482,19 @@ async function testCategoryCustomizationFooterAndAnnouncementRemoval() {
   assert.match(designMgrSrc, /CategoryAppearanceManager/);
   assert.match(blogMgrSrc, /CategoryAppearanceManager/);
 
-  // 3. Footer About link prominence
+  // 3. Permanent removal of Footer About section / "Ibyerekeye GS GITUMBA"
   const footerSrc = fs.readFileSync(path.resolve('src/components/WebsiteFooter.tsx'), 'utf8');
-  assert.match(footerSrc, /text-base sm:text-lg font-extrabold/);
-  assert.match(footerSrc, /space-y-3/);
-  assert.match(footerSrc, /text-sm font-bold text-white/);
-  assert.doesNotMatch(footerSrc, /GS GITUMBA/);
+  const designSvcForNav = fs.readFileSync(path.resolve('src/services/websiteDesignService.ts'), 'utf8');
+  const designTypesForNav = fs.readFileSync(path.resolve('src/types/websiteDesign.ts'), 'utf8');
+
+  assert.doesNotMatch(footerSrc, /handleLink\('about'\)|About &amp; Governance|navAbout/i);
+  assert.doesNotMatch(designTypesForNav, /id:\s*'nav-about'/);
+  assert.match(footerSrc, /isLegacyAboutFooterItem/);
+  assert.match(footerSrc, /Contact Us/);
+  assert.match(footerSrc, /Privacy Policy/);
+  assert.match(footerSrc, /Terms & Conditions/);
+  assert.match(designSvcForNav, /normalizeNavigationMenus/);
+  assert.match(designSvcForNav, /isRemovedLegacyNavItem/);
 
   // 4. Permanent removal of Top Announcement Strip & Animated Ticker
   assert.equal(fs.existsSync(path.resolve('src/components/TopAnnouncementStripManager.tsx')), false);
@@ -497,7 +518,59 @@ async function testCategoryCustomizationFooterAndAnnouncementRemoval() {
     );
   }
 
-  console.log('✓ 7. Editable All News label, category styling, footer prominence & announcement ticker removal verified');
+  console.log('✓ 7. Editable All News label, category styling, footer removal & announcement ticker removal verified');
+}
+
+// =========================================================================
+// PART 8: INDEPENDENT SCROLLING LAYOUT (STATIONARY HEADER & AD + SCROLLABLE BODY)
+// =========================================================================
+
+async function testIndependentScrollingLayout() {
+  const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  const cssSrc = fs.readFileSync(path.resolve('src/index.css'), 'utf8');
+  const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
+  const footerSrc = fs.readFileSync(path.resolve('src/components/WebsiteFooter.tsx'), 'utf8');
+  const homeSrc = fs.readFileSync(path.resolve('src/views/HomeView.tsx'), 'utf8');
+  const blogSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
+  const scrollUtilsSrc = fs.readFileSync(path.resolve('src/utils/scrollUtils.ts'), 'utf8');
+
+  // CSS rules for viewport-locked shell & single scrollable main region with min-height: 0
+  assert.match(cssSrc, /\.app-viewport-shell\s*\{[\s\S]*height:\s*100dvh;/);
+  assert.match(cssSrc, /\.app-main-scroll\s*\{[\s\S]*min-height:\s*0;[\s\S]*overflow-y:\s*auto;/);
+  assert.match(cssSrc, /overscroll-behavior-y:\s*contain/);
+  assert.match(cssSrc, /@media\s*\(max-height:\s*460px\)/);
+
+  // App shell DOM ordering: Header (stationary) -> AdSlot below_header (stationary) -> Scroll container (Main + above_footer + Footer)
+  const headerPos = appSrc.indexOf('<WebsiteHeader');
+  const belowAdPos = appSrc.indexOf('<AdSlot placement="below_header"');
+  const scrollBoxPos = appSrc.indexOf('id={MAIN_SCROLL_CONTAINER_ID}');
+  const mainPos = appSrc.indexOf('<main ');
+  const aboveFooterAdPos = appSrc.indexOf('<AdSlot placement="above_footer"');
+  const footerPos = appSrc.indexOf('<WebsiteFooter');
+
+  assert.ok(headerPos > 0 && belowAdPos > headerPos);
+  assert.ok(scrollBoxPos > belowAdPos, 'below_header AdSlot must stay outside and above the scrollable container');
+  assert.ok(mainPos > scrollBoxPos && aboveFooterAdPos > mainPos && footerPos > aboveFooterAdPos);
+
+  assert.match(appSrc, /app-viewport-shell/);
+  assert.match(appSrc, /app-main-scroll\s+flex-1\s+min-h-0/);
+  assert.match(headerSrc, /shrink-0 relative z-40/);
+  assert.match(headerSrc, /max-h-\[calc\(100dvh-5\.5rem\)\]\s+overflow-y-auto/);
+
+  // Programmatic scroll-to-top across all navigation targets uses scrollMainContentToTop
+  assert.match(scrollUtilsSrc, /MAIN_SCROLL_CONTAINER_ID\s*=\s*'main-scroll-container'/);
+  for (const [name, src] of [
+    ['App.tsx', appSrc],
+    ['WebsiteHeader.tsx', headerSrc],
+    ['WebsiteFooter.tsx', footerSrc],
+    ['HomeView.tsx', homeSrc],
+    ['BlogView.tsx', blogSrc]
+  ]) {
+    assert.match(src, /scrollMainContentToTop/, `${name} must use scrollMainContentToTop`);
+    assert.doesNotMatch(src, /window\.scrollTo\(/, `${name} must not bypass scroll container with raw window.scrollTo`);
+  }
+
+  console.log('✓ 8. Independent scrolling layout (stationary header & below-header ad, single scrollable main body) verified');
 }
 
 async function runSuite(): Promise<void> {
@@ -508,7 +581,8 @@ async function runSuite(): Promise<void> {
   await testWebsiteNameTypographyControls();
   await testStaticInfoPagesCleanAndAdminGated();
   await testCategoryCustomizationFooterAndAnnouncementRemoval();
-  console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES, CATEGORIES, FOOTER) TESTS PASSED!');
+  await testIndependentScrollingLayout();
+  console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES, CATEGORIES, FOOTER, SCROLLING) TESTS PASSED!');
 }
 
 runSuite().catch((err) => {

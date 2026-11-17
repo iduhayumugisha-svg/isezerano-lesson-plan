@@ -134,7 +134,8 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
       const route = parseBlogRoute(req.originalUrl);
 
       const loadBranding =
-        providers.fetchBranding || (() => fetchWebsiteBrandingFromFirestore());
+        providers.fetchBranding ||
+        (() => fetchWebsiteBrandingFromFirestore(undefined, isProd ? 3500 : 1200));
       const loadPosts =
         providers.fetchPosts || (() => fetchPublishedBlogPostsFromFirestore());
 

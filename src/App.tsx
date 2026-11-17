@@ -32,6 +32,7 @@ import {
   mergeCategoriesForDisplay
 } from './services/blogService';
 import { subscribeToApprovedCommentCounts } from './services/commentService';
+import { MAIN_SCROLL_CONTAINER_ID, scrollMainContentToTop } from './utils/scrollUtils';
 
 export type AppPage = WebsitePage;
 
@@ -224,7 +225,7 @@ function AppContent() {
     if (page === 'blog') {
       setActiveBlogSlug(null);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMainContentToTop('auto');
 
     if (typeof window !== 'undefined') {
       try {
@@ -261,7 +262,7 @@ function AppContent() {
     setActiveBlogSlug(post.slug);
     setCurrentPage('blog');
     if (!openComments) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollMainContentToTop('auto');
     }
     if (typeof window !== 'undefined') {
       try {
@@ -277,7 +278,7 @@ function AppContent() {
 
   return (
     <div
-      className="min-h-screen flex flex-col antialiased selection:bg-teal-700 selection:text-white transition-colors overflow-x-hidden w-full"
+      className="app-viewport-shell flex flex-col w-full antialiased selection:bg-teal-700 selection:text-white transition-colors"
       style={{
         backgroundColor: colors.bodyBg,
         color: colors.bodyText
@@ -293,96 +294,109 @@ function AppContent() {
         onSelectCategory={setSelectedNewsCategory}
       />
 
-      {/* Ad Placement: Below Header */}
-      <AdSlot placement="below_header" />
+      {/* Ad Placement: Stationary Directly Below Header */}
+      <div
+        className="shrink-0 relative z-20 w-full no-print border-b border-slate-200/80"
+        style={{ backgroundColor: colors.bodyBg }}
+      >
+        <AdSlot placement="below_header" />
+      </div>
 
-      {/* 2. Main Content Area */}
-      <main className="flex-1 w-full overflow-x-hidden">
-        {/* PUBLIC PAGE 1: Online Newspaper Homepage (Default opening page at /) */}
-        {currentPage === 'home' && (
-          <HomeView
-            onNavigate={handleNavigate}
-            posts={publishedPosts}
-            categories={newsCategories}
-            commentCounts={commentCounts}
-            isNewsLoading={isNewsLoading}
-            selectedCategory={selectedNewsCategory}
-            onSelectCategory={setSelectedNewsCategory}
-            onOpenArticle={(post) => handleOpenNewspaperArticle(post, false)}
-            onOpenArticleComments={(post) => handleOpenNewspaperArticle(post, true)}
-          />
-        )}
+      {/* 2. Single Independently Scrollable Main Body & Footer Container */}
+      <div
+        id={MAIN_SCROLL_CONTAINER_ID}
+        tabIndex={-1}
+        className="app-main-scroll flex-1 min-h-0 w-full relative z-0 focus:outline-none"
+      >
+        <div className="min-h-full flex flex-col">
+          <main className="flex-1 w-full min-w-0">
+            {/* PUBLIC PAGE 1: Online Newspaper Homepage (Default opening page at /) */}
+            {currentPage === 'home' && (
+              <HomeView
+                onNavigate={handleNavigate}
+                posts={publishedPosts}
+                categories={newsCategories}
+                commentCounts={commentCounts}
+                isNewsLoading={isNewsLoading}
+                selectedCategory={selectedNewsCategory}
+                onSelectCategory={setSelectedNewsCategory}
+                onOpenArticle={(post) => handleOpenNewspaperArticle(post, false)}
+                onOpenArticleComments={(post) => handleOpenNewspaperArticle(post, true)}
+              />
+            )}
 
-        <Suspense
-          fallback={
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center text-sm text-slate-500">
-              Loading page...
-            </div>
-          }
-        >
-          {/* PUBLIC PAGE 1B: Public Blog & Article Reading View */}
-          {currentPage === 'blog' && (
-            <BlogView
-              initialSlug={activeBlogSlug}
-              onSelectPostSlug={handleSelectBlogPostSlug}
-              selectedCategory={selectedNewsCategory}
-              onSelectCategory={setSelectedNewsCategory}
-              onReturnHome={() => handleNavigate('home')}
-              commentCounts={commentCounts}
-              focusComments={focusArticleComments}
-              onConsumeFocusComments={() => setFocusArticleComments(false)}
-            />
-          )}
-
-          {/* PUBLIC PAGE 2: About Us View */}
-          {currentPage === 'about' && (
-            <AboutView onNavigate={handleNavigate} />
-          )}
-
-          {/* PUBLIC PAGE 3: Contact Us View */}
-          {currentPage === 'contact' && (
-            <ContactView onNavigate={handleNavigate} />
-          )}
-
-          {/* PUBLIC PAGE 4: Privacy Policy View */}
-          {currentPage === 'privacy' && (
-            <PrivacyPolicyView onNavigate={handleNavigate} />
-          )}
-
-          {/* PUBLIC PAGE 5: Terms and Conditions View */}
-          {currentPage === 'terms' && (
-            <TermsConditionsView onNavigate={handleNavigate} />
-          )}
-
-          {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or menu */}
-          {currentPage === 'admin' && (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-              {isAdmin && user ? (
-                <AdminDashboardView
-                  onNavigate={handleNavigate}
-                  onLogout={async () => {
-                    await signOutUser();
-                    handleNavigate('home');
-                  }}
-                />
-              ) : (
-                <AdminPortalGateway
-                  onNavigate={handleNavigate}
+            <Suspense
+              fallback={
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center text-sm text-slate-500">
+                  Loading page...
+                </div>
+              }
+            >
+              {/* PUBLIC PAGE 1B: Public Blog & Article Reading View */}
+              {currentPage === 'blog' && (
+                <BlogView
+                  initialSlug={activeBlogSlug}
+                  onSelectPostSlug={handleSelectBlogPostSlug}
+                  selectedCategory={selectedNewsCategory}
+                  onSelectCategory={setSelectedNewsCategory}
+                  onReturnHome={() => handleNavigate('home')}
+                  commentCounts={commentCounts}
+                  focusComments={focusArticleComments}
+                  onConsumeFocusComments={() => setFocusArticleComments(false)}
                 />
               )}
-            </div>
-          )}
-        </Suspense>
-      </main>
 
-      {/* Ad Placement: Above Footer */}
-      <AdSlot placement="above_footer" />
+              {/* PUBLIC PAGE 2: About Us View */}
+              {currentPage === 'about' && (
+                <AboutView onNavigate={handleNavigate} />
+              )}
 
-      {/* 3. Global Professional Public Website Footer */}
-      <WebsiteFooter onNavigate={handleNavigate} />
+              {/* PUBLIC PAGE 3: Contact Us View */}
+              {currentPage === 'contact' && (
+                <ContactView onNavigate={handleNavigate} />
+              )}
 
-      {/* 4. Dynamic Configurable WhatsApp Contact Button */}
-      <WhatsAppFloatingButton currentPage={currentPage} />
+              {/* PUBLIC PAGE 4: Privacy Policy View */}
+              {currentPage === 'privacy' && (
+                <PrivacyPolicyView onNavigate={handleNavigate} />
+              )}
+
+              {/* PUBLIC PAGE 5: Terms and Conditions View */}
+              {currentPage === 'terms' && (
+                <TermsConditionsView onNavigate={handleNavigate} />
+              )}
+
+              {/* ADMIN MANAGEMENT & DASHBOARD PORTAL: Accessible via /admin or menu */}
+              {currentPage === 'admin' && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+                  {isAdmin && user ? (
+                    <AdminDashboardView
+                      onNavigate={handleNavigate}
+                      onLogout={async () => {
+                        await signOutUser();
+                        handleNavigate('home');
+                      }}
+                    />
+                  ) : (
+                    <AdminPortalGateway
+                      onNavigate={handleNavigate}
+                    />
+                  )}
+                </div>
+              )}
+            </Suspense>
+          </main>
+
+          {/* Ad Placement: Above Footer */}
+          <AdSlot placement="above_footer" />
+
+          {/* 3. Global Professional Public Website Footer */}
+          <WebsiteFooter onNavigate={handleNavigate} />
+
+          {/* 4. Dynamic Configurable WhatsApp Contact Button */}
+          <WhatsAppFloatingButton currentPage={currentPage} />
+        </div>
+      </div>
 
       {/* 5. Push Alert Detail Modal */}
       {selectedNotice && (

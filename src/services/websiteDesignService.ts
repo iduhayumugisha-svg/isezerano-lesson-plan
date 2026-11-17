@@ -64,8 +64,29 @@ const mergeTypographyWithDefaults = (
   };
 };
 
-const ensureBlogNavItem = (menus?: NavigationMenuItem[]): NavigationMenuItem[] => {
-  const list = Array.isArray(menus) && menus.length > 0 ? [...menus] : [...DEFAULT_NAVIGATION_MENUS];
+const isRemovedLegacyNavItem = (item: Partial<NavigationMenuItem>): boolean => {
+  const id = (item.id || '').trim().toLowerCase();
+  const path = (item.path || '').trim().toLowerCase();
+  const label = (item.label || '').trim();
+  if (
+    id === 'nav-about' ||
+    id === 'nav-lesson-prep' ||
+    id === 'nav-report-cards' ||
+    path === 'about' ||
+    path === 'dashboard' ||
+    path === 'nursery'
+  ) {
+    return true;
+  }
+  if (/ibyerekeye|gs\s*gitumba/i.test(label)) {
+    return true;
+  }
+  return false;
+};
+
+const normalizeNavigationMenus = (menus?: NavigationMenuItem[]): NavigationMenuItem[] => {
+  const rawList = Array.isArray(menus) && menus.length > 0 ? menus : DEFAULT_NAVIGATION_MENUS;
+  const list = rawList.filter((m) => !isRemovedLegacyNavItem(m));
   const hasBlog = list.some((m) => m.path === 'blog' || m.id === 'nav-blog');
   if (!hasBlog) {
     list.push({
@@ -151,7 +172,7 @@ export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         categoryNav: normalizeCategoryNavSettings(parsed.categoryNav),
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-        navigationMenus: ensureBlogNavItem(parsed.navigationMenus),
+        navigationMenus: normalizeNavigationMenus(parsed.navigationMenus),
         whatsappContact: normalizeWhatsAppSettings(parsed.whatsappContact),
         versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
@@ -206,7 +227,7 @@ const normalizeWebsiteDesignPayload = (
   logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
   categoryNav: normalizeCategoryNavSettings(data.categoryNav),
   homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
-  navigationMenus: ensureBlogNavItem(data.navigationMenus),
+  navigationMenus: normalizeNavigationMenus(data.navigationMenus),
   whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
   versionHistory: data.versionHistory || fallbackHistory,
   updatedAt: data.updatedAt || new Date().toISOString(),
@@ -387,7 +408,9 @@ export const saveWebsiteDesignSettings = async (
     logo: { ...settings.logo },
     categoryNav: normalizeCategoryNavSettings(settings.categoryNav),
     homepageSections: settings.homepageSections ? JSON.parse(JSON.stringify(settings.homepageSections)) : [],
-    navigationMenus: settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : [],
+    navigationMenus: normalizeNavigationMenus(
+      settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : undefined
+    ),
     whatsappContact: normalizeWhatsAppSettings(settings.whatsappContact),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
