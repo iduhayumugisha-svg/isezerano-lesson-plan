@@ -117,39 +117,204 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Validation for public news comments:
-    // Only permitted fields: name, content, postId, status, createdAt.
-    // Commenters' emails and phone numbers are strictly prohibited from public comments
-    // to ensure private personal info is never exposed to public reads.
-    function isValidPublicComment(data) {
-      return data.keys().hasOnly(['name', 'content', 'postId', 'createdAt', 'status']) &&
+    function isValidCommentId(id) {
+      return id is string &&
+             id.size() > 0 &&
+             id.size() <= 128 &&
+             id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Strict schema validation for public news comments & replies (instant publishing).
+    // Email, phone numbers, and ownership secrets are strictly forbidden on public /comments documents
+    // so private personal info is never exposed to public reads.
+    function isValidPublicCommentCreate(data) {
+      return data.keys().hasAll([
+               'postId',
+               'parentId',
+               'replyToName',
+               'name',
+               'content',
+               'status',
+               'createdAt',
+               'updatedAt',
+               'edited'
+             ]) &&
+             data.keys().hasOnly([
+               'postId',
+               'parentId',
+               'replyToName',
+               'name',
+               'content',
+               'status',
+               'createdAt',
+               'updatedAt',
+               'edited'
+             ]) &&
+             data.postId is string &&
+             data.postId.size() > 0 &&
+             data.postId.size() <= 120 &&
+             (data.parentId == null || isValidCommentId(data.parentId)) &&
+             (
+               (data.parentId == null && data.replyToName == null) ||
+               (
+                 data.parentId != null &&
+                 (
+                   data.replyToName == null ||
+                   (data.replyToName is string && data.replyToName.size() >= 1 && data.replyToName.size() <= 80)
+                 )
+               )
+             ) &&
              data.name is string &&
              data.name.size() >= 2 &&
              data.name.size() <= 80 &&
              data.content is string &&
              data.content.size() >= 2 &&
              data.content.size() <= 2000 &&
-             data.postId is string &&
-             data.postId.size() > 0 &&
-             data.postId.size() <= 120 &&
-             (!('status' in data) || data.status == 'pending') &&
-             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 60) || data.createdAt is timestamp);
+             data.status == 'published' &&
+             data.createdAt is string &&
+             data.createdAt.size() >= 10 &&
+             data.createdAt.size() <= 60 &&
+             data.updatedAt is string &&
+             data.updatedAt == data.createdAt &&
+             data.edited == false;
+    }
+
+    function hasValidCommentVerifier(commentId, verifier) {
+      return verifier is string &&
+             verifier.size() >= 37 &&
+             verifier.size() <= 180 &&
+             verifier.matches('^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_\\-]{4,40}$') &&
+             exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(verifier.split(':')[0]));
+    }
+
+    function isValidPublicCommentOwnerEdit(data, existingData, commentId) {
+      return data.keys().hasAll([
+               'postId',
+               'name',
+               'content',
+               'status',
+               'createdAt',
+               'updatedAt',
+               'edited'
+             ]) &&
+             data.keys().hasOnly([
+               'postId',
+               'parentId',
+               'replyToName',
+               'name',
+               'content',
+               'status',
+               'createdAt',
+               'updatedAt',
+               'edited'
+             ]) &&
+             data.diff(existingData).affectedKeys().hasOnly(['content', 'updatedAt', 'edited']) &&
+             data.content is string &&
+             data.content.size() >= 2 &&
+             data.content.size() <= 2000 &&
+             data.edited == true &&
+             data.updatedAt is string &&
+             data.updatedAt.size() >= 10 &&
+             data.updatedAt.size() <= 60 &&
+             data.updatedAt != existingData.updatedAt &&
+             existingData.status in ['published', 'approved'] &&
+             exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
+               getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
+             getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt ==
+               data.updatedAt;
     }
 
     match /comments/{commentId} {
-      // Public visitors can ONLY read comments whose status is 'approved' AND which do not contain private email/phone.
-      // Pending or rejected comments can ONLY be read by Admin.
+      // Public visitors can read live comments & replies (new 'published' or legacy 'approved')
+      // that do not contain private PII or ownership tokens.
+      // Hidden, rejected, or legacy pending comments are strictly Admin-only.
       allow read: if (
-        resource.data.status == 'approved' &&
+        resource.data.status in ['published', 'approved'] &&
         (!('email' in resource.data)) &&
-        (!('phone' in resource.data))
+        (!('phone' in resource.data)) &&
+        (!('ownerToken' in resource.data))
       ) || isAdmin();
 
-      // Legitimate public comment submission (status is pending or omitted, private email/phone disallowed)
-      allow create: if isValidPublicComment(request.resource.data) || isAdmin();
+      // Instant public comment/reply submission paired atomically with private ownership lock
+      allow create: if isAdmin() || (
+        isValidCommentId(commentId) &&
+        isValidPublicCommentCreate(request.resource.data) &&
+        !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership)
+      );
 
-      // Moderation (approving, rejecting, updating status, editing, deleting) is administrator-only
-      allow update, delete: if isAdmin();
+      // Owners (proven via atomic batch against /private/ownership & /tokens) can edit ONLY content/updatedAt/edited;
+      // Admin can moderate (hide/publish/reject) or edit any comment.
+      allow update: if isAdmin() || isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId);
+
+      // Owners (proven via atomic batch against /private/ownership & /tokens) or Admin can delete comments.
+      allow delete: if isAdmin() || (
+        exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
+        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier
+      );
+
+      // Cryptographic ownership tokens (Admin-only read/list; public create ONLY atomically with a new comment)
+      match /tokens/{tokenId} {
+        allow read, update, delete: if isAdmin();
+        allow create: if isAdmin() || (
+          isValidCommentId(tokenId) &&
+          tokenId.size() >= 32 &&
+          tokenId.matches('^[a-fA-F0-9]{32,128}$') &&
+          request.resource.data.keys().hasAll(['postId', 'createdAt']) &&
+          request.resource.data.keys().hasOnly(['postId', 'createdAt']) &&
+          request.resource.data.postId is string &&
+          request.resource.data.postId.size() > 0 &&
+          request.resource.data.postId.size() <= 120 &&
+          request.resource.data.createdAt is string &&
+          request.resource.data.createdAt.size() <= 60 &&
+          !exists(/databases/$(database)/documents/comments/$(commentId)) &&
+          !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+          existsAfter(/databases/$(database)/documents/comments/$(commentId))
+        );
+      }
+
+      // Private ownership metadata + optional visitor email (Admin-only read; synced on create/edit/delete)
+      match /private/{ownershipId} {
+        allow read, delete: if isAdmin();
+        allow create: if isAdmin() || (
+          ownershipId == 'ownership' &&
+          request.resource.data.keys().hasAll(['postId', 'createdAt', 'lastSyncedAt', 'verifier']) &&
+          request.resource.data.keys().hasOnly(['postId', 'createdAt', 'lastSyncedAt', 'verifier', 'email']) &&
+          request.resource.data.postId is string &&
+          request.resource.data.postId.size() > 0 &&
+          request.resource.data.postId.size() <= 120 &&
+          request.resource.data.createdAt is string &&
+          request.resource.data.createdAt.size() <= 60 &&
+          request.resource.data.lastSyncedAt == request.resource.data.createdAt &&
+          request.resource.data.verifier == '' &&
+          (!('email' in request.resource.data) || (
+            request.resource.data.email is string &&
+            request.resource.data.email.size() <= 160
+          )) &&
+          !exists(/databases/$(database)/documents/comments/$(commentId)) &&
+          existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId == request.resource.data.postId
+        );
+        allow update: if isAdmin() || (
+          ownershipId == 'ownership' &&
+          exists(/databases/$(database)/documents/comments/$(commentId)) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifier', 'lastSyncedAt']) &&
+          request.resource.data.verifier != resource.data.verifier &&
+          request.resource.data.lastSyncedAt is string &&
+          request.resource.data.lastSyncedAt.size() >= 10 &&
+          request.resource.data.lastSyncedAt.size() <= 80 &&
+          request.resource.data.lastSyncedAt != resource.data.lastSyncedAt &&
+          hasValidCommentVerifier(commentId, request.resource.data.verifier) &&
+          (
+            (!existsAfter(/databases/$(database)/documents/comments/$(commentId))) ||
+            getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt == request.resource.data.lastSyncedAt
+          )
+        );
+      }
     }
 
     match /settings/{settingId} {
@@ -181,6 +346,76 @@ service cloud.firestore {
 
       // Public readers can register a breaking news push subscription token without logging in
       allow create: if isAdmin() || isValidPublicFcmToken(request.resource.data);
+    }
+
+    // ==============================================================
+    // 9B. Fixed Mini Shop / Product Showcase
+    // Public visitors may read ACTIVE products only (never private/admin fields).
+    // Only verified Google Admin twizerefelix90@gmail.com may read all, create, update, or delete.
+    // ==============================================================
+    function isValidMiniShopProductWrite(data) {
+      return data.keys().hasAll([
+               'id',
+               'title',
+               'description',
+               'imageUrl',
+               'active',
+               'displayOrder',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id',
+               'title',
+               'description',
+               'price',
+               'imageUrl',
+               'imageStorageMode',
+               'whatsappNumber',
+               'phoneNumber',
+               'active',
+               'displayOrder',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.id is string &&
+             data.id.size() > 0 &&
+             data.id.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 2 &&
+             data.title.size() <= 90 &&
+             data.description is string &&
+             data.description.size() >= 2 &&
+             data.description.size() <= 200 &&
+             (!('price' in data) || (data.price is string && data.price.size() <= 40)) &&
+             data.imageUrl is string &&
+             data.imageUrl.size() >= 5 &&
+             data.imageUrl.size() <= 750000 &&
+             (!('imageStorageMode' in data) || data.imageStorageMode in ['firebase_storage', 'firestore_embedded']) &&
+             (!('whatsappNumber' in data) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 30)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 30)) &&
+             (('whatsappNumber' in data && data.whatsappNumber.size() > 0) || ('phoneNumber' in data && data.phoneNumber.size() > 0)) &&
+             data.active is bool &&
+             data.displayOrder is int &&
+             data.displayOrder >= 0 &&
+             data.createdAt is string &&
+             data.createdAt.size() >= 10 &&
+             data.createdAt.size() <= 60 &&
+             data.updatedAt is string &&
+             data.updatedAt.size() >= 10 &&
+             data.updatedAt.size() <= 60;
+    }
+
+    match /mini_shop_products/{productId} {
+      allow get: if isAdmin() || (resource != null && resource.data.active == true);
+      allow list: if isAdmin() || resource.data.active == true;
+      allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);
+      allow delete: if isAdmin();
+
+      // Any future admin-only metadata or private seller notes stay strictly Admin-only
+      match /private/{metaId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     // ==============================================================

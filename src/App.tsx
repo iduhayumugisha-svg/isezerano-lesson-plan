@@ -6,6 +6,7 @@ import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
+import { MiniShopBar } from './components/MiniShopBar';
 
 // Code-split Secondary Public Views & Modals
 const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
@@ -19,7 +20,7 @@ const AdminPortalGateway = lazy(() => import('./views/AdminPortalGateway').then(
 const AdminDashboardView = lazy(() => import('./views/AdminDashboardView').then((m) => ({ default: m.AdminDashboardView })));
 const AnnouncementDetailModal = lazy(() => import('./components/AnnouncementDetailModal').then((m) => ({ default: m.AnnouncementDetailModal })));
 
-import { PushAnnouncement } from './types/platform';
+import { PushAnnouncement, MiniShopProduct } from './types/platform';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
@@ -32,6 +33,7 @@ import {
   mergeCategoriesForDisplay
 } from './services/blogService';
 import { subscribeToApprovedCommentCounts } from './services/commentService';
+import { subscribeToActiveMiniShopProducts } from './services/miniShopService';
 import { scrollMainContentToTop } from './utils/scrollUtils';
 
 export type AppPage = WebsitePage;
@@ -98,8 +100,10 @@ function AppContent() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [focusArticleComments, setFocusArticleComments] = useState<boolean>(false);
   const [selectedNotice, setSelectedNotice] = useState<PushAnnouncement | null>(null);
+  const [activeMiniShopProducts, setActiveMiniShopProducts] = useState<MiniShopProduct[]>([]);
+  const [miniShopHeight, setMiniShopHeight] = useState<number>(0);
 
-  // Live newspaper articles and Firestore categories subscription
+  // Live newspaper articles, Firestore categories, comments, and Mini Shop subscription
   useEffect(() => {
     setIsNewsLoading(true);
     const unsubPosts = subscribeToBlogPosts((posts) => {
@@ -116,10 +120,15 @@ function AppContent() {
       setCommentCounts(counts);
     });
 
+    const unsubMiniShop = subscribeToActiveMiniShopProducts((products) => {
+      setActiveMiniShopProducts(products);
+    });
+
     return () => {
       unsubPosts();
       unsubCategories();
       unsubComments();
+      unsubMiniShop();
     };
   }, []);
 
@@ -276,6 +285,9 @@ function AppContent() {
     }
   };
 
+  const showMiniShop = currentPage !== 'admin' && activeMiniShopProducts.length > 0;
+  const effectiveMiniShopOffset = showMiniShop ? miniShopHeight : 0;
+
   return (
     <div
       className="min-h-screen flex flex-col w-full antialiased overflow-x-clip selection:bg-teal-700 selection:text-white transition-colors"
@@ -284,6 +296,21 @@ function AppContent() {
         color: colors.bodyText
       }}
     >
+      {/* 0. Fixed Mini Shop / Product Showcase (Always pinned above WebsiteHeader on public pages) */}
+      <MiniShopBar
+        products={activeMiniShopProducts}
+        visible={showMiniShop}
+        onHeightChange={setMiniShopHeight}
+      />
+      {effectiveMiniShopOffset > 0 && (
+        <div
+          aria-hidden="true"
+          data-testid="mini-shop-spacer"
+          className="no-print w-full shrink-0"
+          style={{ height: `${effectiveMiniShopOffset}px` }}
+        />
+      )}
+
       {/* 1. Fixed/Sticky Global Newspaper Header */}
       <WebsiteHeader
         currentPage={currentPage}
@@ -292,6 +319,7 @@ function AppContent() {
         newsCategories={newsCategories}
         selectedCategory={selectedNewsCategory}
         onSelectCategory={setSelectedNewsCategory}
+        topOffsetPx={effectiveMiniShopOffset}
       />
 
       {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}

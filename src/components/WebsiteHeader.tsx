@@ -39,6 +39,7 @@ interface WebsiteHeaderProps {
   newsCategories?: BlogCategory[];
   selectedCategory?: string;
   onSelectCategory?: (category: string) => void;
+  topOffsetPx?: number;
 }
 
 export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
@@ -47,7 +48,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   onSelectAnnouncement,
   newsCategories,
   selectedCategory = 'All Categories',
-  onSelectCategory
+  onSelectCategory,
+  topOffsetPx = 0
 }) => {
   const { language, setLanguage } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
@@ -153,6 +155,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     <header
       className="no-print sticky top-0 z-40 border-b shadow-2xs transition-colors backdrop-blur-md"
       style={{
+        top: topOffsetPx > 0 ? `${topOffsetPx}px` : undefined,
         backgroundColor: colors.headerBg,
         borderColor: colors.headerBorder,
         color: colors.headerText

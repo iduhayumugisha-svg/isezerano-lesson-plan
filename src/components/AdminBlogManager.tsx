@@ -44,6 +44,7 @@ import {
 import {
   ArticleComment,
   CommentModerationStatus,
+  isCommentPubliclyVisibleStatus,
   subscribeToAllCommentsForAdmin,
   moderateArticleComment,
   deleteArticleComment
@@ -114,7 +115,7 @@ export const AdminBlogManager: React.FC = () => {
   // Reader Comments Moderation State
   const [allComments, setAllComments] = useState<ArticleComment[]>([]);
   const [commentStatusFilter, setCommentStatusFilter] = useState<
-    'all' | CommentModerationStatus
+    'all' | 'live' | 'hidden' | 'pending'
   >('all');
   const [commentSearchQuery, setCommentSearchQuery] = useState('');
   const [moderatingCommentId, setModeratingCommentId] = useState<string | null>(null);
@@ -556,11 +557,11 @@ export const AdminBlogManager: React.FC = () => {
       if (res.success) {
         showBanner(
           'success',
-          nextStatus === 'approved'
-            ? `Comment by ${comment.name} approved and published.`
-            : nextStatus === 'rejected'
-            ? `Comment by ${comment.name} rejected and hidden.`
-            : `Comment by ${comment.name} moved to pending.`
+          nextStatus === 'published' || nextStatus === 'approved'
+            ? `Comment by ${comment.name} is now visible live.`
+            : nextStatus === 'hidden' || nextStatus === 'rejected'
+            ? `Comment by ${comment.name} hidden from public view.`
+            : `Comment by ${comment.name} status updated.`
         );
       } else {
         showBanner('error', res.error || 'Could not update comment status.');
@@ -570,13 +571,23 @@ export const AdminBlogManager: React.FC = () => {
     }
   };
 
-  const handleConfirmDeleteComment = async () => {
+  const handleConfirmDeleteComment = async (deleteRepliesToo = false) => {
     if (!confirmDeleteComment) return;
     setIsDeletingComment(true);
     try {
-      const res = await deleteArticleComment(confirmDeleteComment.id);
+      const childReplyIds = deleteRepliesToo
+        ? allComments
+            .filter((c) => c.parentId === confirmDeleteComment.id)
+            .map((c) => c.id)
+        : [];
+      const res = await deleteArticleComment(confirmDeleteComment.id, childReplyIds);
       if (res.success) {
-        showBanner('success', `Deleted comment by ${confirmDeleteComment.name}.`);
+        showBanner(
+          'success',
+          deleteRepliesToo && childReplyIds.length > 0
+            ? `Deleted comment by ${confirmDeleteComment.name} and ${childReplyIds.length} replies.`
+            : `Deleted comment by ${confirmDeleteComment.name}.`
+        );
         setConfirmDeleteComment(null);
       } else {
         showBanner('error', res.error || 'Could not delete comment.');
@@ -600,13 +611,23 @@ export const AdminBlogManager: React.FC = () => {
   });
 
   const postTitleMap = new Map(posts.map((p) => [p.id, p.title]));
+  const liveCommentsCount = allComments.filter((c) =>
+    isCommentPubliclyVisibleStatus(c.status)
+  ).length;
+  const hiddenCommentsCount = allComments.filter(
+    (c) => c.status === 'hidden' || c.status === 'rejected'
+  ).length;
   const pendingCommentsCount = allComments.filter((c) => c.status === 'pending').length;
-  const approvedCommentsCount = allComments.filter((c) => c.status === 'approved').length;
-  const rejectedCommentsCount = allComments.filter((c) => c.status === 'rejected').length;
 
   const filteredComments = allComments.filter((comment) => {
     const matchesStatus =
-      commentStatusFilter === 'all' || comment.status === commentStatusFilter;
+      commentStatusFilter === 'all'
+        ? true
+        : commentStatusFilter === 'live'
+        ? isCommentPubliclyVisibleStatus(comment.status)
+        : commentStatusFilter === 'hidden'
+        ? comment.status === 'hidden' || comment.status === 'rejected'
+        : comment.status === 'pending';
     const queryLower = commentSearchQuery.trim().toLowerCase();
     const articleTitle = (postTitleMap.get(comment.postId) || comment.postId).toLowerCase();
     const matchesQuery =
@@ -738,40 +759,40 @@ export const AdminBlogManager: React.FC = () => {
           </div>
 
           {dashboardTab === 'comments' ? (
-            /* ================= READER COMMENTS MODERATION ================= */
+            /* ================= READER COMMENTS POST-PUBLICATION MODERATION ================= */
             <div className="space-y-4">
               {/* Comments KPI Strip */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Total Messages
+                    Total Comments
                   </div>
                   <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
                     {allComments.length}
                   </div>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
-                    Pending Review
-                  </div>
-                  <div className="mt-1.5 text-2xl font-bold text-amber-700 tabular-nums">
-                    {pendingCommentsCount}
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
-                    Approved Live
+                    Published Live
                   </div>
                   <div className="mt-1.5 text-2xl font-bold text-emerald-700 tabular-nums">
-                    {approvedCommentsCount}
+                    {liveCommentsCount}
                   </div>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-700">
-                    Rejected / Hidden
+                    Hidden / Rejected
                   </div>
                   <div className="mt-1.5 text-2xl font-bold text-rose-700 tabular-nums">
-                    {rejectedCommentsCount}
+                    {hiddenCommentsCount}
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
+                    Legacy Pending
+                  </div>
+                  <div className="mt-1.5 text-2xl font-bold text-amber-700 tabular-nums">
+                    {pendingCommentsCount}
                   </div>
                 </div>
               </div>
@@ -784,22 +805,26 @@ export const AdminBlogManager: React.FC = () => {
                     type="text"
                     value={commentSearchQuery}
                     onChange={(e) => setCommentSearchQuery(e.target.value)}
-                    placeholder="Search messages by reader name, text, or article title..."
+                    placeholder="Search comments & replies by reader name, text, or article title..."
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-600"
                   />
                 </div>
                 <select
-                  aria-label="Filter comments by moderation status"
+                  aria-label="Filter comments by visibility status"
                   value={commentStatusFilter}
                   onChange={(e) =>
-                    setCommentStatusFilter(e.target.value as 'all' | CommentModerationStatus)
+                    setCommentStatusFilter(
+                      e.target.value as 'all' | 'live' | 'hidden' | 'pending'
+                    )
                   }
                   className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
                 >
-                  <option value="all">All Messages ({allComments.length})</option>
-                  <option value="pending">Pending ({pendingCommentsCount})</option>
-                  <option value="approved">Approved ({approvedCommentsCount})</option>
-                  <option value="rejected">Rejected ({rejectedCommentsCount})</option>
+                  <option value="all">All Comments ({allComments.length})</option>
+                  <option value="live">Published Live ({liveCommentsCount})</option>
+                  <option value="hidden">Hidden / Rejected ({hiddenCommentsCount})</option>
+                  {pendingCommentsCount > 0 && (
+                    <option value="pending">Legacy Pending ({pendingCommentsCount})</option>
+                  )}
                 </select>
               </div>
 
@@ -812,7 +837,7 @@ export const AdminBlogManager: React.FC = () => {
                   </h3>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
                     {allComments.length === 0
-                      ? 'Reader messages submitted on published articles will appear here for review.'
+                      ? 'Reader comments and replies appear here automatically upon instant publication.'
                       : 'Try clearing your search or status filter.'}
                   </p>
                 </div>
@@ -823,6 +848,7 @@ export const AdminBlogManager: React.FC = () => {
                       postTitleMap.get(comment.postId) || `Article (${comment.postId})`;
                     const dateInfo = formatPublicationDate(comment.createdAt);
                     const isBusy = moderatingCommentId === comment.id;
+                    const isLive = isCommentPubliclyVisibleStatus(comment.status);
 
                     return (
                       <div
@@ -834,15 +860,27 @@ export const AdminBlogManager: React.FC = () => {
                             <div className="flex flex-wrap items-center gap-2 text-xs">
                               <span
                                 className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md font-bold text-[11px] ${
-                                  comment.status === 'approved'
+                                  isLive
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : comment.status === 'rejected'
+                                    : comment.status === 'hidden' || comment.status === 'rejected'
                                     ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                     : 'bg-amber-50 text-amber-800 border border-amber-200'
                                 }`}
                               >
-                                <span className="capitalize">{comment.status}</span>
+                                <span className="capitalize">
+                                  {comment.status === 'approved' ? 'published' : comment.status}
+                                </span>
                               </span>
+                              {comment.parentId && (
+                                <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[11px]">
+                                  Reply{comment.replyToName ? ` to ${comment.replyToName}` : ''}
+                                </span>
+                              )}
+                              {comment.edited && (
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold text-[10px]">
+                                  Edited
+                                </span>
+                              )}
                               <span className="font-bold text-slate-900">{comment.name}</span>
                               {dateInfo && (
                                 <>
@@ -863,26 +901,26 @@ export const AdminBlogManager: React.FC = () => {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                            {comment.status !== 'approved' && (
+                            {!isLive && (
                               <button
                                 type="button"
                                 disabled={isBusy}
-                                onClick={() => handleModerateComment(comment, 'approved')}
+                                onClick={() => handleModerateComment(comment, 'published')}
                                 className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
                               >
                                 <ShieldCheck className="w-3.5 h-3.5" />
-                                <span>Approve</span>
+                                <span>Publish Live</span>
                               </button>
                             )}
-                            {comment.status !== 'rejected' && (
+                            {isLive && (
                               <button
                                 type="button"
                                 disabled={isBusy}
-                                onClick={() => handleModerateComment(comment, 'rejected')}
+                                onClick={() => handleModerateComment(comment, 'hidden')}
                                 className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
-                                <span>Reject</span>
+                                <span>Hide</span>
                               </button>
                             )}
                             <button
@@ -1780,43 +1818,66 @@ export const AdminBlogManager: React.FC = () => {
       )}
 
       {/* DELETE COMMENT CONFIRMATION MODAL */}
-      {confirmDeleteComment && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-start space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
-                <Trash2 className="w-5 h-5" />
+      {confirmDeleteComment && (() => {
+        const childReplies = allComments.filter(
+          (c) => c.parentId === confirmDeleteComment.id
+        );
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Delete Comment?</h3>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Are you sure you want to permanently delete the comment from{' '}
+                    <strong className="text-slate-900">{confirmDeleteComment.name}</strong>?
+                  </p>
+                  {childReplies.length > 0 && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2">
+                      This comment has {childReplies.length}{' '}
+                      {childReplies.length === 1 ? 'reply' : 'replies'}. You can keep the replies or remove the entire discussion thread.
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Delete Comment?</h3>
-                <p className="text-xs text-slate-600 mt-1">
-                  Are you sure you want to permanently delete the message from{' '}
-                  <strong className="text-slate-900">{confirmDeleteComment.name}</strong>?
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteComment(null)}
-                disabled={isDeletingComment}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeleteComment}
-                disabled={isDeletingComment}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
-              >
-                {isDeletingComment ? 'Deleting...' : 'Delete Permanently'}
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteComment(null)}
+                  disabled={isDeletingComment}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmDeleteComment(false)}
+                  disabled={isDeletingComment}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                >
+                  {isDeletingComment ? 'Deleting...' : 'Delete Comment Only'}
+                </button>
+                {childReplies.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmDeleteComment(true)}
+                    disabled={isDeletingComment}
+                    className="px-4 py-2 rounded-xl bg-rose-800 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    {isDeletingComment
+                      ? 'Deleting...'
+                      : `Delete + ${childReplies.length} Replies`}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

@@ -15,6 +15,8 @@ import {
   resolvePublicOrigin
 } from './server/ogMeta.ts';
 import type { OgDataProviders } from './server/ogMeta.ts';
+import { mountCommentsApi } from './server/commentsApi.ts';
+import type { CommentsApiOptions } from './server/commentsApi.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +25,7 @@ export interface ServerAppOptions {
   isProd?: boolean;
   providers?: OgDataProviders;
   transformHtml?: (url: string, html: string) => Promise<string>;
+  commentsApiOptions?: CommentsApiOptions;
 }
 
 /**
@@ -57,6 +60,9 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
       }
     }
   );
+
+  // 1b. Trusted Comment & Discussion API (HttpOnly signed author sessions + Admin JWT)
+  mountCommentsApi(app, options.commentsApiOptions);
 
   // 2. Production API endpoints (in dev, Vite middleware plugin handles these cleanly too)
   if (isProd) {

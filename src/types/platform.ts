@@ -175,3 +175,20 @@ export interface WebsitePageContent {
   lastUpdated: string;
   updatedBy: string;
 }
+
+// ==================== MINI SHOP / PRODUCT SHOWCASE TYPES ====================
+export interface MiniShopProduct {
+  id: string;
+  title: string;
+  description: string;
+  price?: string;
+  imageUrl: string;
+  imageStorageMode?: 'firebase_storage' | 'firestore_embedded';
+  whatsappNumber?: string;
+  phoneNumber?: string;
+  active: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+

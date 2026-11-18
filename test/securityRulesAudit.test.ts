@@ -7,7 +7,9 @@
  * 2. Users collection is Admin-only (no public/teacher registration or profile self-service).
  * 3. Deleted educational collections (lesson_plans, nursery_students, nursery_school_settings,
  *    nursery_assessments, teacher_profiles, school_directory) are absent from firestore.rules and default-denied.
- * 4. Public comments privacy & moderation (`approved` without email/phone public; `pending`/`rejected` Admin-only).
+ * 4. Instant public comments & replies (`published` + legacy `approved` readable publicly without email/phone/ownerToken;
+ *    private optional email & ownership tokens isolated in Admin-only subcollections; owner-only edit/delete
+ *    with immutable name/postId/parentId/createdAt/status; post-publication Admin moderation).
  * 5. Post view counter exact +1 increment only.
  * 6. News collections, static pages, branding & announcements (public read, Admin-only write).
  * 7. Breaking news FCM token subscriptions (public create validated, read/list/update/delete Admin-only).
@@ -68,15 +70,44 @@ class FirestoreRulesEngine {
     return /^twizerefelix90@gmail\.com$/i.test(email);
   }
 
-  private isValidPublicComment(data: any): boolean {
+  private isValidCommentId(id: string): boolean {
+    return typeof id === 'string' && id.length > 0 && id.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(id);
+  }
+
+  private isValidPublicCommentCreate(data: any): boolean {
     if (!data || typeof data !== 'object') return false;
-    const allowed = new Set(['name', 'content', 'postId', 'createdAt', 'status']);
+    const requiredAndAllowed = [
+      'postId',
+      'parentId',
+      'replyToName',
+      'name',
+      'content',
+      'status',
+      'createdAt',
+      'updatedAt',
+      'edited'
+    ];
     const keys = Object.keys(data);
-    if (!keys.every((k) => allowed.has(k))) return false;
+    if (!requiredAndAllowed.every((k) => k in data)) return false;
+    if (!keys.every((k) => requiredAndAllowed.includes(k))) return false;
+    if (typeof data.postId !== 'string' || data.postId.length === 0 || data.postId.length > 120) return false;
+    if (!(data.parentId === null || this.isValidCommentId(data.parentId))) return false;
+    if (data.parentId === null && data.replyToName !== null) return false;
+    if (
+      data.parentId !== null &&
+      !(
+        data.replyToName === null ||
+        (typeof data.replyToName === 'string' && data.replyToName.length >= 1 && data.replyToName.length <= 80)
+      )
+    ) {
+      return false;
+    }
     if (typeof data.name !== 'string' || data.name.length < 2 || data.name.length > 80) return false;
     if (typeof data.content !== 'string' || data.content.length < 2 || data.content.length > 2000) return false;
-    if (typeof data.postId !== 'string' || data.postId.length === 0 || data.postId.length > 120) return false;
-    if ('status' in data && data.status !== 'pending') return false;
+    if (data.status !== 'published') return false;
+    if (typeof data.createdAt !== 'string' || data.createdAt.length < 10 || data.createdAt.length > 60) return false;
+    if (typeof data.updatedAt !== 'string' || data.updatedAt !== data.createdAt) return false;
+    if (data.edited !== false) return false;
     return true;
   }
 
@@ -120,24 +151,153 @@ class FirestoreRulesEngine {
     return updated.views === existing.views + 1;
   }
 
-  // 4. Comments
+  // 4. Instant Comments & Discussion Security
   public canReadComment(auth: AuthContext | null, commentId: string): boolean {
     const existing = this.getDoc(`comments/${commentId}`);
     if (!existing) return false;
     if (this.isAdmin(auth)) return true;
-    return existing.status === 'approved' && !('email' in existing) && !('phone' in existing);
+    return (
+      (existing.status === 'published' || existing.status === 'approved') &&
+      !('email' in existing) &&
+      !('phone' in existing) &&
+      !('ownerToken' in existing)
+    );
   }
 
-  public canCreateComment(auth: AuthContext | null, data: any): boolean {
+  public canReadPrivateCommentSubdoc(auth: AuthContext | null): boolean {
+    return this.isAdmin(auth);
+  }
+
+  public canCreateCommentBatch(
+    auth: AuthContext | null,
+    commentId: string,
+    commentData: any,
+    ownershipData?: any,
+    tokenId?: string
+  ): boolean {
+    if (this.isAdmin(auth)) {
+      this.setDoc(`comments/${commentId}`, commentData);
+      return true;
+    }
+    if (!this.isValidCommentId(commentId)) return false;
+    if (!this.isValidPublicCommentCreate(commentData)) return false;
+    if (this.getDoc(`comments/${commentId}`) || this.getDoc(`comments/${commentId}/private/ownership`)) {
+      return false;
+    }
+    if (!ownershipData || !tokenId || !/^[a-fA-F0-9]{32,128}$/.test(tokenId)) return false;
+    if (ownershipData.postId !== commentData.postId) return false;
+    if (ownershipData.lastSyncedAt !== ownershipData.createdAt || ownershipData.verifier !== '') return false;
+    if ('email' in ownershipData && (typeof ownershipData.email !== 'string' || ownershipData.email.length > 160)) {
+      return false;
+    }
+
+    this.setDoc(`comments/${commentId}`, commentData);
+    this.setDoc(`comments/${commentId}/tokens/${tokenId}`, {
+      postId: commentData.postId,
+      createdAt: commentData.createdAt
+    });
+    this.setDoc(`comments/${commentId}/private/ownership`, ownershipData);
+    return true;
+  }
+
+  public canForgeTokenOnExistingComment(auth: AuthContext | null, commentId: string): boolean {
     if (this.isAdmin(auth)) return true;
-    return this.isValidPublicComment(data);
+    // Rule requires !exists(comments/$(commentId)) so attaching a token to an existing comment fails
+    return !this.getDoc(`comments/${commentId}`);
+  }
+
+  public canEditCommentBatch(
+    auth: AuthContext | null,
+    commentId: string,
+    nextCommentData: any,
+    verifier?: string
+  ): boolean {
+    const existing = this.getDoc(`comments/${commentId}`);
+    if (!existing) return false;
+    if (this.isAdmin(auth)) {
+      this.setDoc(`comments/${commentId}`, nextCommentData);
+      return true;
+    }
+
+    const own = this.getDoc(`comments/${commentId}/private/ownership`);
+    if (!own) return false;
+    if (typeof verifier !== 'string' || !/^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_-]{4,40}$/.test(verifier)) {
+      return false;
+    }
+    if (verifier === own.verifier) return false;
+    const tokenKey = verifier.split(':')[0];
+    if (!this.getDoc(`comments/${commentId}/tokens/${tokenKey}`)) return false;
+
+    const allKeys = new Set([...Object.keys(existing), ...Object.keys(nextCommentData)]);
+    const changedKeys = Array.from(allKeys).filter(
+      (k) => JSON.stringify(existing[k]) !== JSON.stringify(nextCommentData[k])
+    );
+    const allowedDiff = new Set(['content', 'updatedAt', 'edited']);
+    if (!changedKeys.every((k) => allowedDiff.has(k))) return false;
+    if (
+      typeof nextCommentData.content !== 'string' ||
+      nextCommentData.content.length < 2 ||
+      nextCommentData.content.length > 2000
+    ) {
+      return false;
+    }
+    if (nextCommentData.edited !== true) return false;
+    if (
+      typeof nextCommentData.updatedAt !== 'string' ||
+      nextCommentData.updatedAt === existing.updatedAt
+    ) {
+      return false;
+    }
+    if (!(existing.status === 'published' || existing.status === 'approved')) return false;
+
+    this.setDoc(`comments/${commentId}`, nextCommentData);
+    this.setDoc(`comments/${commentId}/private/ownership`, {
+      ...own,
+      verifier,
+      lastSyncedAt: nextCommentData.updatedAt
+    });
+    return true;
+  }
+
+  public canDeleteCommentBatch(
+    auth: AuthContext | null,
+    commentId: string,
+    verifier?: string,
+    deleteMarker?: string
+  ): boolean {
+    const existing = this.getDoc(`comments/${commentId}`);
+    if (!existing) return false;
+    if (this.isAdmin(auth)) {
+      this.documents.delete(`comments/${commentId}`);
+      return true;
+    }
+
+    const own = this.getDoc(`comments/${commentId}/private/ownership`);
+    if (!own) return false;
+    if (typeof verifier !== 'string' || !/^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_-]{4,40}$/.test(verifier)) {
+      return false;
+    }
+    if (verifier === own.verifier) return false;
+    if (typeof deleteMarker !== 'string' || deleteMarker.length < 10 || deleteMarker === own.lastSyncedAt) {
+      return false;
+    }
+    const tokenKey = verifier.split(':')[0];
+    if (!this.getDoc(`comments/${commentId}/tokens/${tokenKey}`)) return false;
+
+    this.setDoc(`comments/${commentId}/private/ownership`, {
+      ...own,
+      verifier,
+      lastSyncedAt: deleteMarker
+    });
+    this.documents.delete(`comments/${commentId}`);
+    return true;
   }
 
   public canModerateComment(auth: AuthContext | null): boolean {
     return this.isAdmin(auth);
   }
 
-  // 5. Public CMS collections (categories, website_pages, appSettings, siteSettings, announcements)
+  // 5. Public CMS collections
   public canReadPublicCms(): boolean {
     return true;
   }
@@ -168,6 +328,81 @@ class FirestoreRulesEngine {
       contentType.startsWith('image/') &&
       sizeBytes < maxBytes
     );
+  }
+
+  // 8. Mini Shop products (public reads active items; Admin-only read-all, write, delete)
+  private isValidMiniShopProductWrite(data: any): boolean {
+    if (!data || typeof data !== 'object') return false;
+    const required = [
+      'id',
+      'title',
+      'description',
+      'imageUrl',
+      'active',
+      'displayOrder',
+      'createdAt',
+      'updatedAt'
+    ];
+    const allowed = [
+      ...required,
+      'price',
+      'imageStorageMode',
+      'whatsappNumber',
+      'phoneNumber'
+    ];
+    const keys = Object.keys(data);
+    if (!required.every((k) => k in data)) return false;
+    if (!keys.every((k) => allowed.includes(k))) return false;
+    if (typeof data.id !== 'string' || data.id.length === 0 || data.id.length > 128) return false;
+    if (typeof data.title !== 'string' || data.title.length < 2 || data.title.length > 90) return false;
+    if (typeof data.description !== 'string' || data.description.length < 2 || data.description.length > 200) return false;
+    if ('price' in data && (typeof data.price !== 'string' || data.price.length > 40)) return false;
+    if (typeof data.imageUrl !== 'string' || data.imageUrl.length < 5 || data.imageUrl.length > 750000) return false;
+    if (
+      'imageStorageMode' in data &&
+      data.imageStorageMode !== 'firebase_storage' &&
+      data.imageStorageMode !== 'firestore_embedded'
+    ) {
+      return false;
+    }
+    if ('whatsappNumber' in data && (typeof data.whatsappNumber !== 'string' || data.whatsappNumber.length > 30)) {
+      return false;
+    }
+    if ('phoneNumber' in data && (typeof data.phoneNumber !== 'string' || data.phoneNumber.length > 30)) {
+      return false;
+    }
+    const hasWa = typeof data.whatsappNumber === 'string' && data.whatsappNumber.length > 0;
+    const hasTel = typeof data.phoneNumber === 'string' && data.phoneNumber.length > 0;
+    if (!hasWa && !hasTel) return false;
+    if (typeof data.active !== 'boolean') return false;
+    if (typeof data.displayOrder !== 'number' || !Number.isInteger(data.displayOrder) || data.displayOrder < 0) {
+      return false;
+    }
+    if (typeof data.createdAt !== 'string' || data.createdAt.length < 10 || data.createdAt.length > 60) return false;
+    if (typeof data.updatedAt !== 'string' || data.updatedAt.length < 10 || data.updatedAt.length > 60) return false;
+    return true;
+  }
+
+  public canReadMiniShopProduct(auth: AuthContext | null, product: Record<string, any> | null): boolean {
+    if (this.isAdmin(auth)) return true;
+    return Boolean(product && product.active === true);
+  }
+
+  public canListMiniShopProducts(auth: AuthContext | null, queryWhereActiveEqualsTrue: boolean): boolean {
+    if (this.isAdmin(auth)) return true;
+    return queryWhereActiveEqualsTrue;
+  }
+
+  public canWriteMiniShopProduct(auth: AuthContext | null, data: any): boolean {
+    return this.isAdmin(auth) && this.isValidMiniShopProductWrite(data);
+  }
+
+  public canDeleteMiniShopProduct(auth: AuthContext | null): boolean {
+    return this.isAdmin(auth);
+  }
+
+  public canAccessMiniShopPrivateSubdoc(auth: AuthContext | null): boolean {
+    return this.isAdmin(auth);
   }
 }
 
@@ -256,6 +491,12 @@ export function runSecurityAuditTests() {
       postId: 'post-1',
       status: 'pending'
     },
+    'comments/comment-hidden': {
+      name: 'Hidden Author',
+      content: 'Hidden post-publication',
+      postId: 'post-1',
+      status: 'hidden'
+    },
     'comments/comment-rejected': {
       name: 'Spam Author',
       content: 'Rejected content',
@@ -296,42 +537,187 @@ export function runSecurityAuditTests() {
     !storageRulesSrc.includes('token.admin == true') && !storageRulesSrc.includes('|| isAuthenticated()')
   );
 
-  // 3. Public Comments Privacy & Moderation
-  console.log('\n--- 3. PUBLIC COMMENTS PRIVACY & MODERATION TESTS ---');
-  assert('Public visitor CAN read approved clean comment', engine.canReadComment(null, 'comment-approved-clean'));
+  // 3. Instant Comments, Replies, Private Optional Email & Author-Only Edit/Delete
+  console.log('\n--- 3. INSTANT COMMENTS, REPLIES, PRIVACY & OWNERSHIP TESTS ---');
+  assert('Public visitor CAN read legacy approved clean comment', engine.canReadComment(null, 'comment-approved-clean'));
   assert('Public visitor CANNOT read approved comment with private email', !engine.canReadComment(null, 'comment-approved-with-email'));
-  assert('Public visitor CANNOT read pending comment', !engine.canReadComment(null, 'comment-pending'));
-  assert('Public visitor CANNOT read rejected comment', !engine.canReadComment(null, 'comment-rejected'));
-  assert('Admin CAN read pending/rejected/private comments', engine.canReadComment(admin, 'comment-pending') && engine.canReadComment(admin, 'comment-rejected'));
+  assert('Public visitor CANNOT read legacy pending comment', !engine.canReadComment(null, 'comment-pending'));
+  assert('Public visitor CANNOT read hidden/rejected comment', !engine.canReadComment(null, 'comment-hidden') && !engine.canReadComment(null, 'comment-rejected'));
+  assert('Admin CAN read hidden/pending/rejected/private comments', engine.canReadComment(admin, 'comment-hidden') && engine.canReadComment(admin, 'comment-pending'));
+
+  const aliceToken = 'a1b2c3d4e5f678901234567890abcdef1234567890abcdef';
+  const aliceTs = '2026-11-18T08:00:00.000Z';
+  const aliceComment = {
+    postId: 'post-1',
+    parentId: null,
+    replyToName: null,
+    name: 'Alice Mukamana',
+    content: 'Thank you for this clear news report.',
+    status: 'published',
+    createdAt: aliceTs,
+    updatedAt: aliceTs,
+    edited: false
+  };
+
   assert(
-    'Public visitor CAN submit valid pending comment',
-    engine.canCreateComment(null, {
-      name: 'Alice Mukamana',
-      content: 'Thank you for this clear news report.',
-      postId: 'post-1',
-      status: 'pending'
-    })
+    'Public visitor CAN publish instant comment + private optional email atomically without exposing email in public doc',
+    engine.canCreateCommentBatch(
+      null,
+      'comment_alice_1',
+      aliceComment,
+      {
+        postId: 'post-1',
+        createdAt: aliceTs,
+        lastSyncedAt: aliceTs,
+        verifier: '',
+        email: 'alice@example.com'
+      },
+      aliceToken
+    )
+  );
+  assert('Public visitor CAN immediately read newly published comment', engine.canReadComment(null, 'comment_alice_1'));
+  assert('Public/non-admin visitor CANNOT read private email or token subcollection', !engine.canReadPrivateCommentSubdoc(null) && !engine.canReadPrivateCommentSubdoc(randomGoogleUser));
+  assert('Admin CAN inspect private subcollections when needed', engine.canReadPrivateCommentSubdoc(admin));
+
+  const bobToken = 'b1c2d3e4f5a678901234567890abcdef1234567890abcdef';
+  const bobTs = '2026-11-18T08:05:00.000Z';
+  assert(
+    'Public visitor CAN publish instant reply referencing parentId and replyToName',
+    engine.canCreateCommentBatch(
+      null,
+      'comment_bob_reply_1',
+      {
+        postId: 'post-1',
+        parentId: 'comment_alice_1',
+        replyToName: 'Alice Mukamana',
+        name: 'Bob Niyonsenga',
+        content: 'I agree with your point!',
+        status: 'published',
+        createdAt: bobTs,
+        updatedAt: bobTs,
+        edited: false
+      },
+      {
+        postId: 'post-1',
+        createdAt: bobTs,
+        lastSyncedAt: bobTs,
+        verifier: ''
+      },
+      bobToken
+    )
+  );
+  assert('Public visitor CAN read instant reply immediately', engine.canReadComment(null, 'comment_bob_reply_1'));
+
+  assert(
+    'Public visitor CANNOT put email directly on public /comments doc',
+    !engine.canCreateCommentBatch(
+      null,
+      'comment_leak',
+      { ...aliceComment, email: 'leak@example.com' },
+      { postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+      aliceToken
+    )
   );
   assert(
-    'Public visitor CANNOT submit comment with email field',
-    !engine.canCreateComment(null, {
-      name: 'Alice',
-      content: 'Contact me',
-      postId: 'post-1',
-      email: 'alice@example.com'
-    })
+    'Public visitor CANNOT create comment without ownership subdoc',
+    !engine.canCreateCommentBatch(null, 'comment_no_own', aliceComment, undefined, undefined)
   );
   assert(
-    'Public visitor CANNOT self-approve comment',
-    !engine.canCreateComment(null, {
-      name: 'Alice',
-      content: 'Approved comment',
-      postId: 'post-1',
-      status: 'approved'
-    })
+    'Public visitor CANNOT attach forged token onto existing legacy comment',
+    !engine.canForgeTokenOnExistingComment(null, 'comment-approved-clean')
   );
-  assert('Public/Google non-admin CANNOT moderate or delete comments', !engine.canModerateComment(randomGoogleUser));
-  assert('Admin CAN moderate or delete comments', engine.canModerateComment(admin));
+
+  // Author edits own comment
+  const aliceEditTs = '2026-11-18T08:10:00.000Z';
+  assert(
+    'Original author WITH secret ownerToken CAN edit own comment content & edited flag',
+    engine.canEditCommentBatch(
+      null,
+      'comment_alice_1',
+      {
+        ...aliceComment,
+        content: 'Updated insight on this clear report.',
+        updatedAt: aliceEditTs,
+        edited: true
+      },
+      `${aliceToken}:n1a2b3`
+    )
+  );
+  assert(
+    'Original author CANNOT mutate immutable name, postId, parentId, or status on edit',
+    !engine.canEditCommentBatch(
+      null,
+      'comment_alice_1',
+      {
+        ...aliceComment,
+        name: 'Impersonated Admin',
+        content: 'Tampered',
+        updatedAt: '2026-11-18T08:11:00.000Z',
+        edited: true
+      },
+      `${aliceToken}:n4c5d6`
+    )
+  );
+  assert(
+    'Another visitor (Bob / attacker with same name "Alice Mukamana") WITHOUT Alice ownerToken CANNOT edit Alice comment',
+    !engine.canEditCommentBatch(
+      null,
+      'comment_alice_1',
+      {
+        ...aliceComment,
+        content: 'Hijacked comment',
+        updatedAt: '2026-11-18T08:12:00.000Z',
+        edited: true
+      },
+      `${bobToken}:n7e8f9`
+    )
+  );
+  assert(
+    'Another visitor CANNOT replay empty/stale verifier after edit',
+    !engine.canEditCommentBatch(
+      null,
+      'comment_alice_1',
+      {
+        ...aliceComment,
+        content: 'Replay exploit',
+        updatedAt: '2026-11-18T08:13:00.000Z',
+        edited: true
+      },
+      `${aliceToken}:n1a2b3`
+    )
+  );
+
+  // Delete authorization
+  assert(
+    'Non-owner CANNOT delete Alice comment',
+    !engine.canDeleteCommentBatch(null, 'comment_alice_1', `${bobToken}:del001`, 'deleted_10000_del001')
+  );
+  assert(
+    'Original author WITH valid ownerToken CAN delete own reply',
+    engine.canDeleteCommentBatch(null, 'comment_bob_reply_1', `${bobToken}:del002`, 'deleted_10001_del002')
+  );
+  assert(
+    'Attacker CANNOT resurrect a deleted comment ID to overwrite ownership',
+    !engine.canCreateCommentBatch(
+      null,
+      'comment_bob_reply_1',
+      aliceComment,
+      { postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+      'c1d2e3f4a5b678901234567890abcdef1234567890abcdef'
+    )
+  );
+  assert('Public/Google non-admin CANNOT hide or moderate comments', !engine.canModerateComment(randomGoogleUser));
+  assert('Admin CAN hide, restore, or delete any comment after publication', engine.canModerateComment(admin));
+
+  assert(
+    'firestore.rules defines /comments/{commentId}/tokens, /private isolation, and hardened verifier delete rules',
+    firestoreRulesSrc.includes('match /tokens/{tokenId}') &&
+      firestoreRulesSrc.includes('match /private/{ownershipId}') &&
+      firestoreRulesSrc.includes("resource.data.status in ['published', 'approved']") &&
+      firestoreRulesSrc.includes("get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=") &&
+      firestoreRulesSrc.includes('exists(/databases/$(database)/documents/comments/$(commentId))') &&
+      firestoreRulesSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)')
+  );
 
   // 4. Post View Counter Increment (+1 only)
   console.log('\n--- 4. POST VIEW-COUNTER & CMS WRITE TESTS ---');
@@ -369,6 +755,72 @@ export function runSecurityAuditTests() {
   assert('Verified Admin CAN upload valid post image (<15MB)', engine.canUploadStorageMedia(admin, 'image/jpeg', 500_000, 15 * 1024 * 1024));
   assert('Random authenticated Google user CANNOT upload to Storage', !engine.canUploadStorageMedia(randomGoogleUser, 'image/jpeg', 500_000, 15 * 1024 * 1024));
   assert('Attacker with spoofed token.admin claim CANNOT upload to Storage', !engine.canUploadStorageMedia(maliciousAdminClaim, 'image/jpeg', 500_000, 15 * 1024 * 1024));
+
+  // 6. Mini Shop Security Rules
+  console.log('\n--- 6. MINI SHOP PRODUCT SHOWCASE SECURITY TESTS ---');
+  const validProductPayload = {
+    id: 'prod_1',
+    title: 'Solar Radio Pro',
+    description: 'Rechargeable FM/AM radio with solar charging.',
+    price: '18,000 RWF',
+    imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
+    imageStorageMode: 'firestore_embedded',
+    whatsappNumber: '+250780000111',
+    phoneNumber: '0780000111',
+    active: true,
+    displayOrder: 0,
+    createdAt: '2026-11-18T08:00:00.000Z',
+    updatedAt: '2026-11-18T08:00:00.000Z'
+  };
+  assert(
+    'Unauthenticated public visitor CAN get & list active Mini Shop products (where active == true)',
+    engine.canReadMiniShopProduct(null, { active: true }) && engine.canListMiniShopProducts(null, true)
+  );
+  assert(
+    'Unauthenticated & non-admin visitor CANNOT read inactive Mini Shop drafts or list unfiltered products',
+    !engine.canReadMiniShopProduct(null, { active: false }) &&
+      !engine.canReadMiniShopProduct(randomGoogleUser, { active: false }) &&
+      !engine.canListMiniShopProducts(null, false)
+  );
+  assert(
+    'Public & non-admin visitor CANNOT read Mini Shop private subcollection',
+    !engine.canAccessMiniShopPrivateSubdoc(null) && !engine.canAccessMiniShopPrivateSubdoc(randomGoogleUser)
+  );
+  assert(
+    'Admin CAN read inactive Mini Shop drafts & list all products',
+    engine.canReadMiniShopProduct(admin, { active: false }) && engine.canListMiniShopProducts(admin, false)
+  );
+  assert(
+    'Public/non-admin/spoofed-claim/unverified users CANNOT create, edit, or delete Mini Shop products',
+    !engine.canWriteMiniShopProduct(null, validProductPayload) &&
+      !engine.canWriteMiniShopProduct(randomGoogleUser, validProductPayload) &&
+      !engine.canWriteMiniShopProduct(maliciousAdminClaim, validProductPayload) &&
+      !engine.canWriteMiniShopProduct(unverifiedAdminEmail, validProductPayload) &&
+      !engine.canDeleteMiniShopProduct(null) &&
+      !engine.canDeleteMiniShopProduct(randomGoogleUser)
+  );
+  assert(
+    'Verified Google Admin twizerefelix90@gmail.com CAN create, update, toggle & delete valid Mini Shop products',
+    engine.canWriteMiniShopProduct(admin, validProductPayload) &&
+      engine.canWriteMiniShopProduct(admin, { ...validProductPayload, active: false }) &&
+      engine.canDeleteMiniShopProduct(admin)
+  );
+  assert(
+    'Mini Shop write rules reject extra admin/private fields (such as updatedBy or sellerEmail) on public docs',
+    !engine.canWriteMiniShopProduct(admin, {
+      ...validProductPayload,
+      updatedBy: 'twizerefelix90@gmail.com'
+    })
+  );
+  assert(
+    'firestore.rules defines hardened mini_shop_products active-only public read and Admin-only validated write/delete',
+    firestoreRulesSrc.includes('match /mini_shop_products/{productId}') &&
+      firestoreRulesSrc.includes('function isValidMiniShopProductWrite(data)') &&
+      firestoreRulesSrc.includes('allow get: if isAdmin() || (resource != null && resource.data.active == true);') &&
+      firestoreRulesSrc.includes('allow list: if isAdmin() || resource.data.active == true;') &&
+      firestoreRulesSrc.includes('allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);') &&
+      firestoreRulesSrc.includes('allow delete: if isAdmin();')
+  );
 
   console.log('===========================================================');
   console.log(`AUDIT TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);

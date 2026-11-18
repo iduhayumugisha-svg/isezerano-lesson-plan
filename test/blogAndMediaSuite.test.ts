@@ -54,10 +54,17 @@ import {
 import {
   sanitizeCommentPlainText,
   validateArticleCommentInput,
+  validateOptionalCommentEmail,
   buildPublicCommentPayload,
   checkCommentRateLimit,
   countApprovedCommentsByPost,
+  countPublishedCommentsByPost,
   sortCommentsNewestFirst,
+  buildCommentThreads,
+  canVisitorEditComment,
+  canVisitorDeleteComment,
+  saveCommentOwnerToken,
+  removeCommentOwnerToken,
   COMMENT_RATE_LIMIT_COOLDOWN_MS
 } from '../src/services/commentService';
 import {
@@ -848,13 +855,19 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(validateArticleCommentInput({ postId: 'p', name: 'Jean Paul', content: 'M'.repeat(2001) }).valid, false);
   assert.equal(validateArticleCommentInput({ postId: 'p', name: 'Reader', content: 'https://a.com https://b.com https://c.com' }).valid, false);
 
+  assert.equal(validateOptionalCommentEmail('').valid, true);
+  assert.equal(validateOptionalCommentEmail('invalid-email').valid, false);
+  assert.equal(validateOptionalCommentEmail('Reader@Example.com').sanitizedEmail, 'reader@example.com');
+
   const validInput = validateArticleCommentInput({
     postId: 'post_abc',
     name: '  Marie Claire  ',
+    email: 'marie@example.com',
     content: 'Thank you for this helpful CBC update!\nVery clear.'
   });
   assert.equal(validInput.valid, true);
   assert.equal(validInput.sanitizedName, 'Marie Claire');
+  assert.equal(validInput.sanitizedEmail, 'marie@example.com');
 
   const payload = buildPublicCommentPayload({
     postId: validInput.sanitizedPostId,
@@ -862,10 +875,30 @@ function testCommentsSharingAndNewspaperRedesign() {
     content: validInput.sanitizedContent,
     createdAt: '2026-11-13T10:30:00.000Z'
   });
-  assert.deepEqual(Object.keys(payload).sort(), ['content', 'createdAt', 'name', 'postId', 'status']);
-  assert.equal(payload.status, 'pending');
+  assert.deepEqual(
+    Object.keys(payload).sort(),
+    ['content', 'createdAt', 'edited', 'name', 'parentId', 'postId', 'replyToName', 'status', 'updatedAt']
+  );
+  assert.equal(payload.status, 'published');
+  assert.equal(payload.parentId, null);
+  assert.equal(payload.replyToName, null);
+  assert.equal(payload.edited, false);
+  assert.equal(payload.updatedAt, '2026-11-13T10:30:00.000Z');
+  assert.equal('email' in payload, false);
 
-  // Rate limiting & counting
+  const replyPayload = buildPublicCommentPayload({
+    postId: 'post_abc',
+    parentId: 'comment_parent_1',
+    replyToName: 'Marie Claire',
+    name: 'Eric Habimana',
+    content: 'Agreed!',
+    createdAt: '2026-11-13T10:35:00.000Z'
+  });
+  assert.equal(replyPayload.status, 'published');
+  assert.equal(replyPayload.parentId, 'comment_parent_1');
+  assert.equal(replyPayload.replyToName, 'Marie Claire');
+
+  // Rate limiting & counting across both new 'published' and legacy 'approved'
   const now = 1_700_000_000_000;
   assert.equal(checkCommentRateLimit([], now).allowed, true);
   assert.equal(checkCommentRateLimit([now - 5_000], now).allowed, false);
@@ -875,21 +908,38 @@ function testCommentsSharingAndNewspaperRedesign() {
     false
   );
 
-  const counts = countApprovedCommentsByPost([
+  const counts = countPublishedCommentsByPost([
+    { postId: 'post_1', status: 'published' },
     { postId: 'post_1', status: 'approved' },
-    { postId: 'post_1', status: 'approved' },
+    { postId: 'post_1', status: 'hidden' },
     { postId: 'post_1', status: 'pending' },
     { postId: 'post_1', status: 'rejected' },
-    { postId: 'post_2', status: 'approved' }
+    { postId: 'post_2', status: 'published' }
   ]);
   assert.equal(counts['post_1'], 2);
   assert.equal(counts['post_2'], 1);
+  assert.equal(countApprovedCommentsByPost([{ postId: 'post_1', status: 'published' }])['post_1'], 1);
 
   const sorted = sortCommentsNewestFirst([
-    { id: 'c1', postId: 'p1', name: 'Older', content: 'First', status: 'approved', createdAt: '2026-11-12T08:00:00.000Z' },
-    { id: 'c2', postId: 'p1', name: 'Newer', content: 'Second', status: 'approved', createdAt: '2026-11-13T09:15:00.000Z' }
+    { id: 'c1', postId: 'p1', parentId: null, replyToName: null, name: 'Older', content: 'First', status: 'approved', createdAt: '2026-11-12T08:00:00.000Z', updatedAt: '2026-11-12T08:00:00.000Z', edited: false },
+    { id: 'c2', postId: 'p1', parentId: null, replyToName: null, name: 'Newer', content: 'Second', status: 'published', createdAt: '2026-11-13T09:15:00.000Z', updatedAt: '2026-11-13T09:15:00.000Z', edited: false }
   ]);
   assert.equal(sorted[0].id, 'c2');
+
+  // Thread grouping: top-level newest-first, replies chronological oldest-first, orphans preserved safely
+  const threaded = buildCommentThreads([
+    { id: 'p_old', postId: 'p1', parentId: null, replyToName: null, name: 'Aline', content: 'Parent old', status: 'approved', createdAt: '2026-11-12T08:00:00.000Z', updatedAt: '2026-11-12T08:00:00.000Z', edited: false },
+    { id: 'p_new', postId: 'p1', parentId: null, replyToName: null, name: 'Bruno', content: 'Parent new', status: 'published', createdAt: '2026-11-13T08:00:00.000Z', updatedAt: '2026-11-13T08:00:00.000Z', edited: false },
+    { id: 'r_2', postId: 'p1', parentId: 'p_old', replyToName: 'Aline', name: 'Claire', content: 'Second reply', status: 'published', createdAt: '2026-11-12T09:30:00.000Z', updatedAt: '2026-11-12T09:30:00.000Z', edited: false },
+    { id: 'r_1', postId: 'p1', parentId: 'p_old', replyToName: 'Aline', name: 'David', content: 'First reply', status: 'published', createdAt: '2026-11-12T08:30:00.000Z', updatedAt: '2026-11-12T08:30:00.000Z', edited: false },
+    { id: 'r_orphan', postId: 'p1', parentId: 'deleted_parent', replyToName: 'Ghost', name: 'Eva', content: 'Orphan reply', status: 'published', createdAt: '2026-11-13T10:00:00.000Z', updatedAt: '2026-11-13T10:00:00.000Z', edited: false }
+  ]);
+  assert.equal(threaded.topLevel.length, 2);
+  assert.equal(threaded.topLevel[0].comment.id, 'p_new');
+  assert.equal(threaded.topLevel[1].comment.id, 'p_old');
+  assert.deepEqual(threaded.topLevel[1].replies.map((r) => r.id), ['r_1', 'r_2']);
+  assert.equal(threaded.orphanThreads.length, 1);
+  assert.equal(threaded.orphanThreads[0].replies[0].id, 'r_orphan');
 
   // Sharing links
   assert.equal(getCanonicalArticleUrl('rwanda-cbc-update', 'https://isezerano.online'), 'https://isezerano.online/blog/rwanda-cbc-update');
@@ -916,6 +966,9 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(commentsCode.includes('formattedDate'), true);
   assert.equal(commentsCode.includes('formattedTime'), true);
   assert.equal(commentsCode.includes('dangerouslySetInnerHTML'), false);
+  assert.equal(commentsCode.includes('Replying to'), true);
+  assert.equal(commentsCode.includes('Save Changes'), true);
+  assert.equal(commentsCode.includes('Confirm Delete'), true);
   assert.equal(shareCode.includes('navigator.share'), true);
   assert.equal(shareCode.includes('WhatsApp'), true);
   assert.equal(shareCode.includes('Facebook'), true);
@@ -923,10 +976,57 @@ function testCommentsSharingAndNewspaperRedesign() {
   assert.equal(shareCode.includes('Copy article link'), true);
   assert.equal(adminCode.includes("setDashboardTab('comments')"), true);
   assert.equal(adminCode.includes('subscribeToAllCommentsForAdmin'), true);
-  assert.equal(adminCode.includes("handleModerateComment(comment, 'approved')"), true);
-  assert.equal(adminCode.includes("handleModerateComment(comment, 'rejected')"), true);
+  assert.equal(adminCode.includes("handleModerateComment(comment, 'published')"), true);
+  assert.equal(adminCode.includes("handleModerateComment(comment, 'hidden')"), true);
   assert.equal(adminCode.includes('handleConfirmDeleteComment'), true);
+  assert.equal(commentsCode.includes('canVisitorEditComment'), true);
+  assert.equal(commentsCode.includes('canVisitorDeleteComment'), true);
+  assert.equal(commentServiceCode.includes("where('status', '==', 'published')"), true);
   assert.equal(commentServiceCode.includes("where('status', '==', 'approved')"), true);
+
+  // Authoritative UI ownership permissions: server boolean overrides localStorage; Admin keeps moderation privilege
+  const serverDeniedComment = {
+    id: 'cmt_server_denied_1',
+    postId: 'p1',
+    parentId: null,
+    replyToName: null,
+    name: 'Visitor A',
+    content: 'Owned by Visitor A',
+    status: 'published' as const,
+    createdAt: '2026-11-18T08:00:00.000Z',
+    updatedAt: '2026-11-18T08:00:00.000Z',
+    edited: false,
+    canEdit: false,
+    canDelete: false
+  };
+  const fakeLocalStorage = (() => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      }
+    };
+  })();
+  const prevLs = (globalThis as any).localStorage;
+  (globalThis as any).localStorage = fakeLocalStorage;
+  try {
+    // Even if attacker writes local token into localStorage, server `canEdit: false` / `canDelete: false` is authoritative
+    saveCommentOwnerToken(serverDeniedComment.id, 'f'.repeat(48), '2026-11-18T08:00:00.000Z');
+    assert.equal(canVisitorEditComment(serverDeniedComment, false), false);
+    assert.equal(canVisitorDeleteComment(serverDeniedComment, false), false);
+    assert.equal(canVisitorEditComment({ ...serverDeniedComment, canEdit: true }, false), true);
+    assert.equal(canVisitorDeleteComment({ ...serverDeniedComment, canDelete: true }, false), true);
+    assert.equal(canVisitorEditComment(serverDeniedComment, true), true);
+    assert.equal(canVisitorDeleteComment(serverDeniedComment, true), true);
+    removeCommentOwnerToken(serverDeniedComment.id);
+  } finally {
+    if (prevLs === undefined) delete (globalThis as any).localStorage;
+    else (globalThis as any).localStorage = prevLs;
+  }
 
   // Newspaper redesign & three-dot menu checks (Admin-only portal, zero educational links)
   const tier2Marker = 'TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR';

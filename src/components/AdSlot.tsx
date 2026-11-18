@@ -13,7 +13,7 @@ interface AdSlotProps {
   className?: string;
 }
 
-const AD_EXECUTION_TIMEOUT_MS = 4000;
+const AD_EXECUTION_TIMEOUT_MS = 12000;
 let adExecutionQueue: Promise<void> = Promise.resolve();
 
 const needsSerializedAdExecution = (code: string): boolean =>
