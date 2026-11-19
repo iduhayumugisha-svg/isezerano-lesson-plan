@@ -41,5 +41,8 @@ jobs:
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@14
 
+      - name: Run existing static security audit
+        run: bun run test:security
+
       - name: Run Firestore emulator security tests
         run: firebase emulators:exec --only firestore --project demo-isezerano-security "bun run test:rules-emulator"
