@@ -9,7 +9,6 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -172,10 +171,12 @@ test('Firestore security rules: comments, private ownership, Mini Shop and admin
 
   // 5. Public comments cannot contain email or any unexpected/private fields.
   await seed('comments/legacy_leak', validComment('legacy_leak', {
-    email: 'leak@example.com'
+    email: 'leak@example.com',
+    publicSafe: false
   }));
   await assertFails(getDoc(doc(visitorDb, 'comments/legacy_leak')));
-  await assertFails(getDocs(commentsQuery));
+  const safeRows = await assertSucceeds(getDocs(commentsQuery));
+  assert.equal(safeRows.docs.some((row) => row.id === 'legacy_leak'), false);
 
   // 6. Only the original owner with a valid token can edit and delete.
   await clear();
@@ -283,5 +284,9 @@ test('Firestore security rules: comments, private ownership, Mini Shop and admin
   // Ensure a path/id mismatch is rejected for administrator product writes.
   await assertFails(setDoc(doc(adminDb, 'mini_shop_products/path-mismatch'), validProduct({
     id: 'different-id'
+  })));
+  await assertFails(setDoc(doc(adminDb, 'mini_shop_products/private-leak'), validProduct({
+    id: 'private-leak',
+    sellerEmail: 'secret@example.com'
   })));
 });
