@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:security": "tsx test/securityRulesAudit.test.ts"
+    "test:security": "tsx test/securityRulesAudit.test.ts",
+    "test:rules-emulator": "tsx --test test/firestoreRules.emulator.test.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
