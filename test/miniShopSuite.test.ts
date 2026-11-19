@@ -175,10 +175,10 @@ function testMiniShopIntegrationAndLayoutArchitecture(): void {
   assert.doesNotMatch(serviceSrc, /updatedBy/);
   assert.doesNotMatch(serviceSrc, /\+250782971258/);
 
-  // Firestore security rules protect writes to verified Admin only and allow public active reads
+  // Firestore security rules protect writes to verified Admin only and allow public active + publicSafe reads
   assert.match(
     rulesSrc,
-    /match \/mini_shop_products\/\{productId\}[\s\S]*allow get:\s*if isAdmin\(\) \|\| \(resource != null && resource\.data\.active == true\);[\s\S]*allow list:\s*if isAdmin\(\) \|\| resource\.data\.active == true;[\s\S]*allow create, update:\s*if isAdmin\(\) && isValidMiniShopProductWrite\(request\.resource\.data\);[\s\S]*allow delete:\s*if isAdmin\(\);/
+    /match \/mini_shop_products\/\{productId\}[\s\S]*allow get:\s*if isAdmin\(\) \|\| \([\s\S]*resource\.data\.active == true[\s\S]*hasOnlyMiniShopPublicFields\(resource\.data\)[\s\S]*\);[\s\S]*allow list:\s*if isAdmin\(\) \|\| \([\s\S]*resource\.data\.active == true &&[\s\S]*resource\.data\.publicSafe == true[\s\S]*\);[\s\S]*allow create, update:\s*if isAdmin\(\) && isValidMiniShopProductWrite\(request\.resource\.data\);[\s\S]*allow delete:\s*if isAdmin\(\);/
   );
 
   // GitHub Actions workflow deploys hosting + firestore:rules to isezerano-news

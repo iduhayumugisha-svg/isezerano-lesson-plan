@@ -877,8 +877,9 @@ function testCommentsSharingAndNewspaperRedesign() {
   });
   assert.deepEqual(
     Object.keys(payload).sort(),
-    ['content', 'createdAt', 'edited', 'name', 'parentId', 'postId', 'replyToName', 'status', 'updatedAt']
+    ['content', 'createdAt', 'edited', 'name', 'parentId', 'postId', 'publicSafe', 'replyToName', 'status', 'updatedAt']
   );
+  assert.equal(payload.publicSafe, true);
   assert.equal(payload.status, 'published');
   assert.equal(payload.parentId, null);
   assert.equal(payload.replyToName, null);

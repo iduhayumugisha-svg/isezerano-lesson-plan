@@ -85,13 +85,21 @@ class FirestoreRulesEngine {
       'status',
       'createdAt',
       'updatedAt',
-      'edited'
+      'edited',
+      'publicSafe'
     ];
     const keys = Object.keys(data);
     if (!requiredAndAllowed.every((k) => k in data)) return false;
     if (!keys.every((k) => requiredAndAllowed.includes(k))) return false;
+    if (data.publicSafe !== true) return false;
     if (typeof data.postId !== 'string' || data.postId.length === 0 || data.postId.length > 120) return false;
     if (!(data.parentId === null || this.isValidCommentId(data.parentId))) return false;
+    if (data.parentId !== null) {
+      const parentDoc = this.getDoc(`comments/${data.parentId}`);
+      if (!parentDoc || parentDoc.postId !== data.postId) return false;
+      if (parentDoc.status !== 'published' && parentDoc.status !== 'approved') return false;
+      if (parentDoc.publicSafe !== true) return false;
+    }
     if (data.parentId === null && data.replyToName !== null) return false;
     if (
       data.parentId !== null &&
@@ -158,10 +166,16 @@ class FirestoreRulesEngine {
     if (this.isAdmin(auth)) return true;
     return (
       (existing.status === 'published' || existing.status === 'approved') &&
+      existing.publicSafe === true &&
       !('email' in existing) &&
       !('phone' in existing) &&
       !('ownerToken' in existing)
     );
+  }
+
+  public canListComments(auth: AuthContext | null, constrainedStatus?: string, constrainedPublicSafe?: boolean): boolean {
+    if (this.isAdmin(auth)) return true;
+    return (constrainedStatus === 'published' || constrainedStatus === 'approved') && constrainedPublicSafe === true;
   }
 
   public canReadPrivateCommentSubdoc(auth: AuthContext | null): boolean {
@@ -330,7 +344,7 @@ class FirestoreRulesEngine {
     );
   }
 
-  // 8. Mini Shop products (public reads active items; Admin-only read-all, write, delete)
+  // 8. Mini Shop products (public reads active + publicSafe items; Admin-only read-all, write, delete)
   private isValidMiniShopProductWrite(data: any): boolean {
     if (!data || typeof data !== 'object') return false;
     const required = [
@@ -341,7 +355,8 @@ class FirestoreRulesEngine {
       'active',
       'displayOrder',
       'createdAt',
-      'updatedAt'
+      'updatedAt',
+      'publicSafe'
     ];
     const allowed = [
       ...required,
@@ -353,6 +368,7 @@ class FirestoreRulesEngine {
     const keys = Object.keys(data);
     if (!required.every((k) => k in data)) return false;
     if (!keys.every((k) => allowed.includes(k))) return false;
+    if (data.publicSafe !== true) return false;
     if (typeof data.id !== 'string' || data.id.length === 0 || data.id.length > 128) return false;
     if (typeof data.title !== 'string' || data.title.length < 2 || data.title.length > 90) return false;
     if (typeof data.description !== 'string' || data.description.length < 2 || data.description.length > 200) return false;
@@ -385,12 +401,12 @@ class FirestoreRulesEngine {
 
   public canReadMiniShopProduct(auth: AuthContext | null, product: Record<string, any> | null): boolean {
     if (this.isAdmin(auth)) return true;
-    return Boolean(product && product.active === true);
+    return Boolean(product && product.active === true && this.isValidMiniShopProductWrite(product));
   }
 
-  public canListMiniShopProducts(auth: AuthContext | null, queryWhereActiveEqualsTrue: boolean): boolean {
+  public canListMiniShopProducts(auth: AuthContext | null, queryWhereActiveAndSafe: boolean): boolean {
     if (this.isAdmin(auth)) return true;
-    return queryWhereActiveEqualsTrue;
+    return queryWhereActiveAndSafe;
   }
 
   public canWriteMiniShopProduct(auth: AuthContext | null, data: any): boolean {
@@ -476,7 +492,8 @@ export function runSecurityAuditTests() {
       name: 'John Doe',
       content: 'Very informative report!',
       postId: 'post-1',
-      status: 'approved'
+      status: 'approved',
+      publicSafe: true
     },
     'comments/comment-approved-with-email': {
       name: 'Jane Smith',
@@ -556,7 +573,8 @@ export function runSecurityAuditTests() {
     status: 'published',
     createdAt: aliceTs,
     updatedAt: aliceTs,
-    edited: false
+    edited: false,
+    publicSafe: true
   };
 
   assert(
@@ -595,7 +613,8 @@ export function runSecurityAuditTests() {
         status: 'published',
         createdAt: bobTs,
         updatedAt: bobTs,
-        edited: false
+        edited: false,
+        publicSafe: true
       },
       {
         postId: 'post-1',
@@ -710,9 +729,22 @@ export function runSecurityAuditTests() {
   assert('Admin CAN hide, restore, or delete any comment after publication', engine.canModerateComment(admin));
 
   assert(
-    'firestore.rules defines /comments/{commentId}/tokens, /private isolation, and hardened verifier delete rules',
+    'Public visitor CAN list comments when querying status == published/approved AND publicSafe == true, and CANNOT run unfiltered or publicSafe-missing list queries',
+    engine.canListComments(null, 'published', true) &&
+      engine.canListComments(null, 'approved', true) &&
+      !engine.canListComments(null, 'published', false) &&
+      !engine.canListComments(null, undefined, true) &&
+      !engine.canListComments(null, 'pending', true) &&
+      !engine.canListComments(null, 'hidden', true) &&
+      engine.canListComments(admin, undefined, undefined)
+  );
+
+  assert(
+    'firestore.rules defines /comments/{commentId}/tokens, /private isolation, publicSafe split get/list comment rules, and hardened verifier delete rules',
     firestoreRulesSrc.includes('match /tokens/{tokenId}') &&
       firestoreRulesSrc.includes('match /private/{ownershipId}') &&
+      firestoreRulesSrc.includes('allow get: if isAdmin() || (') &&
+      firestoreRulesSrc.includes('resource.data.publicSafe == true') &&
       firestoreRulesSrc.includes("resource.data.status in ['published', 'approved']") &&
       firestoreRulesSrc.includes("get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=") &&
       firestoreRulesSrc.includes('exists(/databases/$(database)/documents/comments/$(commentId))') &&
@@ -770,16 +802,18 @@ export function runSecurityAuditTests() {
     active: true,
     displayOrder: 0,
     createdAt: '2026-11-18T08:00:00.000Z',
-    updatedAt: '2026-11-18T08:00:00.000Z'
+    updatedAt: '2026-11-18T08:00:00.000Z',
+    publicSafe: true
   };
   assert(
-    'Unauthenticated public visitor CAN get & list active Mini Shop products (where active == true)',
-    engine.canReadMiniShopProduct(null, { active: true }) && engine.canListMiniShopProducts(null, true)
+    'Unauthenticated public visitor CAN get & list active + publicSafe Mini Shop products',
+    engine.canReadMiniShopProduct(null, validProductPayload) && engine.canListMiniShopProducts(null, true)
   );
   assert(
-    'Unauthenticated & non-admin visitor CANNOT read inactive Mini Shop drafts or list unfiltered products',
-    !engine.canReadMiniShopProduct(null, { active: false }) &&
-      !engine.canReadMiniShopProduct(randomGoogleUser, { active: false }) &&
+    'Unauthenticated & non-admin visitor CANNOT read inactive Mini Shop drafts, un-migrated docs, or list unfiltered products',
+    !engine.canReadMiniShopProduct(null, { ...validProductPayload, active: false }) &&
+      !engine.canReadMiniShopProduct(null, { ...validProductPayload, publicSafe: false }) &&
+      !engine.canReadMiniShopProduct(randomGoogleUser, { ...validProductPayload, active: false }) &&
       !engine.canListMiniShopProducts(null, false)
   );
   assert(
@@ -788,7 +822,7 @@ export function runSecurityAuditTests() {
   );
   assert(
     'Admin CAN read inactive Mini Shop drafts & list all products',
-    engine.canReadMiniShopProduct(admin, { active: false }) && engine.canListMiniShopProducts(admin, false)
+    engine.canReadMiniShopProduct(admin, { ...validProductPayload, active: false }) && engine.canListMiniShopProducts(admin, false)
   );
   assert(
     'Public/non-admin/spoofed-claim/unverified users CANNOT create, edit, or delete Mini Shop products',
@@ -813,13 +847,13 @@ export function runSecurityAuditTests() {
     })
   );
   assert(
-    'firestore.rules defines hardened mini_shop_products active-only public read and Admin-only validated write/delete',
+    'firestore.rules defines hardened mini_shop_products publicSafe active-only read, Admin-only write/delete, and strict appSettings/fcm_config isolation',
     firestoreRulesSrc.includes('match /mini_shop_products/{productId}') &&
       firestoreRulesSrc.includes('function isValidMiniShopProductWrite(data)') &&
-      firestoreRulesSrc.includes('allow get: if isAdmin() || (resource != null && resource.data.active == true);') &&
-      firestoreRulesSrc.includes('allow list: if isAdmin() || resource.data.active == true;') &&
+      firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
       firestoreRulesSrc.includes('allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);') &&
-      firestoreRulesSrc.includes('allow delete: if isAdmin();')
+      firestoreRulesSrc.includes('allow delete: if isAdmin();') &&
+      firestoreRulesSrc.includes('match /appSettings/fcm_config')
   );
 
   console.log('===========================================================');

@@ -424,6 +424,13 @@ async function fetchPublicCommentsFromFirestoreRest(
             op: 'EQUAL',
             value: { stringValue: st }
           }
+        },
+        {
+          fieldFilter: {
+            field: { fieldPath: 'publicSafe' },
+            op: 'EQUAL',
+            value: { booleanValue: true }
+          }
         }
       ];
       if (postId) {
@@ -507,7 +514,8 @@ async function syncCreateToFirestoreRest(
             status: { stringValue: comment.status },
             createdAt: { stringValue: comment.createdAt },
             updatedAt: { stringValue: comment.updatedAt },
-            edited: { booleanValue: false }
+            edited: { booleanValue: false },
+            publicSafe: { booleanValue: true }
           }
         }
       },

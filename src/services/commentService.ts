@@ -29,6 +29,7 @@ export interface ArticleComment {
   createdAt: string;
   updatedAt: string;
   edited: boolean;
+  publicSafe?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -473,7 +474,8 @@ export const buildPublicCommentPayload = (params: {
     status: 'published',
     createdAt: timestamp,
     updatedAt: timestamp,
-    edited: false
+    edited: false,
+    publicSafe: true
   };
 };
 
@@ -1207,13 +1209,15 @@ export const subscribeToPublishedCommentsForPost = (
     const publishedQuery = query(
       collection(db, 'comments'),
       where('postId', '==', postId),
-      where('status', '==', 'published')
+      where('status', '==', 'published'),
+      where('publicSafe', '==', true)
     );
 
     const approvedQuery = query(
       collection(db, 'comments'),
       where('postId', '==', postId),
-      where('status', '==', 'approved')
+      where('status', '==', 'approved'),
+      where('publicSafe', '==', true)
     );
 
     unsubPublished = onSnapshot(
@@ -1317,8 +1321,16 @@ export const subscribeToPublishedCommentCounts = (
     };
   }
 
-  const publishedQuery = query(collection(db, 'comments'), where('status', '==', 'published'));
-  const approvedQuery = query(collection(db, 'comments'), where('status', '==', 'approved'));
+  const publishedQuery = query(
+    collection(db, 'comments'),
+    where('status', '==', 'published'),
+    where('publicSafe', '==', true)
+  );
+  const approvedQuery = query(
+    collection(db, 'comments'),
+    where('status', '==', 'approved'),
+    where('publicSafe', '==', true)
+  );
 
   const unsubPublished = onSnapshot(
     publishedQuery,

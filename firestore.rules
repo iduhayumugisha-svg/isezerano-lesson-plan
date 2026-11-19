@@ -29,79 +29,84 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 1. Admin Users Collection (Strictly Admin-Only — no reader/teacher accounts)
+    // 1. Admin Users Collection (Strictly Admin-Only)
     // ==============================================================
     match /users/{userId} {
       allow read, write: if isAdmin();
     }
 
     // ==============================================================
-    // 2. Application Configurable Settings (Design, Ads, WhatsApp, FCM Config)
+    // 2. Application Settings (Explicit Allowlist — NO public wildcard reads)
     // ==============================================================
+    // Public read (get only, no enumeration) strictly for public rendering settings:
+    // - appSettings/ads (ad slots)
+    // - appSettings/website_design (theme, branding, typography, WhatsApp contact)
+    match /appSettings/ads {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    match /appSettings/website_design {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    // Admin FCM / push configuration is strictly Admin-only
+    match /appSettings/fcm_config {
+      allow read, write: if isAdmin();
+    }
+
+    // Any other or future appSettings documents are strictly Admin-only (fail-closed)
     match /appSettings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // ==============================================================
-    // 3. Homepage Hero Slides
-    // ==============================================================
-    match /homepage_slides/{slideId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ==============================================================
-    // 4. Website Editable Pages (About Us, Contact Us, Privacy Policy, Terms & Conditions)
-    // ==============================================================
-    match /website_pages/{pageId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ==============================================================
-    // 5. Shared Website Statistics and Activity Counters
-    // ==============================================================
-    match /site_stats/{statId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ==============================================================
-    // 6. News Platform: Posts with restricted view-counter increment (+1 only)
-    // ==============================================================
-    match /posts/{postId} {
-      allow read: if true;
-      allow create, delete: if isAdmin();
-      // Public visitors can only increment views by exactly +1 (or initialize to 1).
-      allow update: if isAdmin() || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
-        request.resource.data.views is int && (
-          (!('views' in resource.data) && request.resource.data.views == 1) ||
-          ('views' in resource.data && request.resource.data.views == resource.data.views + 1)
-        )
-      );
-    }
-
-    // ==============================================================
-    // 7. Site Settings & Branding
+    // 3. Site Settings & Branding (Explicit Allowlist — NO public wildcard reads)
     // ==============================================================
     match /siteSettings/branding {
-      allow read: if true;
+      allow get: if true;
+      allow list: if isAdmin();
       allow create, update: if isAdmin() &&
         request.resource.data.logoData is string &&
         request.resource.data.logoData.size() <= 700000;
       allow delete: if isAdmin();
     }
 
+    match /siteSettings/blog_categories {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
     match /siteSettings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ==============================================================
+    // 4. Shared Website Statistics and Activity Counters
+    // ==============================================================
+    match /site_stats/counters {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    match /site_stats/{statId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ==============================================================
+    // 5. Public Website Content Collections (Public Read, Admin Write)
+    // ==============================================================
+    match /website_pages/{pageId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ==============================================================
-    // 8. News Website Collections & Validated Public Comments
-    // ==============================================================
+    match /homepage_slides/{slideId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /categories/{catId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -117,6 +122,39 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Preserved legacy settings collection locked down to Admin-only
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ==============================================================
+    // 6. News Platform: Posts with restricted view-counter increment (+1 only)
+    // ==============================================================
+    match /posts/{postId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      // Public visitors can only increment views by exactly +1 (or initialize to 1).
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
+        request.resource.data.views is int && (
+          ((!('views' in resource.data) || resource.data.views == null) && request.resource.data.views == 1) ||
+          ('views' in resource.data && resource.data.views is number && request.resource.data.views == resource.data.views + 1)
+        )
+      );
+    }
+
+    // ==============================================================
+    // 7. Public Comments & Replies — Public/Private Separation + Author Ownership Protocol
+    //
+    // Security guarantees:
+    // - Public /comments/{commentId} documents with `publicSafe == true` are enforced by rules
+    //   on every create/update (including Admin writes) to contain ONLY the 10 approved public fields
+    //   and NEVER email, phone, ownerToken, ownerSecret, ipAddress, or verifier.
+    // - Public `list` queries MUST filter by `status in ['published', 'approved']` AND `publicSafe == true`,
+    //   preventing un-migrated legacy documents containing inline PII from ever matching public queries.
+    // - Private data (optional email & secret ownership tokens) lives exclusively in Admin-only subcollections
+    //   (/comments/{commentId}/private/ownership and /comments/{commentId}/tokens/{tokenId}).
+    // ==============================================================
     function isValidCommentId(id) {
       return id is string &&
              id.size() > 0 &&
@@ -124,10 +162,16 @@ service cloud.firestore {
              id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Strict schema validation for public news comments & replies (instant publishing).
-    // Email, phone numbers, and ownership secrets are strictly forbidden on public /comments documents
-    // so private personal info is never exposed to public reads.
-    function isValidPublicCommentCreate(data) {
+    function hasNoPrivateCommentFields(data) {
+      return !('email' in data) &&
+             !('phone' in data) &&
+             !('ownerToken' in data) &&
+             !('ownerSecret' in data) &&
+             !('ipAddress' in data) &&
+             !('verifier' in data);
+    }
+
+    function hasOnlyPublicCommentFields(data) {
       return data.keys().hasAll([
                'postId',
                'parentId',
@@ -137,7 +181,8 @@ service cloud.firestore {
                'status',
                'createdAt',
                'updatedAt',
-               'edited'
+               'edited',
+               'publicSafe'
              ]) &&
              data.keys().hasOnly([
                'postId',
@@ -148,12 +193,28 @@ service cloud.firestore {
                'status',
                'createdAt',
                'updatedAt',
-               'edited'
+               'edited',
+               'publicSafe'
              ]) &&
+             data.publicSafe == true &&
+             hasNoPrivateCommentFields(data);
+    }
+
+    function isValidPublicCommentCreate(data) {
+      return hasOnlyPublicCommentFields(data) &&
              data.postId is string &&
              data.postId.size() > 0 &&
              data.postId.size() <= 120 &&
-             (data.parentId == null || isValidCommentId(data.parentId)) &&
+             (
+               data.parentId == null ||
+               (
+                 isValidCommentId(data.parentId) &&
+                 exists(/databases/$(database)/documents/comments/$(data.parentId)) &&
+                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.postId == data.postId &&
+                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.status in ['published', 'approved'] &&
+                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.publicSafe == true
+               )
+             ) &&
              (
                (data.parentId == null && data.replyToName == null) ||
                (
@@ -188,26 +249,7 @@ service cloud.firestore {
     }
 
     function isValidPublicCommentOwnerEdit(data, existingData, commentId) {
-      return data.keys().hasAll([
-               'postId',
-               'name',
-               'content',
-               'status',
-               'createdAt',
-               'updatedAt',
-               'edited'
-             ]) &&
-             data.keys().hasOnly([
-               'postId',
-               'parentId',
-               'replyToName',
-               'name',
-               'content',
-               'status',
-               'createdAt',
-               'updatedAt',
-               'edited'
-             ]) &&
+      return hasOnlyPublicCommentFields(data) &&
              data.diff(existingData).affectedKeys().hasOnly(['content', 'updatedAt', 'edited']) &&
              data.content is string &&
              data.content.size() >= 2 &&
@@ -218,6 +260,7 @@ service cloud.firestore {
              data.updatedAt.size() <= 60 &&
              data.updatedAt != existingData.updatedAt &&
              existingData.status in ['published', 'approved'] &&
+             existingData.publicSafe == true &&
              exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
              get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
                getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
@@ -226,18 +269,26 @@ service cloud.firestore {
     }
 
     match /comments/{commentId} {
-      // Public visitors can read live comments & replies (new 'published' or legacy 'approved')
-      // that do not contain private PII or ownership tokens.
-      // Hidden, rejected, or legacy pending comments are strictly Admin-only.
-      allow read: if (
+      // Public visitors can ONLY read comments/replies that:
+      // 1) are published (or legacy approved),
+      // 2) carry the rule-enforced `publicSafe == true` schema guarantee, and
+      // 3) contain ONLY the 10 approved public fields (verified on get, guaranteed by write rules for publicSafe docs).
+      allow get: if isAdmin() || (
+        resource != null &&
         resource.data.status in ['published', 'approved'] &&
-        (!('email' in resource.data)) &&
-        (!('phone' in resource.data)) &&
-        (!('ownerToken' in resource.data))
-      ) || isAdmin();
+        hasOnlyPublicCommentFields(resource.data)
+      );
+      allow list: if isAdmin() || (
+        resource.data.status in ['published', 'approved'] &&
+        resource.data.publicSafe == true
+      );
 
-      // Instant public comment/reply submission paired atomically with private ownership lock
-      allow create: if isAdmin() || (
+      // Instant public comment/reply submission paired atomically with private ownership lock.
+      // Even Admin writes cannot mark a document `publicSafe: true` if any private field is present.
+      allow create: if (
+        isAdmin() &&
+        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasOnlyPublicCommentFields(request.resource.data))
+      ) || (
         isValidCommentId(commentId) &&
         isValidPublicCommentCreate(request.resource.data) &&
         !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
@@ -246,10 +297,15 @@ service cloud.firestore {
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) can edit ONLY content/updatedAt/edited;
       // Admin can moderate (hide/publish/reject) or edit any comment.
-      allow update: if isAdmin() || isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId);
+      allow update: if (
+        isAdmin() &&
+        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasOnlyPublicCommentFields(request.resource.data))
+      ) || isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId);
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) or Admin can delete comments.
       allow delete: if isAdmin() || (
+        resource != null &&
+        resource.data.status in ['published', 'approved'] &&
         exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
         get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
           getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
@@ -257,7 +313,7 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier
       );
 
-      // Cryptographic ownership tokens (Admin-only read/list; public create ONLY atomically with a new comment)
+      // Cryptographic ownership tokens (Admin-only read/list/update/delete; public create ONLY atomically with a new comment)
       match /tokens/{tokenId} {
         allow read, update, delete: if isAdmin();
         allow create: if isAdmin() || (
@@ -277,7 +333,7 @@ service cloud.firestore {
         );
       }
 
-      // Private ownership metadata + optional visitor email (Admin-only read; synced on create/edit/delete)
+      // Private ownership metadata + optional visitor email (Admin-only read/delete; atomic create/update only)
       match /private/{ownershipId} {
         allow read, delete: if isAdmin();
         allow create: if isAdmin() || (
@@ -317,13 +373,8 @@ service cloud.firestore {
       }
     }
 
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
     // ==============================================================
-    // 9. Breaking News Announcements & Public Push Notification Subscriptions
+    // 8. Breaking News Announcements & Public Push Notification Subscriptions
     // ==============================================================
     match /announcements/{announcementId} {
       allow read: if true;
@@ -349,11 +400,17 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 9B. Fixed Mini Shop / Product Showcase
-    // Public visitors may read ACTIVE products only (never private/admin fields).
-    // Only verified Google Admin twizerefelix90@gmail.com may read all, create, update, or delete.
+    // 9. Fixed Mini Shop / Product Showcase
+    //
+    // Security guarantees:
+    // - Public /mini_shop_products/{productId} documents are rule-enforced on every write
+    //   to contain ONLY explicitly approved public showcase fields (`publicSafe == true` + 12 public fields).
+    // - Private seller metadata / internal notes MUST live in /mini_shop_products/{productId}/private/{metaId}
+    //   which is strictly Admin-only.
+    // - Public visitors can ONLY read products where `active == true` AND `publicSafe == true`.
+    // - Inactive or un-migrated products with extra fields are blocked from public reads.
     // ==============================================================
-    function isValidMiniShopProductWrite(data) {
+    function hasOnlyMiniShopPublicFields(data) {
       return data.keys().hasAll([
                'id',
                'title',
@@ -362,7 +419,8 @@ service cloud.firestore {
                'active',
                'displayOrder',
                'createdAt',
-               'updatedAt'
+               'updatedAt',
+               'publicSafe'
              ]) &&
              data.keys().hasOnly([
                'id',
@@ -376,8 +434,14 @@ service cloud.firestore {
                'active',
                'displayOrder',
                'createdAt',
-               'updatedAt'
+               'updatedAt',
+               'publicSafe'
              ]) &&
+             data.publicSafe == true;
+    }
+
+    function isValidMiniShopProductWrite(data) {
+      return hasOnlyMiniShopPublicFields(data) &&
              data.id is string &&
              data.id.size() > 0 &&
              data.id.size() <= 128 &&
@@ -407,19 +471,26 @@ service cloud.firestore {
     }
 
     match /mini_shop_products/{productId} {
-      allow get: if isAdmin() || (resource != null && resource.data.active == true);
-      allow list: if isAdmin() || resource.data.active == true;
+      allow get: if isAdmin() || (
+        resource != null &&
+        resource.data.active == true &&
+        hasOnlyMiniShopPublicFields(resource.data)
+      );
+      allow list: if isAdmin() || (
+        resource.data.active == true &&
+        resource.data.publicSafe == true
+      );
       allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);
       allow delete: if isAdmin();
 
-      // Any future admin-only metadata or private seller notes stay strictly Admin-only
+      // Admin-only private seller metadata, costs, supplier contacts, or internal notes
       match /private/{metaId} {
         allow read, write: if isAdmin();
       }
     }
 
     // ==============================================================
-    // 10. Default deny for all other or legacy educational collections
+    // 10. Default deny for all other paths and removed legacy collections
     // ==============================================================
     match /{document=**} {
       allow read, write: if false;

@@ -58,7 +58,8 @@ const PUBLIC_MINI_SHOP_FIELDS = [
   'active',
   'displayOrder',
   'createdAt',
-  'updatedAt'
+  'updatedAt',
+  'publicSafe'
 ] as const;
 
 interface AdminVerificationResult {
@@ -429,7 +430,8 @@ const buildCleanProductPayload = (product: MiniShopProduct): Record<string, unkn
     active: Boolean(product.active),
     displayOrder: Math.max(0, Math.trunc(Number(product.displayOrder) || 0)),
     createdAt: product.createdAt,
-    updatedAt: product.updatedAt
+    updatedAt: product.updatedAt,
+    publicSafe: true
   });
 };
 
@@ -466,10 +468,24 @@ const fetchActiveMiniShopProductsViaRest = async (): Promise<RestFetchResult> =>
             },
             from: [{ collectionId: MINI_SHOP_COLLECTION }],
             where: {
-              fieldFilter: {
-                field: { fieldPath: 'active' },
-                op: 'EQUAL',
-                value: { booleanValue: true }
+              compositeFilter: {
+                op: 'AND',
+                filters: [
+                  {
+                    fieldFilter: {
+                      field: { fieldPath: 'active' },
+                      op: 'EQUAL',
+                      value: { booleanValue: true }
+                    }
+                  },
+                  {
+                    fieldFilter: {
+                      field: { fieldPath: 'publicSafe' },
+                      op: 'EQUAL',
+                      value: { booleanValue: true }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -546,7 +562,8 @@ export const subscribeToActiveMiniShopProducts = (
   try {
     const activeQuery = query(
       collection(db, MINI_SHOP_COLLECTION),
-      where('active', '==', true)
+      where('active', '==', true),
+      where('publicSafe', '==', true)
     );
     const unsubscribe = onSnapshot(
       activeQuery,
