@@ -280,7 +280,7 @@ service cloud.firestore {
       );
       allow list: if isAdmin() || (
         resource.data.status in ['published', 'approved'] &&
-        resource.data.publicSafe == true
+        hasOnlyPublicCommentFields(resource.data)
       );
 
       // Instant public comment/reply submission paired atomically with private ownership lock.
@@ -478,9 +478,11 @@ service cloud.firestore {
       );
       allow list: if isAdmin() || (
         resource.data.active == true &&
-        resource.data.publicSafe == true
+        hasOnlyMiniShopPublicFields(resource.data)
       );
-      allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);
+      allow create, update: if isAdmin() &&
+        request.resource.data.id == productId &&
+        isValidMiniShopProductWrite(request.resource.data);
       allow delete: if isAdmin();
 
       // Admin-only private seller metadata, costs, supplier contacts, or internal notes
