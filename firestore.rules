@@ -278,9 +278,12 @@ service cloud.firestore {
         resource.data.status in ['published', 'approved'] &&
         hasOnlyPublicCommentFields(resource.data)
       );
+      // Firestore list queries cannot prove document key allowlists from query filters.
+      // publicSafe is therefore the queryable invariant; every create/update setting it true
+      // is separately required to pass hasOnlyPublicCommentFields().
       allow list: if isAdmin() || (
         resource.data.status in ['published', 'approved'] &&
-        hasOnlyPublicCommentFields(resource.data)
+        resource.data.publicSafe == true
       );
 
       // Instant public comment/reply submission paired atomically with private ownership lock.
@@ -476,9 +479,11 @@ service cloud.firestore {
         resource.data.active == true &&
         hasOnlyMiniShopPublicFields(resource.data)
       );
+      // publicSafe is the queryable invariant for list queries; all writes setting it true
+      // must pass isValidMiniShopProductWrite() and the strict public-field allowlist.
       allow list: if isAdmin() || (
         resource.data.active == true &&
-        hasOnlyMiniShopPublicFields(resource.data)
+        resource.data.publicSafe == true
       );
       allow create, update: if isAdmin() &&
         request.resource.data.id == productId &&
