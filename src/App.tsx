@@ -5,6 +5,7 @@ import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
 import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
+import { AdscodBannerAd } from './components/AdscodBannerAd';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { MiniShopBar } from './components/MiniShopBar';
 
@@ -322,7 +323,10 @@ function AppContent() {
         topOffsetPx={effectiveMiniShopOffset}
       />
 
-      {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}
+      {/* 2. Adscod Banner: directly below the site menu on public pages */}
+      {currentPage !== 'admin' && <AdscodBannerAd />}
+
+      {/* Existing configurable ad slot remains unchanged */}
       <AdSlot placement="below_header" className="no-print" />
 
       {/* 3. Natural Document Flow Main Body */}
@@ -378,7 +382,7 @@ function AppContent() {
             <PrivacyPolicyView onNavigate={handleNavigate} />
           )}
 
-          {/* PUBLIC PAGE 5: Terms and Conditions View */}
+          {/* PUBLIC PAGE 5: Terms & Conditions View */}
           {currentPage === 'terms' && (
             <TermsConditionsView onNavigate={handleNavigate} />
           )}
