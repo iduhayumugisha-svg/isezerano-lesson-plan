@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 const ADS_ENDPOINT = 'https://isezerano-adscod.twizerefelix90.workers.dev?placement=banner';
+const ROTATION_INTERVAL_MS = 15_000;
 
 interface AdscodAd {
   title?: string;
@@ -24,9 +25,17 @@ export const AdscodBannerAd: React.FC = () => {
   const [ad, setAd] = useState<AdscodAd | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let inFlight = false;
+    let disposed = false;
+    let controller: AbortController | null = null;
 
     const loadAd = async () => {
+      // Avoid unnecessary requests while the visitor has this tab in the background.
+      if (disposed || document.visibilityState !== 'visible' || inFlight) return;
+
+      inFlight = true;
+      controller = new AbortController();
+
       try {
         const response = await fetch(ADS_ENDPOINT, {
           method: 'GET',
@@ -45,6 +54,7 @@ export const AdscodBannerAd: React.FC = () => {
         const clickUrl = safeHttpsUrl(candidate?.clickUrl);
         if (!clickUrl) return;
 
+        // Keep the current banner if the provider has no valid replacement.
         setAd({
           title: typeof candidate.title === 'string' ? candidate.title : undefined,
           body: typeof candidate.body === 'string' ? candidate.body : undefined,
@@ -53,14 +63,24 @@ export const AdscodBannerAd: React.FC = () => {
           clickUrl
         });
       } catch (error) {
-        if (!controller.signal.aborted) {
-          console.warn('[Adscod] Could not load banner advertisement:', error);
+        if (!disposed && !controller?.signal.aborted) {
+          console.warn('[Adscod] Could not refresh banner advertisement:', error);
         }
+      } finally {
+        inFlight = false;
       }
     };
 
     void loadAd();
-    return () => controller.abort();
+    const intervalId = window.setInterval(() => {
+      void loadAd();
+    }, ROTATION_INTERVAL_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      controller?.abort();
+    };
   }, []);
 
   if (!ad) return null;
