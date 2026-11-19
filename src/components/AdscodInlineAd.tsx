@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 const ADS_ENDPOINT = 'https://isezerano-adscod.twizerefelix90.workers.dev';
+const AD_REFRESH_INTERVAL_MS = 15_000;
 
 interface AdscodAd {
   title?: string;
@@ -25,8 +26,12 @@ export const AdscodInlineAd: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController();
+    let requestInProgress = false;
 
     const loadAd = async () => {
+      if (requestInProgress || controller.signal.aborted) return;
+      requestInProgress = true;
+
       try {
         const response = await fetch(ADS_ENDPOINT, {
           method: 'GET',
@@ -56,11 +61,20 @@ export const AdscodInlineAd: React.FC = () => {
         if (!controller.signal.aborted) {
           console.warn('[Adscod] Could not load inline advertisement:', error);
         }
+      } finally {
+        requestInProgress = false;
       }
     };
 
     void loadAd();
-    return () => controller.abort();
+    const refreshTimer = window.setInterval(() => {
+      void loadAd();
+    }, AD_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      controller.abort();
+    };
   }, []);
 
   if (!ad) return null;
