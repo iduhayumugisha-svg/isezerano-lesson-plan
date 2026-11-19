@@ -1,0 +1,79 @@
+name: Backup and Dry-Run Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firestore-backup-dryrun
+  cancel-in-progress: false
+
+jobs:
+  backup-and-audit:
+    name: Read-only Firestore backup and dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.FIRESTORE_BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON}" ]; then
+            echo "::error::Missing repository secret FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS."
+            exit 1
+          fi
+          if [ -z "${BACKUP_ENCRYPTION_KEY}" ] || [ "${#BACKUP_ENCRYPTION_KEY}" -lt 32 ]; then
+            echo "::error::Add FIRESTORE_BACKUP_ENCRYPTION_KEY (at least 32 characters) before running this workflow."
+            exit 1
+          fi
+
+      - name: Create read-only backup and dry-run report
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          FIREBASE_PROJECT_ID: isezerano-news
+        run: |
+          set -euo pipefail
+          umask 077
+          node scripts/firestoreBackupAndDryRun.mjs
+
+      - name: Encrypt backup for safe artifact storage
+        shell: bash
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.FIRESTORE_BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p artifacts/secure-export
+          tar -czf artifacts/secure-export/firestore-backup.tar.gz -C artifacts/firestore-backup .
+          openssl enc -aes-256-cbc -pbkdf2 -salt -iter 200000 \
+            -in artifacts/secure-export/firestore-backup.tar.gz \
+            -out artifacts/secure-export/firestore-backup.tar.gz.enc \
+            -pass env:BACKUP_ENCRYPTION_KEY
+          cp artifacts/firestore-backup/dry-run-migration-report.md artifacts/secure-export/
+          rm -f artifacts/secure-export/firestore-backup.tar.gz
+          rm -rf artifacts/firestore-backup
+          echo "Encrypted backup prepared. Plaintext backup files were removed from the runner workspace."
+
+      - name: Upload encrypted backup and dry-run report
+        uses: actions/upload-artifact@v4
+        with:
+          name: isezerano-firestore-backup-and-dryrun
+          path: artifacts/secure-export/*
+          if-no-files-found: error
+          retention-days: 7
