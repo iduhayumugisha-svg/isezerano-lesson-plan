@@ -851,7 +851,8 @@ export function runSecurityAuditTests() {
     firestoreRulesSrc.includes('match /mini_shop_products/{productId}') &&
       firestoreRulesSrc.includes('function isValidMiniShopProductWrite(data)') &&
       firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
-      firestoreRulesSrc.includes('allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);') &&
+      firestoreRulesSrc.includes('request.resource.data.id == productId') &&
+      firestoreRulesSrc.includes('isValidMiniShopProductWrite(request.resource.data);') &&
       firestoreRulesSrc.includes('allow delete: if isAdmin();') &&
       firestoreRulesSrc.includes('match /appSettings/fcm_config')
   );

@@ -1,0 +1,135 @@
+name: Four-Comment Migration (Manual and Protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run only, or apply the four approved missing-field additions"
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - apply
+        default: dry-run
+      confirmation:
+        description: "For apply only, type exactly APPLY_4_COMMENTS"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: four-comment-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Backup, validate, and optionally migrate exactly four comments
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate apply confirmation
+        if: inputs.mode == 'apply'
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "APPLY_4_COMMENTS" ]; then
+            echo "::error::Apply blocked. The confirmation must be exactly APPLY_4_COMMENTS."
+            exit 1
+          fi
+
+      - name: Validate backup and Firebase secrets
+        if: inputs.mode == 'apply'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.FIRESTORE_BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
+            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS."
+            exit 1
+          }
+          test -n "$BACKUP_ENCRYPTION_KEY" && [ "${#BACKUP_ENCRYPTION_KEY}" -ge 32 ] || {
+            echo "::error::Missing or too-short FIRESTORE_BACKUP_ENCRYPTION_KEY."
+            exit 1
+          }
+
+      - name: Create fresh read-only Firestore backup before any write
+        if: inputs.mode == 'apply'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          FIREBASE_PROJECT_ID: isezerano-news
+        run: |
+          set -euo pipefail
+          umask 077
+          node scripts/firestoreBackupAndDryRun.mjs
+
+      - name: Encrypt backup and remove plaintext copy
+        if: inputs.mode == 'apply'
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.FIRESTORE_BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p artifacts/secure-export
+          tar -czf artifacts/secure-export/firestore-backup.tar.gz -C artifacts/firestore-backup .
+          openssl enc -aes-256-cbc -pbkdf2 -salt -iter 200000 \
+            -in artifacts/secure-export/firestore-backup.tar.gz \
+            -out artifacts/secure-export/firestore-backup.tar.gz.enc \
+            -pass env:BACKUP_ENCRYPTION_KEY
+          cp artifacts/firestore-backup/dry-run-migration-report.md artifacts/secure-export/
+          rm -f artifacts/secure-export/firestore-backup.tar.gz
+          rm -rf artifacts/firestore-backup
+          echo "Fresh encrypted backup prepared; plaintext backup removed."
+
+      - name: Upload fresh encrypted backup BEFORE migration
+        if: inputs.mode == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: isezerano-firestore-pre-migration-backup
+          path: artifacts/secure-export/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Run read-only preflight
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          FIREBASE_PROJECT_ID: isezerano-news
+          REPORT_PATH: artifacts/comment-migration-preflight.md
+        run: node scripts/prepareCommentMigrationDryRun.mjs
+
+      - name: Apply atomic four-comment migration
+        if: inputs.mode == 'apply'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+          FIREBASE_PROJECT_ID: isezerano-news
+          MIGRATION_CONFIRMATION: ${{ inputs.confirmation }}
+          REPORT_PATH: artifacts/comments-migration-result.md
+        run: node scripts/applyFourCommentMigration.mjs
+
+      - name: Record dry-run mode
+        if: inputs.mode == 'dry-run'
+        run: |
+          mkdir -p artifacts
+          cp artifacts/comment-migration-preflight.md artifacts/comments-migration-result.md
+
+      - name: Upload migration report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isezerano-comments-migration-result
+          path: artifacts/comments-migration-result.md
+          if-no-files-found: warn
+          retention-days: 7

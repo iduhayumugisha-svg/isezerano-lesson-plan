@@ -1,0 +1,70 @@
+name: Deploy Firestore Rules (Manual Approval)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type exactly DEPLOY_FIRESTORE_RULES after migration and emulator tests pass"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firestore-rules-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Re-test rules, then deploy rules only
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Validate explicit deployment confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "DEPLOY_FIRESTORE_RULES" ]; then
+            echo "::error::Deployment blocked. Type exactly DEPLOY_FIRESTORE_RULES."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@14
+
+      - name: Run Firestore emulator security tests before production deployment
+        run: firebase emulators:exec --only firestore --project demo-isezerano-security "bun run test:rules-emulator"
+
+      - name: Deploy ONLY Firestore Rules
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS }}
+        run: |
+          set -euo pipefail
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
+            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT_ISEZERANO_NEWS."
+            exit 1
+          }
+          umask 077
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
+          trap 'rm -f "$RUNNER_TEMP/firebase-sa.json"' EXIT
+          firebase deploy --only firestore:rules --project isezerano-news --non-interactive
