@@ -118,6 +118,31 @@ test('Firestore security rules: comments, private ownership, Mini Shop and admin
   await assertFails(getDoc(ownershipRef));
   await assertFails(getDoc(tokenRef));
 
+  // Public and Admin client writes cannot mark a document publicSafe while embedding private data.
+  const leakId = 'comment_private_leak_attempt';
+  const leakBatch = writeBatch(visitorDb);
+  leakBatch.set(doc(visitorDb, 'comments', leakId), validComment(leakId, {
+    email: 'private@example.com'
+  }));
+  leakBatch.set(doc(visitorDb, 'comments', leakId, 'tokens', 'e1b2c3d4e5f678901234567890abcdef1234567890abcdef'), {
+    postId: 'post-1',
+    createdAt: NOW
+  });
+  leakBatch.set(doc(visitorDb, 'comments', leakId, 'private', 'ownership'), {
+    postId: 'post-1',
+    createdAt: NOW,
+    lastSyncedAt: NOW,
+    verifier: ''
+  });
+  await assertFails(leakBatch.commit());
+  await assertFails(setDoc(doc(adminDb, 'comments/admin_private_leak'), validComment('admin_private_leak', {
+    email: 'private@example.com'
+  })));
+  await assertFails(setDoc(
+    doc(visitorDb, 'comments', commentId, 'tokens', 'f1b2c3d4e5f678901234567890abcdef1234567890abcdef'),
+    { postId: 'post-1', createdAt: NOW }
+  ));
+
   // 3. Replies must point to a published/approved safe parent in the same article.
   const replyRef = doc(visitorDb, 'comments/reply_public_1');
   const replyToken = 'b1b2c3d4e5f678901234567890abcdef1234567890abcdef';
