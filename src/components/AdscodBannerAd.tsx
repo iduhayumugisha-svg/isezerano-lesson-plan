@@ -1,40 +1,45 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
-const PUBLISHER_SDK_URL = 'https://api.adscod.com/sdk/v1/publisher.js';
-const PUBLISHER_KEY = import.meta.env.VITE_ADSCOD_PUBLISHER_KEY;
+const ADS_WORKER_URL = 'https://isezerano-adscod.twizerefelix90.workers.dev';
+
+interface AdscodAd {
+  title?: string;
+  body?: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  clickUrl?: string;
+}
+
+interface AdscodResponse {
+  ads?: AdscodAd[];
+}
 
 export const AdscodBannerAd: React.FC = () => {
-  const slotRef = useRef<HTMLDivElement>(null);
+  const [ad, setAd] = useState<AdscodAd | null>(null);
 
   useEffect(() => {
-    const slot = slotRef.current;
-    if (!slot) return;
-    if (!PUBLISHER_KEY) {
-      console.warn('[Adscod] Publisher SDK key is not configured.');
-      return;
-    }
+    const controller = new AbortController();
 
-    const targetId = 'adscod-banner-slot';
-    slot.id = targetId;
+    fetch(`${ADS_WORKER_URL}/?placement=banner`, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' }
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Ad request failed: ${response.status}`);
+        return response.json() as Promise<AdscodResponse>;
+      })
+      .then((data) => setAd(data.ads?.[0] ?? null))
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.warn('[Adscod] Banner ad could not be loaded.', error);
+        }
+      });
 
-    const script = document.createElement('script');
-    script.src = PUBLISHER_SDK_URL;
-    script.async = true;
-    script.dataset.key = PUBLISHER_KEY;
-    script.dataset.placement = 'banner';
-    script.dataset.target = `#${targetId}`;
-    script.dataset.category = 'news';
-    script.dataset.limit = '1';
-    script.dataset.adscodManaged = 'true';
-    script.onerror = () => console.error('[Adscod] Publisher SDK failed to load.');
-
-    slot.appendChild(script);
-
-    return () => {
-      script.remove();
-      slot.replaceChildren();
-    };
+    return () => controller.abort();
   }, []);
+
+  if (!ad?.clickUrl) return null;
 
   return (
     <aside
@@ -43,15 +48,26 @@ export const AdscodBannerAd: React.FC = () => {
       data-ad-provider="adscod"
       data-ad-placement="banner"
     >
-      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl px-0 py-1.5 min-[360px]:p-2 sm:px-3 sm:py-2.5 shadow-2xs overflow-hidden relative">
-        <div className="flex items-center justify-between px-2.5 min-[360px]:px-0 pb-1.5 mb-1.5 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl p-2 sm:p-3 shadow-2xs overflow-hidden">
+        <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-500">
           <span>Advertisement</span>
-          <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">AD</span>
+          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px]">AD</span>
         </div>
-        <div
-          ref={slotRef}
-          className="ad-slot-wrapper block w-full min-w-0 min-h-[50px] text-center"
-        />
+        <a
+          href={ad.clickUrl}
+          target="_blank"
+          rel="sponsored noopener noreferrer"
+          className="flex flex-col sm:flex-row items-center gap-3 text-left"
+        >
+          {ad.imageUrl && (
+            <img src={ad.imageUrl} alt={ad.title || 'Sponsored advertisement'} className="w-full sm:w-40 max-h-28 object-contain rounded-lg" loading="lazy" />
+          )}
+          <span className="min-w-0 flex-1">
+            {ad.title && <strong className="block text-sm font-bold text-slate-900">{ad.title}</strong>}
+            {ad.body && <span className="mt-1 block text-xs sm:text-sm text-slate-600">{ad.body}</span>}
+          </span>
+          {ad.ctaLabel && <span className="shrink-0 rounded-lg bg-teal-700 px-4 py-2 text-xs font-bold text-white">{ad.ctaLabel}</span>}
+        </a>
       </div>
     </aside>
   );
