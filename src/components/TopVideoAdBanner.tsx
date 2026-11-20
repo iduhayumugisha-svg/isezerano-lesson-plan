@@ -91,11 +91,6 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
             <span className="text-[9px] font-bold text-amber-300 uppercase tracking-wide shrink-0">
               {videoAd.label || 'Sponsored Video'}
             </span>
-            {false && videoAd.title && (
-              <span className="text-xs font-semibold text-slate-200 truncate">
-                · {videoAd.title}
-              </span>
-            )}
           </div>
 
           <button
