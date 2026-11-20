@@ -27,6 +27,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build website
+        env:
+          VITE_ADSCOD_PUBLISHER_KEY: ${{ secrets.ADSCOD_PUBLISHER_API_KEY }}
         run: bun run build
 
       - name: Install Firebase CLI
