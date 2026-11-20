@@ -79,7 +79,7 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
     <section
       data-testid="top-video-ad-banner"
       aria-label={videoAd.label || 'Sponsored Video Advertisement'}
-      className="no-print w-full bg-slate-950 border-b border-slate-800 text-white"
+      className="no-print w-full md:w-1/2 mx-auto bg-slate-950 border border-slate-800 rounded-b-2xl text-white"
     >
       <div className="max-w-3xl mx-auto px-3 sm:px-6 py-1.5 space-y-1.5">
         <div className="flex items-center justify-between gap-2 text-xs">
