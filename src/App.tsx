@@ -316,19 +316,26 @@ function AppContent() {
         />
       )}
 
-      {/* 0B. Site-Wide Vimeo Video Advertisement (Displayed above WebsiteHeader on public pages when enabled) */}
-      <TopVideoAdBanner currentPage={currentPage} />
+      {/* 0B & 1. Unified Sticky Top Area: Site-Wide Video Ad Banner + Global Newspaper Header */}
+      <div
+        data-testid="top-header-sticky-group"
+        className="sticky top-0 z-40 w-full"
+        style={{
+          top: effectiveMiniShopOffset > 0 ? `${effectiveMiniShopOffset}px` : undefined
+        }}
+      >
+        <TopVideoAdBanner currentPage={currentPage} />
 
-      {/* 1. Fixed/Sticky Global Newspaper Header */}
-      <WebsiteHeader
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        onSelectAnnouncement={(notice) => setSelectedNotice(notice)}
-        newsCategories={newsCategories}
-        selectedCategory={selectedNewsCategory}
-        onSelectCategory={setSelectedNewsCategory}
-        topOffsetPx={effectiveMiniShopOffset}
-      />
+        <WebsiteHeader
+          currentPage={currentPage}
+          onNavigate={handleNavigate}
+          onSelectAnnouncement={(notice) => setSelectedNotice(notice)}
+          newsCategories={newsCategories}
+          selectedCategory={selectedNewsCategory}
+          onSelectCategory={setSelectedNewsCategory}
+          topOffsetPx={effectiveMiniShopOffset}
+        />
+      </div>
 
       {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}
       <AdSlot placement="below_header" className="no-print" />

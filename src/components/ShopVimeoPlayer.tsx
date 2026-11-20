@@ -227,10 +227,16 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
   return (
     <div
       data-testid="shop-vimeo-player"
-      className={`w-full ${compact ? "rounded-xl" : "rounded-2xl"} overflow-hidden bg-slate-950 border border-slate-800 shadow-lg ${className}`}
+      className={`w-full overflow-hidden bg-slate-950 border border-slate-800 shadow-lg ${
+        compact ? 'rounded-xl' : 'rounded-2xl'
+      } ${className}`}
     >
       {/* Reserved 16:9 container prevents layout shift (CLS = 0) */}
-      <div className={`relative w-full aspect-video ${compact ? "" : "min-h-[180px]"} bg-slate-950 overflow-hidden`}>
+      <div
+        className={`relative w-full aspect-video bg-slate-950 overflow-hidden ${
+          compact ? '' : 'min-h-[180px]'
+        }`}
+      >
         <div
           ref={containerRef}
           data-testid="shop-vimeo-mount"
@@ -304,25 +310,31 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
       </div>
 
       {/* Interactive Player Controls Bar */}
-      <div className={`${compact ? "px-1.5 py-1.5 flex-col items-stretch gap-1" : "px-3.5 py-2.5 flex-row items-center justify-between gap-2.5"} bg-slate-900 border-t border-slate-800 text-slate-100 flex flex-wrap`}>
-        <div className={`flex flex-wrap items-center ${compact ? "justify-center gap-1" : "gap-2"}`}>
+      <div
+        className={`bg-slate-900 border-t border-slate-800 text-slate-100 flex flex-wrap items-center justify-between ${
+          compact ? 'px-2 py-1 gap-1.5' : 'px-3.5 py-2.5 gap-2.5'
+        }`}
+      >
+        <div className={`flex flex-wrap items-center ${compact ? 'gap-1' : 'gap-2'}`}>
           <button
             type="button"
             onClick={handleTogglePlay}
             disabled={!isReady || Boolean(playerError)}
             data-testid="shop-vimeo-play-pause"
             aria-label={isPlaying ? 'Pause video' : 'Play video'}
-            className={`inline-flex items-center gap-1 ${compact ? "px-2 py-1" : "px-3 py-1.5"} rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white text-[11px] font-extrabold cursor-pointer transition-colors`}
+            className={`inline-flex items-center rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-45 text-white font-extrabold cursor-pointer transition-colors ${
+              compact ? 'gap-1 px-2 py-1 text-[10px]' : 'gap-1.5 px-3 py-1.5 text-xs'
+            }`}
           >
             {isPlaying ? (
               <>
-                <Pause className="w-3.5 h-3.5" aria-hidden="true" />
-                {!compact && <span>Pause</span>}
+                <Pause className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} aria-hidden="true" />
+                <span>Pause</span>
               </>
             ) : (
               <>
-                <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-                {!compact && <span>Play</span>}
+                <Play className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} fill-current`} aria-hidden="true" />
+                <span>Play</span>
               </>
             )}
           </button>
@@ -333,7 +345,9 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
             disabled={!isReady || Boolean(playerError)}
             data-testid="shop-vimeo-mute-toggle"
             aria-label={isMuted ? 'Turn sound on' : 'Mute sound'}
-            className={`inline-flex items-center gap-1 ${compact ? "px-2 py-1" : "px-3 py-1.5"} rounded-lg text-[11px] font-bold border cursor-pointer transition-colors disabled:opacity-45 ${
+            className={`inline-flex items-center rounded-lg font-bold border cursor-pointer transition-colors disabled:opacity-45 ${
+              compact ? 'gap-1 px-2 py-1 text-[10px]' : 'gap-1.5 px-3 py-1.5 text-xs'
+            } ${
               isMuted
                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                 : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-300'
@@ -341,37 +355,39 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
           >
             {isMuted ? (
               <>
-                <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />
-                {!compact && <span>Sound Off</span>}
+                <VolumeX className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} aria-hidden="true" />
+                <span>Sound Off</span>
               </>
             ) : (
               <>
-                <Volume2 className="w-3.5 h-3.5" aria-hidden="true" />
-                {!compact && <span>Sound On</span>}
+                <Volume2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} aria-hidden="true" />
+                <span>Sound On</span>
               </>
             )}
           </button>
 
-          {!compact && <button
+          <button
             type="button"
             onClick={handleReplay}
             disabled={!isReady || Boolean(playerError)}
             data-testid="shop-vimeo-replay"
             aria-label="Replay video from beginning"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-45 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer transition-colors"
+            className={`inline-flex items-center rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-45 text-slate-200 border border-slate-700 font-bold cursor-pointer transition-colors ${
+              compact ? 'gap-1 px-2 py-1 text-[10px]' : 'gap-1.5 px-3 py-1.5 text-xs'
+            }`}
           >
-            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+            <RotateCcw className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} aria-hidden="true" />
             <span>{hasEnded ? 'Watch Again' : 'Replay'}</span>
-          </button>}
+          </button>
         </div>
 
         {/* Playback Speed Controls (0.5x, 1x, 1.5x, 2x) */}
         <div
-          className={`flex items-center justify-center gap-0.5 bg-slate-950 border border-slate-800 rounded-lg p-0.5 ${compact ? "w-full" : ""}`}
+          className="flex items-center gap-0.5 bg-slate-950 border border-slate-800 rounded-lg p-0.5"
           role="group"
           aria-label="Playback speed"
         >
-          <span className={`${compact ? "px-1.5 text-[10px]" : "px-2 text-[11px]"} font-bold text-slate-400`}>Speed</span>
+          {!compact && <span className="px-2 text-[11px] font-bold text-slate-400">Speed</span>}
           {PLAYBACK_RATES.map((rate) => {
             const active = Math.abs(playbackRate - rate) < 0.05;
             return (
@@ -381,7 +397,9 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
                 onClick={() => handleSetPlaybackRate(rate)}
                 disabled={!isReady || Boolean(playerError)}
                 data-testid={`shop-vimeo-speed-${rate}`}
-                className={`px-1.5 py-1 rounded-md ${compact ? "text-[10px]" : "text-[11px] px-2"} font-extrabold cursor-pointer transition-colors disabled:opacity-45 ${
+                className={`rounded-md font-extrabold cursor-pointer transition-colors disabled:opacity-45 ${
+                  compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'
+                } ${
                   active
                     ? 'bg-teal-600 text-white'
                     : 'text-slate-300 hover:bg-slate-800'

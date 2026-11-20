@@ -146,7 +146,18 @@ function testNormalizationAndPlayerRendering(): void {
   assert.match(html, /data-testid="shop-vimeo-speed-1\.5"/);
   assert.match(html, /data-testid="shop-vimeo-speed-2"/);
 
-  // TopVideoAdBanner renders nothing when disabled or on /admin, and renders banner when enabled on public pages
+  // SSR render of compact TopVideoAdBanner player omits min-h-[180px] so narrow 16:9 stays proportional while keeping all controls
+  const compactHtml = renderToString(
+    React.createElement(ShopVimeoPlayer, { video: normalized, compact: true })
+  );
+  assert.match(compactHtml, /aspect-video/);
+  assert.doesNotMatch(compactHtml, /min-h-\[180px\]/);
+  assert.match(compactHtml, /data-testid="shop-vimeo-play-pause"/);
+  assert.match(compactHtml, /data-testid="shop-vimeo-mute-toggle"/);
+  assert.match(compactHtml, /data-testid="shop-vimeo-replay"/);
+  assert.match(compactHtml, /data-testid="shop-vimeo-speed-2"/);
+
+  // TopVideoAdBanner renders nothing when disabled or on /admin, and renders compact centered banner when enabled on public pages
   const disabledTopHtml = renderToString(
     React.createElement(TopVideoAdBanner, {
       currentPage: 'home',
@@ -189,9 +200,19 @@ function testNormalizationAndPlayerRendering(): void {
     })
   );
   assert.match(enabledTopHtml, /data-testid="top-video-ad-banner"/);
+  assert.match(enabledTopHtml, /data-testid="top-video-ad-header"/);
+  assert.match(enabledTopHtml, /data-testid="top-video-ad-container"/);
+  assert.match(enabledTopHtml, /max-w-2xl/);
   assert.match(enabledTopHtml, /Sponsored Video/);
   assert.match(enabledTopHtml, /Top Banner Ad/);
   assert.match(enabledTopHtml, /data-testid="top-video-ad-collapse-toggle"/);
+
+  const topBannerFileSrc = fs.readFileSync(path.resolve('src/components/TopVideoAdBanner.tsx'), 'utf8');
+  assert.match(topBannerFileSrc, /compact=\{true\}/);
+
+  const appFileSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  assert.match(appFileSrc, /data-testid="top-header-sticky-group"/);
+  assert.match(appFileSrc, /sticky top-0 z-40 w-full/);
 
   const playerSrc = fs.readFileSync(path.resolve('src/components/ShopVimeoPlayer.tsx'), 'utf8');
   assert.match(playerSrc, /import Player from '@vimeo\/player'/);

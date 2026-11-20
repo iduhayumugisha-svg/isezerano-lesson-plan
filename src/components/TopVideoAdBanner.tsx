@@ -79,18 +79,26 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
     <section
       data-testid="top-video-ad-banner"
       aria-label={videoAd.label || 'Sponsored Video Advertisement'}
-      className="no-print sticky top-0 z-[60] w-fit max-w-[120px] mx-auto bg-slate-950 border border-slate-800 rounded-b-xl text-white shadow-xl"
+      className="no-print w-full bg-slate-950 border-b border-slate-800 text-white"
     >
-      <div className="w-full mx-auto px-1.5 py-1 space-y-1">
-        <div className="flex flex-col items-center justify-center gap-1 text-xs">
-          <div className="flex items-center justify-center gap-1 min-w-0">
-            <span className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-extrabold uppercase tracking-wider shrink-0">
-              <Film className="w-3 h-3" aria-hidden="true" />
+      <div className="w-full max-w-2xl mx-auto px-2.5 sm:px-4 py-1.5 space-y-1">
+        <div
+          data-testid="top-video-ad-header"
+          className="flex items-center justify-between gap-2 min-h-[24px] text-[11px]"
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-extrabold uppercase tracking-wider shrink-0 leading-none">
+              <Film className="w-2.5 h-2.5" aria-hidden="true" />
               <span>AD</span>
             </span>
-            <span className="text-[9px] font-bold text-amber-300 uppercase tracking-wide shrink-0">
+            <span className="text-[10px] sm:text-[11px] font-bold text-amber-300 uppercase tracking-wide shrink-0 leading-none">
               {videoAd.label || 'Sponsored Video'}
             </span>
+            {videoAd.title && (
+              <span className="text-[11px] font-semibold text-slate-200 truncate leading-tight">
+                · {videoAd.title}
+              </span>
+            )}
           </div>
 
           <button
@@ -99,27 +107,30 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
             data-testid="top-video-ad-collapse-toggle"
             aria-expanded={!isCollapsed}
             aria-label={isCollapsed ? 'Show top video advertisement' : 'Minimize top video advertisement'}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[9px] font-bold text-slate-300 cursor-pointer shrink-0 transition-colors"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer shrink-0 transition-colors"
           >
             {isCollapsed ? (
               <>
-                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Show</span>
+                <ChevronDown className="w-3 h-3" aria-hidden="true" />
+                <span>Show Video</span>
               </>
             ) : (
               <>
-                <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Hide</span>
+                <ChevronUp className="w-3 h-3" aria-hidden="true" />
+                <span>Minimize</span>
               </>
             )}
           </button>
         </div>
 
         {!isCollapsed && (
-          <div className="w-full max-w-[105px] mx-auto">
+          <div
+            data-testid="top-video-ad-container"
+            className="w-full max-w-[260px] sm:max-w-[300px] md:max-w-[330px] mx-auto"
+          >
             <Suspense
               fallback={
-                <div className="w-full aspect-video rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-[10px] font-semibold text-slate-300">
+                <div className="w-full aspect-video rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-[11px] font-semibold text-slate-300">
                   Loading video advertisement...
                 </div>
               }
@@ -131,8 +142,8 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
                   title: videoAd.title || videoAd.label || 'Sponsored Video'
                 }}
                 autoPlay={true}
-                playerLabel="Video Ad"
                 compact={true}
+                playerLabel="Video Ad"
                 fallbackNote="Thank you for visiting ISEZERANO ONLINE."
               />
             </Suspense>
