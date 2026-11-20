@@ -16,6 +16,8 @@ interface AdscodResponse {
 
 export const AdscodBannerAd: React.FC = () => {
   const [ad, setAd] = useState<AdscodAd | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [requestFailed, setRequestFailed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -29,17 +31,20 @@ export const AdscodBannerAd: React.FC = () => {
         if (!response.ok) throw new Error(`Ad request failed: ${response.status}`);
         return response.json() as Promise<AdscodResponse>;
       })
-      .then((data) => setAd(data.ads?.[0] ?? null))
+      .then((data) => {
+        setAd(data.ads?.[0] ?? null);
+        setLoading(false);
+      })
       .catch((error: unknown) => {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.warn('[Adscod] Banner ad could not be loaded.', error);
+          setRequestFailed(true);
+          setLoading(false);
         }
       });
 
     return () => controller.abort();
   }, []);
-
-  if (!ad?.clickUrl) return null;
 
   return (
     <aside
@@ -53,21 +58,31 @@ export const AdscodBannerAd: React.FC = () => {
           <span>Advertisement</span>
           <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px]">AD</span>
         </div>
-        <a
-          href={ad.clickUrl}
-          target="_blank"
-          rel="sponsored noopener noreferrer"
-          className="flex flex-col sm:flex-row items-center gap-3 text-left"
-        >
-          {ad.imageUrl && (
-            <img src={ad.imageUrl} alt={ad.title || 'Sponsored advertisement'} className="w-full sm:w-40 max-h-28 object-contain rounded-lg" loading="lazy" />
-          )}
-          <span className="min-w-0 flex-1">
-            {ad.title && <strong className="block text-sm font-bold text-slate-900">{ad.title}</strong>}
-            {ad.body && <span className="mt-1 block text-xs sm:text-sm text-slate-600">{ad.body}</span>}
-          </span>
-          {ad.ctaLabel && <span className="shrink-0 rounded-lg bg-teal-700 px-4 py-2 text-xs font-bold text-white">{ad.ctaLabel}</span>}
-        </a>
+        {ad?.clickUrl ? (
+          <a
+            href={ad.clickUrl}
+            target="_blank"
+            rel="sponsored noopener noreferrer"
+            className="flex flex-col sm:flex-row items-center gap-3 text-left"
+          >
+            {ad.imageUrl && (
+              <img src={ad.imageUrl} alt={ad.title || 'Sponsored advertisement'} className="w-full sm:w-40 max-h-28 object-contain rounded-lg" loading="lazy" />
+            )}
+            <span className="min-w-0 flex-1">
+              {ad.title && <strong className="block text-sm font-bold text-slate-900">{ad.title}</strong>}
+              {ad.body && <span className="mt-1 block text-xs sm:text-sm text-slate-600">{ad.body}</span>}
+            </span>
+            {ad.ctaLabel && <span className="shrink-0 rounded-lg bg-teal-700 px-4 py-2 text-xs font-bold text-white">{ad.ctaLabel}</span>}
+          </a>
+        ) : (
+          <div className="min-h-12 flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/70 px-3 py-3 text-center text-xs text-slate-500">
+            {loading
+              ? 'Kwamamaza birimo gushakishwa…'
+              : requestFailed
+                ? 'Kwamamaza ntikubashije guhuzwa na Adscod muri aka kanya.'
+                : 'Nta tangazo rya banner riraboneka muri aka kanya.'}
+          </div>
+        )}
       </div>
     </aside>
   );
