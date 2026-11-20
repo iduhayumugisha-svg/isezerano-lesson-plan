@@ -9,15 +9,31 @@ import {
   ImagePlus,
   Loader2,
   MessageCircle,
+  Monitor,
   Phone,
   Plus,
   RefreshCw,
+  RotateCcw,
+  Save,
   ShoppingBag,
+  SlidersHorizontal,
+  Smartphone,
+  Tablet,
   Trash2,
   X
 } from 'lucide-react';
 import { MiniShopProduct } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
+import { useWebsiteDesign } from '../context/WebsiteDesignContext';
+import { DisplayNumericControl } from './DisplayNumericControl';
+import {
+  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
+  MINI_SHOP_DISPLAY_LIMITS,
+  MiniShopDisplaySettings,
+  getMiniShopVisibleSlice,
+  normalizeMiniShopDisplaySettings,
+  resolveMiniShopColumnsForWidth
+} from '../utils/displaySettingsUtils';
 import {
   deleteMiniShopProduct,
   reorderMiniShopProducts,
@@ -37,9 +53,22 @@ import {
 
 export const AdminMiniShopManager: React.FC = () => {
   const { isAdmin } = useAuth();
+  const {
+    miniShopDisplay,
+    saveMiniShopDisplaySettings,
+    isPublishing: isPublishingDisplay
+  } = useWebsiteDesign();
   const [products, setProducts] = useState<MiniShopProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Display size settings state
+  const [draftDisplay, setDraftDisplay] = useState<MiniShopDisplaySettings>(() =>
+    normalizeMiniShopDisplaySettings(miniShopDisplay)
+  );
+  const [isDisplayDirty, setIsDisplayDirty] = useState(false);
+  const [displayFeedback, setDisplayFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
   // Form state
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -69,6 +98,12 @@ export const AdminMiniShopManager: React.FC = () => {
 
   const formCardRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!isDisplayDirty) {
+      setDraftDisplay(normalizeMiniShopDisplaySettings(miniShopDisplay));
+    }
+  }, [miniShopDisplay, isDisplayDirty]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -265,6 +300,105 @@ export const AdminMiniShopManager: React.FC = () => {
   const previewWaUrl = buildMiniShopWhatsAppUrl(whatsappNumber, title || 'Sample Product');
   const previewTelUrl = buildMiniShopTelHref(phoneNumber);
 
+  const updateDisplayField = <K extends keyof MiniShopDisplaySettings>(
+    key: K,
+    val: MiniShopDisplaySettings[K]
+  ) => {
+    setDraftDisplay((prev) =>
+      normalizeMiniShopDisplaySettings({
+        ...prev,
+        [key]: val
+      })
+    );
+    setIsDisplayDirty(true);
+    setDisplayFeedback(null);
+  };
+
+  const handleResetDisplayDefaults = () => {
+    setDraftDisplay({ ...DEFAULT_MINI_SHOP_DISPLAY_SETTINGS });
+    setIsDisplayDirty(true);
+    setDisplayFeedback(null);
+  };
+
+  const handleSaveDisplaySettings = async () => {
+    setDisplayFeedback(null);
+    const result = await saveMiniShopDisplaySettings(draftDisplay);
+    if (result.success) {
+      setIsDisplayDirty(false);
+      setDisplayFeedback({
+        type: 'success',
+        text: 'Mini Shop display settings saved to Cloud Firestore!'
+      });
+    } else {
+      setDisplayFeedback({
+        type: 'error',
+        text: result.error || 'Failed to save Mini Shop display settings.'
+      });
+    }
+  };
+
+  const previewViewportWidth =
+    previewViewport === 'mobile' ? 340 : previewViewport === 'tablet' ? 768 : 1120;
+  const previewCols = resolveMiniShopColumnsForWidth(draftDisplay, previewViewportWidth);
+  const previewSourceProducts: MiniShopProduct[] =
+    activeProducts.length > 0
+      ? activeProducts
+      : [
+          {
+            id: 'preview-sample-1',
+            title: 'Sample Product 1',
+            description: 'Concise highlight shown in the Mini Shop bar',
+            price: '25,000 RWF',
+            imageUrl: '',
+            whatsappNumber: '+250788000000',
+            phoneNumber: '0788000000',
+            active: true,
+            displayOrder: 0,
+            createdAt: '',
+            updatedAt: ''
+          },
+          {
+            id: 'preview-sample-2',
+            title: 'Sample Product 2',
+            description: 'Second showcase item preview',
+            price: '45,000 RWF',
+            imageUrl: '',
+            whatsappNumber: '+250788000000',
+            phoneNumber: '0788000000',
+            active: true,
+            displayOrder: 1,
+            createdAt: '',
+            updatedAt: ''
+          },
+          {
+            id: 'preview-sample-3',
+            title: 'Sample Product 3',
+            description: 'Third showcase item preview',
+            price: '15,000 RWF',
+            imageUrl: '',
+            whatsappNumber: '+250788000000',
+            phoneNumber: '0788000000',
+            active: true,
+            displayOrder: 2,
+            createdAt: '',
+            updatedAt: ''
+          },
+          {
+            id: 'preview-sample-4',
+            title: 'Sample Product 4',
+            description: 'Fourth showcase item preview',
+            price: '60,000 RWF',
+            imageUrl: '',
+            whatsappNumber: '+250788000000',
+            phoneNumber: '0788000000',
+            active: true,
+            displayOrder: 3,
+            createdAt: '',
+            updatedAt: ''
+          }
+        ];
+  const previewVisibleProducts = getMiniShopVisibleSlice(previewSourceProducts, 0, previewCols);
+
   return (
     <div className="space-y-6">
       {/* Header Status Summary Card */}
@@ -334,6 +468,312 @@ export const AdminMiniShopManager: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Mini Shop Display Settings Panel */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Responsive Bar &amp; Card Sizing</span>
+            </div>
+            <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">
+              Mini Shop Display Settings
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Control section dimensions, card sizing, proportional product thumbnail size, card spacing, and columns per screen size without modifying your products.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleResetDisplayDefaults}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Default</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSaveDisplaySettings}
+              disabled={isPublishingDisplay}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-60"
+            >
+              {isPublishingDisplay ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {displayFeedback && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-xs font-bold flex items-center justify-between gap-3 ${
+              displayFeedback.type === 'success'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                : 'border-rose-300 bg-rose-50 text-rose-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{displayFeedback.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDisplayFeedback(null)}
+              className="p-1 rounded hover:bg-black/5 cursor-pointer"
+              aria-label="Dismiss display settings feedback"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <DisplayNumericControl
+            id="minishop-section-width-percent"
+            label="Section Width"
+            description="Overall Mini Shop inner bar width percentage."
+            value={draftDisplay.sectionWidthPercent}
+            min={MINI_SHOP_DISPLAY_LIMITS.sectionWidthPercent.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.sectionWidthPercent.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.sectionWidthPercent.step}
+            unit="%"
+            onChange={(val) => updateDisplayField('sectionWidthPercent', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-section-max-width-px"
+            label="Section Max Width"
+            description="Maximum width of the Mini Shop showcase bar."
+            value={draftDisplay.sectionMaxWidthPx}
+            min={MINI_SHOP_DISPLAY_LIMITS.sectionMaxWidthPx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.sectionMaxWidthPx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.sectionMaxWidthPx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('sectionMaxWidthPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-section-min-height-px"
+            label="Display Bar Height"
+            description="Minimum overall height of the Mini Shop bar."
+            value={draftDisplay.sectionMinHeightPx}
+            min={MINI_SHOP_DISPLAY_LIMITS.sectionMinHeightPx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.sectionMinHeightPx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.sectionMinHeightPx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('sectionMinHeightPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-card-width-px"
+            label="Product Card Width"
+            description="Maximum width of each product showcase card."
+            value={draftDisplay.cardWidthPx}
+            min={MINI_SHOP_DISPLAY_LIMITS.cardWidthPx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.cardWidthPx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.cardWidthPx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('cardWidthPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-card-height-px"
+            label="Product Card Height"
+            description="Minimum height of each product showcase card."
+            value={draftDisplay.cardHeightPx}
+            min={MINI_SHOP_DISPLAY_LIMITS.cardHeightPx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.cardHeightPx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.cardHeightPx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('cardHeightPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-image-size-px"
+            label="Product Image Size"
+            description="Square proportional thumbnail size (no distortion)."
+            value={draftDisplay.imageSizePx}
+            min={MINI_SHOP_DISPLAY_LIMITS.imageSizePx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.imageSizePx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.imageSizePx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('imageSizePx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-card-gap-px"
+            label="Spacing Between Cards"
+            description="Gap between product cards in multi-column layout."
+            value={draftDisplay.cardGapPx}
+            min={MINI_SHOP_DISPLAY_LIMITS.cardGapPx.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.cardGapPx.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.cardGapPx.step}
+            unit="px"
+            onChange={(val) => updateDisplayField('cardGapPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-desktop-cols"
+            label="Desktop Columns"
+            description="Products displayed side-by-side on desktop (≥1024px)."
+            value={draftDisplay.desktopColumns}
+            min={MINI_SHOP_DISPLAY_LIMITS.desktopColumns.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.desktopColumns.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.desktopColumns.step}
+            unit="col"
+            onChange={(val) => updateDisplayField('desktopColumns', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-tablet-cols"
+            label="Tablet Columns"
+            description="Products displayed side-by-side on tablet (640–1023px)."
+            value={draftDisplay.tabletColumns}
+            min={MINI_SHOP_DISPLAY_LIMITS.tabletColumns.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.tabletColumns.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.tabletColumns.step}
+            unit="col"
+            onChange={(val) => updateDisplayField('tabletColumns', val)}
+          />
+
+          <DisplayNumericControl
+            id="minishop-mobile-cols"
+            label="Mobile Columns"
+            description="Products displayed side-by-side on mobile (<640px)."
+            value={draftDisplay.mobileColumns}
+            min={MINI_SHOP_DISPLAY_LIMITS.mobileColumns.min}
+            max={MINI_SHOP_DISPLAY_LIMITS.mobileColumns.max}
+            step={MINI_SHOP_DISPLAY_LIMITS.mobileColumns.step}
+            unit="col"
+            onChange={(val) => updateDisplayField('mobileColumns', val)}
+          />
+        </div>
+
+        {/* Live Mini Shop Display Preview */}
+        <div className="rounded-xl border border-slate-200 bg-slate-100/80 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+              <Eye className="w-4 h-4 text-teal-700" />
+              <span>Live Preview Before Saving</span>
+              <span className="text-[11px] font-mono text-slate-500 font-normal">
+                ({previewCols} col · img {draftDisplay.imageSizePx}px · card {draftDisplay.cardWidthPx}×{draftDisplay.cardHeightPx}px)
+              </span>
+            </div>
+
+            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
+              {(
+                [
+                  { id: 'desktop', label: 'Desktop', icon: Monitor },
+                  { id: 'tablet', label: 'Tablet', icon: Tablet },
+                  { id: 'mobile', label: 'Mobile', icon: Smartphone }
+                ] as const
+              ).map((vp) => {
+                const Icon = vp.icon;
+                const isSelected = previewViewport === vp.id;
+                return (
+                  <button
+                    key={vp.id}
+                    type="button"
+                    onClick={() => setPreviewViewport(vp.id)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>{vp.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="w-full overflow-x-auto bg-slate-200/70 rounded-xl border border-slate-200 p-3">
+            <div
+              className="mx-auto bg-transparent overflow-hidden transition-all"
+              style={{ width: `${previewViewportWidth}px`, maxWidth: '100%' }}
+            >
+              <div
+                className="mx-auto bg-slate-950 text-white rounded-lg border border-slate-800 shadow-md max-w-full px-3 py-2 flex flex-col justify-center min-w-0 transition-all"
+                style={{
+                  width: `${draftDisplay.sectionWidthPercent}%`,
+                  maxWidth: `${draftDisplay.sectionMaxWidthPx}px`,
+                  minHeight: `${draftDisplay.sectionMinHeightPx}px`
+                }}
+              >
+                <div
+                  className="w-full min-w-0"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))`,
+                    gap: `${draftDisplay.cardGapPx}px`
+                  }}
+                >
+                  {previewVisibleProducts.map((prod) => (
+                    <div
+                      key={prod.id}
+                      className="w-full max-w-full mx-auto rounded-xl bg-slate-900/80 border border-slate-800 px-2.5 py-1.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 min-w-0 transition-all"
+                      style={{
+                        maxWidth: `${draftDisplay.cardWidthPx}px`,
+                        minHeight: `${draftDisplay.cardHeightPx}px`
+                      }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div
+                          className="rounded-lg overflow-hidden bg-slate-800 border border-slate-700/80 shrink-0 flex items-center justify-center"
+                          style={{
+                            width: `${draftDisplay.imageSizePx}px`,
+                            height: `${draftDisplay.imageSizePx}px`
+                          }}
+                        >
+                          {prod.imageUrl ? (
+                            <img
+                              src={prod.imageUrl}
+                              alt={prod.title}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <ShoppingBag className="w-4 h-4 text-amber-300" aria-hidden="true" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-xs font-extrabold text-white truncate">
+                              {prod.title}
+                            </span>
+                            {prod.price && (
+                              <span className="shrink-0 text-[10px] font-extrabold text-amber-300 bg-amber-500/15 border border-amber-400/35 px-1.5 py-0.5 rounded">
+                                {prod.price}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-300 truncate">{prod.description}</p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg bg-[#25D366] text-slate-950">
+                        WhatsApp
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Add / Edit Product Form */}
       <div

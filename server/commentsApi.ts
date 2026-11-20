@@ -486,7 +486,9 @@ async function syncCreateToFirestoreRest(
     const docBase = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/comments/${comment.id}`;
     const commitUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
 
+    const tokenHash = sha256Hex(ownerProof);
     const ownershipFields: Record<string, any> = {
+      tokenHash: { stringValue: tokenHash },
       postId: { stringValue: comment.postId },
       createdAt: { stringValue: comment.createdAt },
       lastSyncedAt: { stringValue: comment.updatedAt },
@@ -522,8 +524,9 @@ async function syncCreateToFirestoreRest(
       {
         currentDocument: { exists: false },
         update: {
-          name: `${docBase}/tokens/${ownerProof}`,
+          name: `${docBase}/tokens/${sha256Hex(ownerProof)}`,
           fields: {
+            tokenHash: { stringValue: sha256Hex(ownerProof) },
             postId: { stringValue: comment.postId },
             createdAt: { stringValue: comment.createdAt }
           }
@@ -554,6 +557,8 @@ async function syncCreateToFirestoreRest(
 
 async function syncUpdateToFirestoreRest(
   commentId: string,
+  postId: string,
+  createdAt: string,
   content: string,
   updatedAt: string,
   ownerProof: string
@@ -561,7 +566,7 @@ async function syncUpdateToFirestoreRest(
   try {
     const docBase = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/comments/${commentId}`;
     const commitUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
-    const nonce = crypto.randomBytes(4).toString('hex');
+    const actionProof = sha256Hex(`${ownerProof}:${postId}:${createdAt}:${updatedAt}`);
 
     const writes = [
       {
@@ -580,7 +585,7 @@ async function syncUpdateToFirestoreRest(
         update: {
           name: `${docBase}/private/ownership`,
           fields: {
-            verifier: { stringValue: `${ownerProof}:${nonce}` },
+            verifier: { stringValue: `${ownerProof}:${actionProof}` },
             lastSyncedAt: { stringValue: updatedAt }
           }
         }
@@ -603,13 +608,16 @@ async function syncUpdateToFirestoreRest(
 
 async function syncDeleteToFirestoreRest(
   commentId: string,
+  postId: string,
+  createdAt: string,
   ownerProof: string
 ): Promise<boolean> {
   try {
     const docBase = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/comments/${commentId}`;
     const commitUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
-    const nonce = crypto.randomBytes(4).toString('hex');
+    const nonce = crypto.randomBytes(6).toString('hex');
     const deleteMarker = `deleted_${Date.now()}_${nonce}`;
+    const actionProof = sha256Hex(`${ownerProof}:${postId}:${createdAt}:${deleteMarker}`);
 
     const writes = [
       {
@@ -617,7 +625,7 @@ async function syncDeleteToFirestoreRest(
         update: {
           name: `${docBase}/private/ownership`,
           fields: {
-            verifier: { stringValue: `${ownerProof}:${nonce}` },
+            verifier: { stringValue: `${ownerProof}:${actionProof}` },
             lastSyncedAt: { stringValue: deleteMarker }
           }
         }
@@ -1020,7 +1028,14 @@ export function mountCommentsApi(app: Express, options: CommentsApiOptions = {})
 
     if (!options.disableFirestoreSync && visitorSessionId && owned) {
       const ownerProof = deriveCommentProof(visitorSessionId, commentId);
-      void syncUpdateToFirestoreRest(commentId, bodyCheck.sanitizedContent, nextIso, ownerProof);
+      void syncUpdateToFirestoreRest(
+        commentId,
+        existing.postId,
+        existing.createdAt,
+        bodyCheck.sanitizedContent,
+        nextIso,
+        ownerProof
+      );
     }
 
     res.status(200).json({
@@ -1123,7 +1138,12 @@ export function mountCommentsApi(app: Express, options: CommentsApiOptions = {})
 
     if (!options.disableFirestoreSync && visitorSessionId && owned) {
       const ownerProof = deriveCommentProof(visitorSessionId, commentId);
-      void syncDeleteToFirestoreRest(commentId, ownerProof);
+      void syncDeleteToFirestoreRest(
+        commentId,
+        existing.postId,
+        existing.createdAt,
+        ownerProof
+      );
     }
 
     res.status(200).json({

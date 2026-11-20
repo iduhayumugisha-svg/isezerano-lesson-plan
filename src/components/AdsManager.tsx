@@ -12,18 +12,29 @@ import {
   Sparkles,
   ToggleLeft,
   ToggleRight,
-  ExternalLink,
-  Layers
+  Monitor,
+  Tablet,
+  Smartphone,
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 import { AdsSettings, DEFAULT_ADS_SETTINGS, AdSlotConfig } from '../types/platform';
 import { getAdsSettings, saveAdsSettings } from '../services/siteSettingsService';
 import { useAuth } from '../context/AuthContext';
+import { DisplayNumericControl } from './DisplayNumericControl';
+import {
+  ADS_DISPLAY_LIMITS,
+  AdsDisplaySettings,
+  DEFAULT_ADS_DISPLAY_SETTINGS,
+  normalizeAdsDisplaySettings
+} from '../utils/displaySettingsUtils';
 
 export const AdsManager: React.FC = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<AdsSettings>(DEFAULT_ADS_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -34,7 +45,10 @@ export const AdsManager: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await getAdsSettings();
-      setSettings(data);
+      setSettings({
+        ...data,
+        displaySettings: normalizeAdsDisplaySettings(data.displaySettings)
+      });
     } catch (err) {
       console.error('Error loading ads settings:', err);
     } finally {
@@ -47,7 +61,11 @@ export const AdsManager: React.FC = () => {
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      const result = await saveAdsSettings(settings, user.uid);
+      const payloadToSave: AdsSettings = {
+        ...settings,
+        displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
+      };
+      const result = await saveAdsSettings(payloadToSave, user.uid);
       if (result.success) {
         if (result.isLocalFallback) {
           setStatusMessage({
@@ -57,7 +75,7 @@ export const AdsManager: React.FC = () => {
         } else {
           setStatusMessage({
             type: 'success',
-            text: '🎉 Ad settings saved successfully to Cloud Firestore across all devices!'
+            text: '🎉 Ad settings & display sizes saved successfully to Cloud Firestore across all devices!'
           });
         }
       } else {
@@ -91,6 +109,28 @@ export const AdsManager: React.FC = () => {
     }));
   };
 
+  const displaySettings: AdsDisplaySettings = normalizeAdsDisplaySettings(settings.displaySettings);
+
+  const updateDisplaySetting = <K extends keyof AdsDisplaySettings>(
+    key: K,
+    value: AdsDisplaySettings[K]
+  ) => {
+    setSettings(prev => ({
+      ...prev,
+      displaySettings: normalizeAdsDisplaySettings({
+        ...normalizeAdsDisplaySettings(prev.displaySettings),
+        [key]: value
+      })
+    }));
+  };
+
+  const handleResetDisplayDefaults = () => {
+    setSettings(prev => ({
+      ...prev,
+      displaySettings: { ...DEFAULT_ADS_DISPLAY_SETTINGS }
+    }));
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12 bg-white rounded-2xl border border-slate-200">
@@ -99,6 +139,14 @@ export const AdsManager: React.FC = () => {
       </div>
     );
   }
+
+  const previewSampleBanner =
+    (settings.belowHeaderAd.type === 'banner' && settings.belowHeaderAd.imageUrl) ||
+    (settings.aboveFooterAd.type === 'banner' && settings.aboveFooterAd.imageUrl) ||
+    '';
+
+  const previewFrameWidth =
+    previewViewport === 'mobile' ? 340 : previewViewport === 'tablet' ? 680 : 960;
 
   return (
     <div className="space-y-6">
@@ -192,6 +240,234 @@ export const AdsManager: React.FC = () => {
             </>
           )}
         </button>
+      </div>
+
+      {/* Advertisement Display Settings Panel */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Layout &amp; Sizing Controls</span>
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
+              Advertisement Display Settings
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Adjust advertisement container width, height, maximum width, and spacing without altering ad scripts or distorting banner image aspect ratios.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleResetDisplayDefaults}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Default</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Sliders & +/- Numeric Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <DisplayNumericControl
+            id="ads-container-width-percent"
+            label="Container Width"
+            description="Percentage width of the ad slot container."
+            value={displaySettings.containerWidthPercent}
+            min={ADS_DISPLAY_LIMITS.containerWidthPercent.min}
+            max={ADS_DISPLAY_LIMITS.containerWidthPercent.max}
+            step={ADS_DISPLAY_LIMITS.containerWidthPercent.step}
+            unit="%"
+            onChange={(val) => updateDisplaySetting('containerWidthPercent', val)}
+          />
+
+          <DisplayNumericControl
+            id="ads-max-width-px"
+            label="Maximum Area Width"
+            description="Caps the ad container width on wide screens."
+            value={displaySettings.maxWidthPx}
+            min={ADS_DISPLAY_LIMITS.maxWidthPx.min}
+            max={ADS_DISPLAY_LIMITS.maxWidthPx.max}
+            step={ADS_DISPLAY_LIMITS.maxWidthPx.step}
+            unit="px"
+            onChange={(val) => updateDisplaySetting('maxWidthPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="ads-container-height-px"
+            label="Container Height"
+            description="Max banner height & ad area vertical size."
+            value={displaySettings.containerHeightPx}
+            min={ADS_DISPLAY_LIMITS.containerHeightPx.min}
+            max={ADS_DISPLAY_LIMITS.containerHeightPx.max}
+            step={ADS_DISPLAY_LIMITS.containerHeightPx.step}
+            unit="px"
+            onChange={(val) => updateDisplaySetting('containerHeightPx', val)}
+          />
+
+          <DisplayNumericControl
+            id="ads-margin-y-px"
+            label="Vertical Margin"
+            description="Top & bottom outer space around ad containers."
+            value={displaySettings.marginY}
+            min={ADS_DISPLAY_LIMITS.marginY.min}
+            max={ADS_DISPLAY_LIMITS.marginY.max}
+            step={ADS_DISPLAY_LIMITS.marginY.step}
+            unit="px"
+            onChange={(val) => updateDisplaySetting('marginY', val)}
+          />
+
+          <DisplayNumericControl
+            id="ads-margin-x-px"
+            label="Horizontal Margin"
+            description="Left & right outer inset around ads."
+            value={displaySettings.marginX}
+            min={ADS_DISPLAY_LIMITS.marginX.min}
+            max={ADS_DISPLAY_LIMITS.marginX.max}
+            step={ADS_DISPLAY_LIMITS.marginX.step}
+            unit="px"
+            onChange={(val) => updateDisplaySetting('marginX', val)}
+          />
+
+          <DisplayNumericControl
+            id="ads-padding-px"
+            label="Inner Padding"
+            description="Breathing room inside the advertisement card."
+            value={displaySettings.paddingPx}
+            min={ADS_DISPLAY_LIMITS.paddingPx.min}
+            max={ADS_DISPLAY_LIMITS.paddingPx.max}
+            step={ADS_DISPLAY_LIMITS.paddingPx.step}
+            unit="px"
+            onChange={(val) => updateDisplaySetting('paddingPx', val)}
+          />
+        </div>
+
+        {/* Live Responsive Preview Before Saving */}
+        <div className="rounded-xl border border-slate-200 bg-slate-100/80 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+              <Eye className="w-4 h-4 text-teal-700" />
+              <span>Live Preview Before Saving</span>
+              <span className="text-[11px] font-mono text-slate-500 font-normal">
+                ({displaySettings.containerWidthPercent}% · max {displaySettings.maxWidthPx}px · h {displaySettings.containerHeightPx}px)
+              </span>
+            </div>
+
+            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
+              {(
+                [
+                  { id: 'desktop', label: 'Desktop', icon: Monitor },
+                  { id: 'tablet', label: 'Tablet', icon: Tablet },
+                  { id: 'mobile', label: 'Mobile', icon: Smartphone }
+                ] as const
+              ).map((vp) => {
+                const Icon = vp.icon;
+                const active = previewViewport === vp.id;
+                return (
+                  <button
+                    key={vp.id}
+                    type="button"
+                    onClick={() => setPreviewViewport(vp.id)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                      active
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>{vp.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 p-3">
+            <div
+              className="mx-auto border border-dashed border-slate-300 rounded-lg bg-slate-50/70 transition-all overflow-hidden"
+              style={{ width: `${previewFrameWidth}px`, maxWidth: '100%' }}
+            >
+              <div
+                className="mx-auto max-w-full transition-all"
+                style={{
+                  width: `${displaySettings.containerWidthPercent}%`,
+                  maxWidth: `${displaySettings.maxWidthPx}px`,
+                  marginTop: `${displaySettings.marginY}px`,
+                  marginBottom: `${displaySettings.marginY}px`,
+                  paddingLeft: `clamp(0px, ${displaySettings.marginX}px, 12%)`,
+                  paddingRight: `clamp(0px, ${displaySettings.marginX}px, 12%)`
+                }}
+              >
+                <div
+                  className="bg-slate-50 border border-slate-200 rounded-xl shadow-2xs overflow-hidden flex flex-col"
+                  style={{
+                    padding: `${displaySettings.paddingPx}px`,
+                    minHeight: `${displaySettings.containerHeightPx}px`
+                  }}
+                >
+                  <div className="shrink-0 flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200/70 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <span>{settings.belowHeaderAd.label || 'Partner Announcement'}</span>
+                    </span>
+                    <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                      AD
+                    </span>
+                  </div>
+
+                  {previewSampleBanner ? (
+                    <div className="flex-1 flex justify-center items-center w-full">
+                      <img
+                        src={previewSampleBanner}
+                        alt="Live Ad Size Preview"
+                        className="w-auto max-w-full h-auto object-contain mx-auto rounded-lg"
+                        style={{
+                          maxHeight: `${Math.max(40, displaySettings.containerHeightPx - displaySettings.paddingPx * 2 - 28)}px`
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="flex-1 w-full rounded-lg border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-center px-4 py-3 text-slate-500"
+                      style={{
+                        minHeight: `${Math.max(44, displaySettings.containerHeightPx - displaySettings.paddingPx * 2 - 34)}px`
+                      }}
+                    >
+                      <span className="text-xs font-bold text-slate-700">
+                        Below-Header &amp; Above-Footer Ad Preview ({previewViewport})
+                      </span>
+                      <span className="text-[11px] text-slate-500 mt-0.5">
+                        Width {displaySettings.containerWidthPercent}% · Max {displaySettings.maxWidthPx}px · Height {displaySettings.containerHeightPx}px · Aspect Ratio Preserved
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Placement 1: Below Header */}

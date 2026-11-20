@@ -5,7 +5,6 @@ import { WebsiteHeader, WebsitePage } from './components/WebsiteHeader';
 import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
-import { AdscodBannerAd } from './components/AdscodBannerAd';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { MiniShopBar } from './components/MiniShopBar';
 
@@ -84,7 +83,7 @@ const getBlogSlugFromUrl = (): string | null => {
 
 function AppContent() {
   const { user, isAdmin, signOutUser } = useAuth();
-  const { colors, branding } = useWebsiteDesign();
+  const { colors, branding, miniShopDisplay } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -302,6 +301,7 @@ function AppContent() {
         products={activeMiniShopProducts}
         visible={showMiniShop}
         onHeightChange={setMiniShopHeight}
+        displaySettings={miniShopDisplay}
       />
       {effectiveMiniShopOffset > 0 && (
         <div
@@ -323,8 +323,8 @@ function AppContent() {
         topOffsetPx={effectiveMiniShopOffset}
       />
 
-      {/* 2. Adscod uses the existing below-header advertisement slot */}
-      {currentPage !== 'admin' && <AdscodBannerAd />}
+      {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}
+      <AdSlot placement="below_header" className="no-print" />
 
       {/* 3. Natural Document Flow Main Body */}
       <main className="flex-1 w-full min-w-0 relative z-0">

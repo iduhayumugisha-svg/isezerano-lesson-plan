@@ -4,14 +4,21 @@ import {
   setDoc,
   onSnapshot
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, getFirebaseAuth } from '../config/firebase';
 import { AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
+import { normalizeAdsDisplaySettings } from '../utils/displaySettingsUtils';
+import { isAuthorizedAdminEmail } from './authService';
 
 // ==================== ADS SETTINGS ====================
 const ADS_STORAGE_KEY = 'isezerano_ads_settings';
 
 const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): AdsSettings => {
-  if (!remoteData) return DEFAULT_ADS_SETTINGS;
+  if (!remoteData) {
+    return {
+      ...DEFAULT_ADS_SETTINGS,
+      displaySettings: normalizeAdsDisplaySettings(DEFAULT_ADS_SETTINGS.displaySettings)
+    };
+  }
   return {
     masterEnabled: remoteData.masterEnabled ?? DEFAULT_ADS_SETTINGS.masterEnabled,
     belowHeaderAd: {
@@ -22,6 +29,7 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
       ...DEFAULT_ADS_SETTINGS.aboveFooterAd,
       ...(remoteData.aboveFooterAd || {})
     },
+    displaySettings: normalizeAdsDisplaySettings(remoteData.displaySettings),
     updatedAt: remoteData.updatedAt || new Date().toISOString(),
     updatedBy: remoteData.updatedBy || 'admin'
   };
@@ -75,12 +83,28 @@ const parseFirestoreRestValue = (val: any): any => {
   return undefined;
 };
 
+const stripUndefinedDeep = <T,>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        out[k] = stripUndefinedDeep(v);
+      }
+    }
+    return out as T;
+  }
+  return value;
+};
+
 const fetchAdsSettingsViaRest = async (): Promise<Partial<AdsSettings> | null> => {
   if (typeof fetch !== 'function') return null;
   try {
     const res = await fetch(
       'https://firestore.googleapis.com/v1/projects/isezerano-news/databases/(default)/documents/appSettings/ads',
-      { method: 'GET' }
+      { method: 'GET', cache: 'no-store' }
     );
     if (!res.ok) return null;
     const json = await res.json();
@@ -106,13 +130,13 @@ const notifyAdsSubscribers = (settings: AdsSettings) => {
   });
 };
 
-export const getAdsSettings = async (): Promise<AdsSettings> => {
-  if (sharedAdsSettings) {
+export const getAdsSettings = async (forceRefresh = false): Promise<AdsSettings> => {
+  if (sharedAdsSettings && !forceRefresh) {
     return sharedAdsSettings;
   }
 
   const localData = getCachedAdsSettingsSync();
-  if (pendingAdsFetch) {
+  if (pendingAdsFetch && !forceRefresh) {
     return pendingAdsFetch;
   }
 
@@ -159,11 +183,21 @@ export const saveAdsSettings = async (
   settings: AdsSettings,
   adminUid: string
 ): Promise<{ success: boolean; error?: string; isLocalFallback?: boolean }> => {
-  const payload: AdsSettings = {
+  const auth = getFirebaseAuth();
+  const currentUser = auth?.currentUser;
+  if (!currentUser || !isAuthorizedAdminEmail(currentUser.email)) {
+    return {
+      success: false,
+      error: 'Administrator Google authentication (twizerefelix90@gmail.com) is required to modify Ad settings.'
+    };
+  }
+
+  const payload: AdsSettings = stripUndefinedDeep({
     ...settings,
+    displaySettings: normalizeAdsDisplaySettings(settings.displaySettings),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
-  };
+  });
 
   try {
     localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(payload));

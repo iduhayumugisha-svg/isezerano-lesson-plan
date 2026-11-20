@@ -12,6 +12,7 @@ import {
   NavigationMenuItem,
   WebsiteDesignVersion,
   WhatsAppContactSettings,
+  MiniShopDisplaySettings,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
@@ -20,15 +21,18 @@ import {
   DEFAULT_CATEGORY_NAV_APPEARANCE,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
-  DEFAULT_WHATSAPP_CONTACT
+  DEFAULT_WHATSAPP_CONTACT,
+  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings } from '../utils/categoryStyleUtils';
+import { normalizeMiniShopDisplaySettings } from '../utils/displaySettingsUtils';
 import { 
   getWebsiteDesignSettings, 
   getPublicWebsiteDesignSettings,
   getCachedWebsiteDesignSettingsSync,
-  saveWebsiteDesignSettings, 
+  saveWebsiteDesignSettings,
+  saveMiniShopDisplayToFirestore,
   restoreWebsiteDesignVersion,
   applyDesignCssVariables,
   updateBrowserFavicon,
@@ -86,8 +90,15 @@ interface WebsiteDesignContextType {
     summaryNote?: string
   ) => Promise<{ success: boolean; error?: string }>;
 
+  // Mini Shop Display Settings Actions
+  updateDraftMiniShopDisplay: (miniShopDisplay: Partial<MiniShopDisplaySettings>) => void;
+  saveMiniShopDisplaySettings: (
+    nextSettings: MiniShopDisplaySettings,
+    summaryNote?: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
   // Reset & Undo Actions
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'miniShopDisplay' | 'all') => void;
   resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
@@ -104,6 +115,7 @@ interface WebsiteDesignContextType {
   homepageSections: HomepageSectionConfig[];
   navigationMenus: NavigationMenuItem[];
   whatsappContact: WhatsAppContactSettings;
+  miniShopDisplay: MiniShopDisplaySettings;
   versionHistory: WebsiteDesignVersion[];
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
@@ -130,8 +142,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
 
-  // Ref to track draft dirty state without triggering re-subscription cycles
+  // Ref to track draft dirty state and prevent stale load overwrites
   const isDraftDirtyRef = useRef<boolean>(false);
+  const loadSeqRef = useRef<number>(0);
 
   useEffect(() => {
     isDraftDirtyRef.current = isDraftDirty;
@@ -148,6 +161,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     loadSettings();
 
     const unsubscribe = subscribeToWebsiteDesign((remoteSettings) => {
+      loadSeqRef.current += 1;
       setPublishedSettings(remoteSettings);
       if (!isDraftDirtyRef.current) {
         setDraftSettings(remoteSettings);
@@ -161,9 +175,11 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [user?.uid, isAdmin]);
 
   const loadPublicSettings = async () => {
+    const seq = ++loadSeqRef.current;
     setIsLoading(true);
     try {
       const data = await getPublicWebsiteDesignSettings();
+      if (seq !== loadSeqRef.current) return;
       setPublishedSettings(data);
       if (!isDraftDirtyRef.current) {
         setDraftSettings(data);
@@ -177,9 +193,11 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const loadSettings = async () => {
+    const seq = ++loadSeqRef.current;
     setIsLoading(true);
     try {
       const data = await getWebsiteDesignSettings();
+      if (seq !== loadSeqRef.current) return;
       setPublishedSettings(data);
       setDraftSettings(data);
       setIsDraftDirty(false);
@@ -690,7 +708,58 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
+  const updateDraftMiniShopDisplay = (partialDisplay: Partial<MiniShopDisplaySettings>) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      miniShopDisplay: normalizeMiniShopDisplaySettings({
+        ...(prev.miniShopDisplay || DEFAULT_MINI_SHOP_DISPLAY_SETTINGS),
+        ...partialDisplay
+      })
+    }));
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const saveMiniShopDisplaySettings = async (
+    nextSettings: MiniShopDisplaySettings,
+    _summaryNote?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    setIsPublishing(true);
+    try {
+      const adminUid = user?.uid || user?.email || 'admin';
+      const result = await saveMiniShopDisplayToFirestore(nextSettings, adminUid);
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to save Mini Shop display settings to Cloud Firestore.'
+        };
+      }
+
+      loadSeqRef.current += 1;
+      setPublishedSettings(prev => ({
+        ...prev,
+        miniShopDisplay: result.normalized,
+        updatedAt: result.updatedAt,
+        updatedBy: adminUid
+      }));
+      setDraftSettings(prev => ({
+        ...prev,
+        miniShopDisplay: result.normalized,
+        updatedAt: result.updatedAt,
+        updatedBy: adminUid
+      }));
+
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save error';
+      return { success: false, error: message };
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'miniShopDisplay' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -716,6 +785,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (section === 'whatsapp' || section === 'all') {
         updated.whatsappContact = { ...DEFAULT_WHATSAPP_CONTACT };
+      }
+      if (section === 'miniShopDisplay' || section === 'all') {
+        updated.miniShopDisplay = { ...DEFAULT_MINI_SHOP_DISPLAY_SETTINGS };
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -905,6 +977,8 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         resetNavigationMenusToDefault,
         updateDraftWhatsAppContact,
         saveWhatsAppContactSettings,
+        updateDraftMiniShopDisplay,
+        saveMiniShopDisplaySettings,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
@@ -920,6 +994,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: activeSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS,
         whatsappContact: normalizeWhatsAppSettings(publishedSettings.whatsappContact),
+        miniShopDisplay: normalizeMiniShopDisplaySettings(publishedSettings.miniShopDisplay),
         versionHistory: activeSettings.versionHistory || [],
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,

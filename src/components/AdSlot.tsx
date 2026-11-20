@@ -6,6 +6,10 @@ import {
   hasCachedAdsSettingsSync,
   subscribeToAdsSettings
 } from '../services/siteSettingsService';
+import {
+  DEFAULT_ADS_DISPLAY_SETTINGS,
+  normalizeAdsDisplaySettings
+} from '../utils/displaySettingsUtils';
 import { ExternalLink, Sparkles } from 'lucide-react';
 
 interface AdSlotProps {
@@ -87,6 +91,11 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   const outerWrapperRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const appliedCodeSignatureRef = useRef<string>('');
+  const displayRef = useRef(normalizeAdsDisplaySettings(adsSettings.displaySettings));
+  const hasExplicitDisplayRef = useRef(Boolean(adsSettings.displaySettings));
+
+  displayRef.current = normalizeAdsDisplaySettings(adsSettings.displaySettings);
+  hasExplicitDisplayRef.current = Boolean(adsSettings.displaySettings);
 
   useEffect(() => {
     getAdsSettings().then((fresh) => {
@@ -107,13 +116,23 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     ? adsSettings.belowHeaderAd
     : adsSettings.aboveFooterAd;
 
-  // Responsive mobile layout fit for Adsterra banners (320x50, 728x90) & Native Banners
+  // Responsive mobile layout fit & proportional sizing for banner/code embeds (Adscod, Adsterra, HTML)
   const syncResponsiveEmbedLayout = useCallback(() => {
     const outer = outerWrapperRef.current;
     const container = codeContainerRef.current;
     if (!outer || !container) return;
 
-    const availableWidth = outer.clientWidth;
+    // Reset previous scaled dimensions before measuring natural available container width
+    outer.style.width = '';
+    outer.style.marginLeft = '';
+    outer.style.marginRight = '';
+    outer.style.height = '';
+    container.style.width = '';
+    container.style.transformOrigin = '';
+    container.style.transform = '';
+    container.style.margin = '';
+
+    const availableWidth = outer.parentElement?.clientWidth || outer.clientWidth;
     if (availableWidth <= 0) return;
 
     let targetWidth = 0;
@@ -138,31 +157,45 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     }
 
     // Fallback check for wide non-iframe fixed elements injected by ad networks
-    if (targetWidth <= availableWidth) {
-      container.style.transform = '';
-      container.style.width = '';
-      outer.style.height = '';
-      if (container.scrollWidth > availableWidth + 2) {
-        targetWidth = container.scrollWidth;
-        targetHeight = container.scrollHeight;
-      }
+    if (container.scrollWidth > availableWidth + 2 && container.scrollWidth > targetWidth) {
+      targetWidth = container.scrollWidth;
+      targetHeight = Math.max(targetHeight, container.scrollHeight);
     }
 
-    if (targetWidth > availableWidth + 1) {
-      const scale = Math.max(0.25, availableWidth / targetWidth);
-      outer.style.height = '';
-      container.style.width = `${targetWidth}px`;
+    if (targetHeight <= 0) {
+      targetHeight = Math.max(container.scrollHeight, container.offsetHeight);
+    }
+
+    const currentDisplay = displayRef.current;
+    const hasCustomOrExplicitHeight =
+      hasExplicitDisplayRef.current ||
+      currentDisplay.containerHeightPx !== DEFAULT_ADS_DISPLAY_SETTINGS.containerHeightPx;
+    const maxInnerHeight = Math.max(
+      40,
+      currentDisplay.containerHeightPx - currentDisplay.paddingPx * 2 - 28
+    );
+
+    const widthScale = targetWidth > availableWidth + 1 ? availableWidth / targetWidth : 1;
+    const heightScale =
+      hasCustomOrExplicitHeight && targetHeight > maxInnerHeight + 2
+        ? maxInnerHeight / targetHeight
+        : 1;
+    const scale = Math.max(0.25, Math.min(widthScale, heightScale));
+
+    if (scale < 0.999) {
+      const baseWidth = Math.max(targetWidth, container.scrollWidth, availableWidth);
       const measuredHeight = Math.max(targetHeight, container.scrollHeight, container.offsetHeight, 50);
+      container.style.width = `${baseWidth}px`;
       container.style.transformOrigin = 'top left';
       container.style.transform = `scale(${scale})`;
       container.style.margin = '0';
+      const scaledWidth = Math.ceil(baseWidth * scale);
+      if (scaledWidth < availableWidth) {
+        outer.style.width = `${scaledWidth}px`;
+        outer.style.marginLeft = 'auto';
+        outer.style.marginRight = 'auto';
+      }
       outer.style.height = `${Math.ceil(measuredHeight * scale)}px`;
-    } else {
-      container.style.width = '';
-      container.style.transformOrigin = '';
-      container.style.transform = '';
-      container.style.margin = '';
-      outer.style.height = '';
     }
   }, []);
 
@@ -384,6 +417,19 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     syncResponsiveEmbedLayout
   ]);
 
+  // Re-sync code embed scaling whenever admin changes width, maxWidth, height, or spacing settings
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [
+    adsSettings.displaySettings?.containerWidthPercent,
+    adsSettings.displaySettings?.maxWidthPx,
+    adsSettings.displaySettings?.containerHeightPx,
+    adsSettings.displaySettings?.marginX,
+    adsSettings.displaySettings?.paddingPx,
+    syncResponsiveEmbedLayout
+  ]);
+
   // Hold compact below-header slot space during initial cold fetch to minimize layout shift
   if (!isAdsResolved) {
     if (placement === 'below_header') {
@@ -404,67 +450,101 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   }
 
   const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
-  const outerSpacingClasses =
-    placement === 'below_header' ? 'pt-2 pb-1 sm:pt-2.5 sm:pb-1' : 'pt-2 pb-3 sm:pt-3 sm:pb-4';
+  const display = normalizeAdsDisplaySettings(adsSettings.displaySettings);
+  const hasExplicitDisplay = Boolean(adsSettings.displaySettings);
+  const hasCustomHeight =
+    hasExplicitDisplay ||
+    display.containerHeightPx !== DEFAULT_ADS_DISPLAY_SETTINGS.containerHeightPx;
+  const contentMaxHeightPx = Math.max(
+    40,
+    display.containerHeightPx - display.paddingPx * 2 - 28
+  );
 
   return (
     <div
-      className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 ${outerSpacingClasses} transition-all relative z-0 ${className}`}
+      className={`w-full max-w-full min-w-0 px-0 min-[360px]:px-2 sm:px-6 lg:px-8 transition-all relative z-0 ${className}`}
       data-ad-placement={placement}
+      style={{
+        marginTop: `${display.marginY}px`,
+        marginBottom: `${display.marginY}px`
+      }}
     >
-      <div className="bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl px-0 py-1.5 min-[360px]:p-2 sm:px-3 sm:py-2.5 shadow-2xs overflow-hidden relative">
-        {/* Subtle Ad Disclosure Header */}
-        <div className="flex items-center justify-between px-2.5 min-[360px]:px-0 pb-1.5 mb-1.5 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-          <span className="flex items-center space-x-1">
-            <Sparkles className="w-3 h-3 text-amber-500" />
-            <span>{slotConfig.label || placementLabel}</span>
-          </span>
-          <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
-            AD
-          </span>
-        </div>
+      <div
+        data-testid={`ad-slot-sized-${placement}`}
+        className="mx-auto max-w-full min-w-0 transition-all"
+        style={{
+          width: `${display.containerWidthPercent}%`,
+          maxWidth: `${display.maxWidthPx}px`,
+          paddingLeft: display.marginX > 0 ? `clamp(0px, ${display.marginX}px, 12vw)` : undefined,
+          paddingRight: display.marginX > 0 ? `clamp(0px, ${display.marginX}px, 12vw)` : undefined
+        }}
+      >
+        <div
+          data-testid={`ad-slot-card-${placement}`}
+          className="w-full bg-slate-50/80 border-y min-[360px]:border border-slate-200/90 rounded-none min-[360px]:rounded-2xl shadow-2xs overflow-hidden relative flex flex-col"
+          style={{
+            padding: `${display.paddingPx}px`,
+            minHeight: hasCustomHeight ? `${display.containerHeightPx}px` : undefined
+          }}
+        >
+          {/* Subtle Ad Disclosure Header */}
+          <div className="shrink-0 flex items-center justify-between px-2.5 min-[360px]:px-0 pb-1.5 mb-1.5 border-b border-slate-200/60 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+            <span className="flex items-center space-x-1">
+              <Sparkles className="w-3 h-3 text-amber-500" />
+              <span>{slotConfig.label || placementLabel}</span>
+            </span>
+            <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+              AD
+            </span>
+          </div>
 
-        {/* Ad Format 1: Banner Image with Link */}
-        {slotConfig.type === 'banner' && slotConfig.imageUrl && (
-          <div className="flex justify-center items-center w-full px-2.5 min-[360px]:px-0">
-            {slotConfig.linkUrl ? (
-              <a
-                href={slotConfig.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                className="block group relative overflow-hidden rounded-xl max-h-[180px] sm:max-h-[220px] w-full transition-transform hover:scale-[1.005]"
-              >
+          {/* Ad Format 1: Banner Image with Link */}
+          {slotConfig.type === 'banner' && slotConfig.imageUrl && (
+            <div className="flex-1 flex justify-center items-center w-full min-w-0 px-2.5 min-[360px]:px-0">
+              {slotConfig.linkUrl ? (
+                <a
+                  href={slotConfig.linkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer sponsored"
+                  className="inline-flex items-center justify-center max-w-full group relative overflow-hidden rounded-xl transition-transform hover:scale-[1.005]"
+                  style={{ maxHeight: `${contentMaxHeightPx}px` }}
+                >
+                  <img
+                    src={slotConfig.imageUrl}
+                    alt={slotConfig.altText || 'Sponsor Banner'}
+                    className="w-auto max-w-full h-auto object-contain mx-auto rounded-xl"
+                    style={{ maxHeight: `${contentMaxHeightPx}px` }}
+                    loading="lazy"
+                  />
+                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-0.5 rounded flex items-center space-x-1">
+                    <span>Visit Sponsor</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </div>
+                </a>
+              ) : (
                 <img
                   src={slotConfig.imageUrl}
                   alt={slotConfig.altText || 'Sponsor Banner'}
-                  className="w-full h-auto max-h-[180px] sm:max-h-[220px] object-contain mx-auto rounded-xl"
+                  className="w-auto max-w-full h-auto object-contain mx-auto rounded-xl"
+                  style={{ maxHeight: `${contentMaxHeightPx}px` }}
                   loading="lazy"
                 />
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-0.5 rounded flex items-center space-x-1">
-                  <span>Visit Sponsor</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </div>
-              </a>
-            ) : (
-              <img
-                src={slotConfig.imageUrl}
-                alt={slotConfig.altText || 'Sponsor Banner'}
-                className="w-full h-auto max-h-[180px] sm:max-h-[220px] object-contain mx-auto rounded-xl"
-                loading="lazy"
-              />
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* Ad Format 2: Custom Script / Embed Code (Responsive block wrapper prevents 0px mobile flex collapse) */}
-        {slotConfig.type === 'code' && (
-          <div ref={outerWrapperRef} className="ad-slot-wrapper w-full min-w-0 min-h-[50px] overflow-hidden">
-            <div
-              ref={codeContainerRef}
-              className="ad-slot-content block w-full min-w-0 min-h-[50px] text-xs text-slate-700 text-center"
-            />
-          </div>
-        )}
+          {/* Ad Format 2: Custom Script / Embed Code (Responsive block wrapper prevents 0px mobile flex collapse) */}
+          {slotConfig.type === 'code' && (
+            <div className="flex-1 flex items-center justify-center w-full min-w-0">
+              <div ref={outerWrapperRef} className="ad-slot-wrapper w-full min-w-0 min-h-[50px] overflow-hidden">
+                <div
+                  ref={codeContainerRef}
+                  className="ad-slot-content block w-full min-w-0 min-h-[50px] text-xs text-slate-700 text-center"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

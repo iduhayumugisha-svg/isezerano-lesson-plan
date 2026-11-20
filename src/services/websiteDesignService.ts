@@ -6,10 +6,12 @@ import {
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
   NavigationMenuItem,
-  WebsiteDesignVersion
+  WebsiteDesignVersion,
+  MiniShopDisplaySettings
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings, resolveAllNewsLabel } from '../utils/categoryStyleUtils';
+import { normalizeMiniShopDisplaySettings } from '../utils/displaySettingsUtils';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -174,6 +176,7 @@ export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
         homepageSections: parsed.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: normalizeNavigationMenus(parsed.navigationMenus),
         whatsappContact: normalizeWhatsAppSettings(parsed.whatsappContact),
+        miniShopDisplay: normalizeMiniShopDisplaySettings(parsed.miniShopDisplay),
         versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
@@ -211,7 +214,7 @@ const DESIGN_PUBLIC_REST_URL =
   '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=typography' +
   '&mask.fieldPaths=logo&mask.fieldPaths=categoryNav&mask.fieldPaths=homepageSections' +
   '&mask.fieldPaths=navigationMenus&mask.fieldPaths=whatsappContact' +
-  '&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
+  '&mask.fieldPaths=miniShopDisplay&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
 
 const normalizeWebsiteDesignPayload = (
   data: Partial<WebsiteDesignSettings>,
@@ -229,6 +232,7 @@ const normalizeWebsiteDesignPayload = (
   homepageSections: data.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
   navigationMenus: normalizeNavigationMenus(data.navigationMenus),
   whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
+  miniShopDisplay: normalizeMiniShopDisplaySettings(data.miniShopDisplay),
   versionHistory: data.versionHistory || fallbackHistory,
   updatedAt: data.updatedAt || new Date().toISOString(),
   updatedBy: data.updatedBy || 'admin'
@@ -251,7 +255,7 @@ export const getPublicWebsiteDesignSettings = async (): Promise<WebsiteDesignSet
 
   if (typeof fetch === 'function') {
     try {
-      const res = await fetch(DESIGN_PUBLIC_REST_URL, { method: 'GET' });
+      const res = await fetch(DESIGN_PUBLIC_REST_URL, { method: 'GET', cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json?.fields) {
@@ -263,13 +267,6 @@ export const getPublicWebsiteDesignSettings = async (): Promise<WebsiteDesignSet
             parsed as Partial<WebsiteDesignSettings>,
             localData?.versionHistory || []
           );
-          if (localData?.updatedAt && remoteMerged.updatedAt) {
-            const localTime = new Date(localData.updatedAt).getTime();
-            const remoteTime = new Date(remoteMerged.updatedAt).getTime();
-            if (localTime > remoteTime) {
-              return localData;
-            }
-          }
           try {
             localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(remoteMerged));
           } catch {
@@ -288,7 +285,7 @@ export const getPublicWebsiteDesignSettings = async (): Promise<WebsiteDesignSet
 
 /**
  * Fetch published website appearance, typography, menus & layout settings.
- * Checks local cache and Cloud Firestore, keeping whichever revision is newer.
+ * Prefers Cloud Firestore when reachable and falls back to local cache only when offline.
  */
 export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings> => {
   let localData: WebsiteDesignSettings | null = null;
@@ -309,15 +306,6 @@ export const getWebsiteDesignSettings = async (): Promise<WebsiteDesignSettings>
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
         const remoteMerged = normalizeWebsiteDesignPayload(data);
-
-        // If local cache has newer saved changes than cloud document, prioritize local cache
-        if (localData && localData.updatedAt && remoteMerged.updatedAt) {
-          const localTime = new Date(localData.updatedAt).getTime();
-          const remoteTime = new Date(remoteMerged.updatedAt).getTime();
-          if (localTime > remoteTime) {
-            return localData;
-          }
-        }
 
         try {
           localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(remoteMerged));
@@ -351,23 +339,6 @@ export const subscribeToWebsiteDesign = (
       if (snap.exists()) {
         const data = snap.data() as Partial<WebsiteDesignSettings>;
         const merged = normalizeWebsiteDesignPayload(data, data.versionHistory || []);
-        // Prevent stale remote snapshot from overwriting newer locally saved settings
-        try {
-          const localRaw = localStorage.getItem(DESIGN_STORAGE_KEY);
-          if (localRaw) {
-            const localData = JSON.parse(localRaw);
-            if (localData?.updatedAt && merged.updatedAt) {
-              const localTime = new Date(localData.updatedAt).getTime();
-              const remoteTime = new Date(merged.updatedAt).getTime();
-              if (localTime > remoteTime) {
-                // Local version is newer than the remote snapshot, do not overwrite
-                return;
-              }
-            }
-          }
-        } catch {
-          // ignore cache parse error
-        }
 
         try {
           localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(merged));
@@ -412,6 +383,7 @@ export const saveWebsiteDesignSettings = async (
       settings.navigationMenus ? JSON.parse(JSON.stringify(settings.navigationMenus)) : undefined
     ),
     whatsappContact: normalizeWhatsAppSettings(settings.whatsappContact),
+    miniShopDisplay: normalizeMiniShopDisplaySettings(settings.miniShopDisplay),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
   };
@@ -425,24 +397,47 @@ export const saveWebsiteDesignSettings = async (
     snapshot: newSnapshot
   };
 
-  // Keep last 15 versions to stay well within Firestore's 1MB document limit
+  // Keep history well under Firestore's 1 MiB document size limit by pruning oversized snapshots
   const existingHistory = Array.isArray(settings.versionHistory) ? settings.versionHistory : [];
-  const updatedHistory = [newVersion, ...existingHistory].slice(0, 15);
+  let updatedHistory = [newVersion, ...existingHistory].slice(0, 10);
 
-  const payload: WebsiteDesignSettings = stripUndefinedDeep({
-    ...settings,
-    branding: rawSnapshot.branding,
-    categoryNav: rawSnapshot.categoryNav,
-    versionHistory: updatedHistory,
-    updatedAt: new Date().toISOString(),
-    updatedBy: adminUid
-  });
+  const buildPayload = (historySlice: WebsiteDesignVersion[]): WebsiteDesignSettings =>
+    stripUndefinedDeep({
+      ...settings,
+      branding: rawSnapshot.branding,
+      categoryNav: rawSnapshot.categoryNav,
+      miniShopDisplay: rawSnapshot.miniShopDisplay,
+      versionHistory: historySlice,
+      updatedAt: new Date().toISOString(),
+      updatedBy: adminUid
+    });
 
-  // Update local cache
+  let payload = buildPayload(updatedHistory);
   try {
-    localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(payload));
-  } catch (err) {
-    console.error('Failed to save design settings locally:', err);
+    // Strip large embedded data-URI logos from older history snapshots first if needed
+    if (JSON.stringify(payload).length > 680_000) {
+      updatedHistory = updatedHistory.map((ver, idx) => {
+        if (idx === 0) return ver;
+        const logoUrl = ver?.snapshot?.logo?.logoUrl;
+        if (typeof logoUrl === 'string' && logoUrl.startsWith('data:') && logoUrl.length > 4096) {
+          return {
+            ...ver,
+            snapshot: {
+              ...ver.snapshot,
+              logo: { ...ver.snapshot.logo, logoUrl: '' }
+            }
+          };
+        }
+        return ver;
+      });
+      payload = buildPayload(updatedHistory);
+    }
+    while (updatedHistory.length > 1 && JSON.stringify(payload).length > 720_000) {
+      updatedHistory = updatedHistory.slice(0, updatedHistory.length - 1);
+      payload = buildPayload(updatedHistory);
+    }
+  } catch {
+    // ignore size-estimation failure
   }
 
   // Apply CSS variables to active document immediately
@@ -463,6 +458,12 @@ export const saveWebsiteDesignSettings = async (
 
       const docRef = doc(db, 'appSettings', 'website_design');
       await setDoc(docRef, payload, { merge: true });
+
+      try {
+        localStorage.setItem(DESIGN_STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.error('Failed to save design settings locally:', err);
+      }
 
       // Sync lightweight site branding/logo metadata to siteSettings/branding when valid
       if (typeof payload.logo?.logoUrl === 'string' && payload.logo.logoUrl.length <= 680000) {
@@ -507,6 +508,78 @@ export const saveWebsiteDesignSettings = async (
 };
 
 /**
+ * Lightweight Mini Shop display-size update writing only `miniShopDisplay`, `updatedAt`, and
+ * `updatedBy` via Firestore merge. Avoids duplicating large versionHistory snapshots near the 1 MiB limit.
+ */
+export const saveMiniShopDisplayToFirestore = async (
+  miniShopDisplay: MiniShopDisplaySettings,
+  adminUid: string
+): Promise<{ success: boolean; normalized: MiniShopDisplaySettings; updatedAt: string; error?: string; code?: string }> => {
+  const normalized = normalizeMiniShopDisplaySettings(miniShopDisplay);
+  const updatedAt = new Date().toISOString();
+
+  const db = initFirestoreIfConfigured();
+  if (!db) {
+    return {
+      success: false,
+      normalized,
+      updatedAt,
+      code: 'firestore/not-configured',
+      error: 'Cloud Firestore is not configured.'
+    };
+  }
+
+  try {
+    const auth = getAuth();
+    const currentEmail = auth?.currentUser?.email;
+    if (!auth?.currentUser || !isAuthorizedAdminEmail(currentEmail)) {
+      return {
+        success: false,
+        normalized,
+        updatedAt,
+        code: 'permission-denied',
+        error: `Administrator sign-in required. Active account: ${currentEmail || 'Not signed in'}. Authorized admin is twizerefelix90@gmail.com.`
+      };
+    }
+
+    const docRef = doc(db, 'appSettings', 'website_design');
+    await setDoc(
+      docRef,
+      stripUndefinedDeep({
+        miniShopDisplay: normalized,
+        updatedAt,
+        updatedBy: currentEmail || adminUid
+      }),
+      { merge: true }
+    );
+
+    try {
+      const existing = getCachedWebsiteDesignSettingsSync();
+      localStorage.setItem(
+        DESIGN_STORAGE_KEY,
+        JSON.stringify({
+          ...existing,
+          miniShopDisplay: normalized,
+          updatedAt,
+          updatedBy: currentEmail || adminUid
+        })
+      );
+    } catch {
+      // ignore localStorage errors
+    }
+
+    return { success: true, normalized, updatedAt };
+  } catch (err: any) {
+    const code = err?.code || 'unknown';
+    const message =
+      code === 'permission-denied'
+        ? `Missing or insufficient permissions for 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com.`
+        : err?.message || 'Failed to save Mini Shop display settings to Cloud Firestore.';
+    return { success: false, normalized, updatedAt, error: message, code };
+  }
+};
+
+/**
  * Restores a previously saved version snapshot as the active published website configuration.
  */
 export const restoreWebsiteDesignVersion = async (
@@ -518,6 +591,7 @@ export const restoreWebsiteDesignVersion = async (
     const restored: WebsiteDesignSettings = {
       ...version.snapshot,
       whatsappContact: normalizeWhatsAppSettings(version.snapshot.whatsappContact),
+      miniShopDisplay: normalizeMiniShopDisplaySettings(version.snapshot.miniShopDisplay),
       versionHistory: currentSettings.versionHistory || [],
       updatedAt: new Date().toISOString(),
       updatedBy: adminUid

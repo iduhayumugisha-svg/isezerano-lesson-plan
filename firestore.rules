@@ -172,7 +172,7 @@ service cloud.firestore {
     }
 
     function hasOnlyPublicCommentFields(data) {
-      return data.keys().hasAll([
+      return data.keys().hasOnly([
                'postId',
                'parentId',
                'replyToName',
@@ -184,7 +184,12 @@ service cloud.firestore {
                'edited',
                'publicSafe'
              ]) &&
-             data.keys().hasOnly([
+             data.publicSafe == true;
+    }
+
+    function hasRequiredPublicCommentFields(data) {
+      return hasOnlyPublicCommentFields(data) &&
+             data.keys().hasAll([
                'postId',
                'parentId',
                'replyToName',
@@ -196,12 +201,11 @@ service cloud.firestore {
                'edited',
                'publicSafe'
              ]) &&
-             data.publicSafe == true &&
              hasNoPrivateCommentFields(data);
     }
 
     function isValidPublicCommentCreate(data) {
-      return hasOnlyPublicCommentFields(data) &&
+      return hasRequiredPublicCommentFields(data) &&
              data.postId is string &&
              data.postId.size() > 0 &&
              data.postId.size() <= 120 &&
@@ -240,16 +244,35 @@ service cloud.firestore {
              data.edited == false;
     }
 
-    function hasValidCommentVerifier(commentId, verifier) {
+    function sha256LowerHex(value) {
+      return hashing.sha256(value.toUtf8()).toHexString().lower();
+    }
+
+    function hasValidCommentVerifier(commentId, verifier, commentData, syncedAt) {
       return verifier is string &&
-             verifier.size() >= 37 &&
-             verifier.size() <= 180 &&
-             verifier.matches('^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_\\-]{4,40}$') &&
-             exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(verifier.split(':')[0]));
+             verifier.size() >= 97 &&
+             verifier.size() <= 193 &&
+             verifier.matches('^[a-fA-F0-9]{32,128}:[a-f0-9]{64}$') &&
+             verifier.split(':').size() == 2 &&
+             syncedAt is string &&
+             syncedAt.size() >= 10 &&
+             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash ==
+               sha256LowerHex(verifier.split(':')[0]) &&
+             exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))) &&
+             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.tokenHash ==
+               sha256LowerHex(verifier.split(':')[0]) &&
+             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.postId ==
+               commentData.postId &&
+             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.createdAt ==
+               commentData.createdAt &&
+             verifier.split(':')[1] ==
+               sha256LowerHex(
+                 verifier.split(':')[0] + ':' + commentData.postId + ':' + commentData.createdAt + ':' + syncedAt
+               );
     }
 
     function isValidPublicCommentOwnerEdit(data, existingData, commentId) {
-      return hasOnlyPublicCommentFields(data) &&
+      return hasRequiredPublicCommentFields(data) &&
              data.diff(existingData).affectedKeys().hasOnly(['content', 'updatedAt', 'edited']) &&
              data.content is string &&
              data.content.size() >= 2 &&
@@ -262,47 +285,63 @@ service cloud.firestore {
              existingData.status in ['published', 'approved'] &&
              existingData.publicSafe == true &&
              exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
+               existingData.postId &&
              get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
                getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
+             getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=
+               get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier &&
              getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt ==
-               data.updatedAt;
+               data.updatedAt &&
+             hasValidCommentVerifier(
+               commentId,
+               getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier,
+               existingData,
+               data.updatedAt
+             );
     }
 
     match /comments/{commentId} {
       // Public visitors can ONLY read comments/replies that:
       // 1) are published (or legacy approved),
       // 2) carry the rule-enforced `publicSafe == true` schema guarantee, and
-      // 3) contain ONLY the 10 approved public fields (verified on get, guaranteed by write rules for publicSafe docs).
+      // 3) contain ONLY the 10 approved public fields.
       allow get: if isAdmin() || (
         resource != null &&
         resource.data.status in ['published', 'approved'] &&
-        hasOnlyPublicCommentFields(resource.data)
+        hasRequiredPublicCommentFields(resource.data)
       );
-      // Firestore list queries cannot prove document key allowlists from query filters.
-      // publicSafe is therefore the queryable invariant; every create/update setting it true
-      // is separately required to pass hasOnlyPublicCommentFields().
       allow list: if isAdmin() || (
         resource.data.status in ['published', 'approved'] &&
-        resource.data.publicSafe == true
+        hasOnlyPublicCommentFields(resource.data)
       );
 
-      // Instant public comment/reply submission paired atomically with private ownership lock.
+      // Instant public comment/reply submission paired atomically with BOTH /private/ownership AND /tokens/{tokenHash}.
       // Even Admin writes cannot mark a document `publicSafe: true` if any private field is present.
       allow create: if (
         isAdmin() &&
-        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasOnlyPublicCommentFields(request.resource.data))
+        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasRequiredPublicCommentFields(request.resource.data))
       ) || (
         isValidCommentId(commentId) &&
         isValidPublicCommentCreate(request.resource.data) &&
         !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership)
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash is string &&
+        getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash.matches('^[a-f0-9]{64}$') &&
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)) &&
+        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.tokenHash ==
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash &&
+        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.postId ==
+          request.resource.data.postId &&
+        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.createdAt ==
+          request.resource.data.createdAt
       );
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) can edit ONLY content/updatedAt/edited;
       // Admin can moderate (hide/publish/reject) or edit any comment.
       allow update: if (
         isAdmin() &&
-        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasOnlyPublicCommentFields(request.resource.data))
+        (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasRequiredPublicCommentFields(request.resource.data))
       ) || isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId);
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) or Admin can delete comments.
@@ -310,29 +349,51 @@ service cloud.firestore {
         resource != null &&
         resource.data.status in ['published', 'approved'] &&
         exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
+          resource.data.postId &&
         get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
           getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
         get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier &&
+        hasValidCommentVerifier(
+          commentId,
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier,
+          resource.data,
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt
+        )
       );
 
-      // Cryptographic ownership tokens (Admin-only read/list/update/delete; public create ONLY atomically with a new comment)
+      // Cryptographic ownership tokens (Admin-only read/list/update/delete; public create ONLY atomically with a new comment & ownership)
       match /tokens/{tokenId} {
         allow read, update, delete: if isAdmin();
         allow create: if isAdmin() || (
           isValidCommentId(tokenId) &&
-          tokenId.size() >= 32 &&
-          tokenId.matches('^[a-fA-F0-9]{32,128}$') &&
-          request.resource.data.keys().hasAll(['postId', 'createdAt']) &&
-          request.resource.data.keys().hasOnly(['postId', 'createdAt']) &&
+          tokenId.size() == 64 &&
+          tokenId.matches('^[a-f0-9]{64}$') &&
+          request.resource.data.keys().hasAll(['tokenHash', 'postId', 'createdAt']) &&
+          request.resource.data.keys().hasOnly(['tokenHash', 'postId', 'createdAt']) &&
+          request.resource.data.tokenHash == tokenId &&
           request.resource.data.postId is string &&
           request.resource.data.postId.size() > 0 &&
           request.resource.data.postId.size() <= 120 &&
           request.resource.data.createdAt is string &&
+          request.resource.data.createdAt.size() >= 10 &&
           request.resource.data.createdAt.size() <= 60 &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
           !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId))
+          !exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(tokenId)) &&
+          existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
+          existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId ==
+            request.resource.data.postId &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.createdAt ==
+            request.resource.data.createdAt &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash ==
+            tokenId &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
+            request.resource.data.postId &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.createdAt ==
+            request.resource.data.createdAt
         );
       }
 
@@ -341,12 +402,15 @@ service cloud.firestore {
         allow read, delete: if isAdmin();
         allow create: if isAdmin() || (
           ownershipId == 'ownership' &&
-          request.resource.data.keys().hasAll(['postId', 'createdAt', 'lastSyncedAt', 'verifier']) &&
-          request.resource.data.keys().hasOnly(['postId', 'createdAt', 'lastSyncedAt', 'verifier', 'email']) &&
+          request.resource.data.keys().hasAll(['tokenHash', 'postId', 'createdAt', 'lastSyncedAt', 'verifier']) &&
+          request.resource.data.keys().hasOnly(['tokenHash', 'postId', 'createdAt', 'lastSyncedAt', 'verifier', 'email']) &&
+          request.resource.data.tokenHash is string &&
+          request.resource.data.tokenHash.matches('^[a-f0-9]{64}$') &&
           request.resource.data.postId is string &&
           request.resource.data.postId.size() > 0 &&
           request.resource.data.postId.size() <= 120 &&
           request.resource.data.createdAt is string &&
+          request.resource.data.createdAt.size() >= 10 &&
           request.resource.data.createdAt.size() <= 60 &&
           request.resource.data.lastSyncedAt == request.resource.data.createdAt &&
           request.resource.data.verifier == '' &&
@@ -356,21 +420,39 @@ service cloud.firestore {
           )) &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
           existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId == request.resource.data.postId
+          existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)) &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId ==
+            request.resource.data.postId &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.createdAt ==
+            request.resource.data.createdAt &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.tokenHash ==
+            request.resource.data.tokenHash &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.postId ==
+            request.resource.data.postId &&
+          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.createdAt ==
+            request.resource.data.createdAt
         );
         allow update: if isAdmin() || (
           ownershipId == 'ownership' &&
           exists(/databases/$(database)/documents/comments/$(commentId)) &&
+          resource.data.postId == get(/databases/$(database)/documents/comments/$(commentId)).data.postId &&
+          resource.data.createdAt == get(/databases/$(database)/documents/comments/$(commentId)).data.createdAt &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifier', 'lastSyncedAt']) &&
           request.resource.data.verifier != resource.data.verifier &&
           request.resource.data.lastSyncedAt is string &&
           request.resource.data.lastSyncedAt.size() >= 10 &&
           request.resource.data.lastSyncedAt.size() <= 80 &&
           request.resource.data.lastSyncedAt != resource.data.lastSyncedAt &&
-          hasValidCommentVerifier(commentId, request.resource.data.verifier) &&
+          hasValidCommentVerifier(
+            commentId,
+            request.resource.data.verifier,
+            get(/databases/$(database)/documents/comments/$(commentId)).data,
+            request.resource.data.lastSyncedAt
+          ) &&
           (
             (!existsAfter(/databases/$(database)/documents/comments/$(commentId))) ||
-            getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt == request.resource.data.lastSyncedAt
+            getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt ==
+              request.resource.data.lastSyncedAt
           )
         );
       }
@@ -414,18 +496,7 @@ service cloud.firestore {
     // - Inactive or un-migrated products with extra fields are blocked from public reads.
     // ==============================================================
     function hasOnlyMiniShopPublicFields(data) {
-      return data.keys().hasAll([
-               'id',
-               'title',
-               'description',
-               'imageUrl',
-               'active',
-               'displayOrder',
-               'createdAt',
-               'updatedAt',
-               'publicSafe'
-             ]) &&
-             data.keys().hasOnly([
+      return data.keys().hasOnly([
                'id',
                'title',
                'description',
@@ -443,8 +514,23 @@ service cloud.firestore {
              data.publicSafe == true;
     }
 
-    function isValidMiniShopProductWrite(data) {
+    function hasRequiredMiniShopPublicFields(data) {
       return hasOnlyMiniShopPublicFields(data) &&
+             data.keys().hasAll([
+               'id',
+               'title',
+               'description',
+               'imageUrl',
+               'active',
+               'displayOrder',
+               'createdAt',
+               'updatedAt',
+               'publicSafe'
+             ]);
+    }
+
+    function isValidMiniShopProductWrite(data) {
+      return hasRequiredMiniShopPublicFields(data) &&
              data.id is string &&
              data.id.size() > 0 &&
              data.id.size() <= 128 &&
@@ -477,17 +563,13 @@ service cloud.firestore {
       allow get: if isAdmin() || (
         resource != null &&
         resource.data.active == true &&
-        hasOnlyMiniShopPublicFields(resource.data)
+        hasRequiredMiniShopPublicFields(resource.data)
       );
-      // publicSafe is the queryable invariant for list queries; all writes setting it true
-      // must pass isValidMiniShopProductWrite() and the strict public-field allowlist.
       allow list: if isAdmin() || (
         resource.data.active == true &&
-        resource.data.publicSafe == true
+        hasOnlyMiniShopPublicFields(resource.data)
       );
-      allow create, update: if isAdmin() &&
-        request.resource.data.id == productId &&
-        isValidMiniShopProductWrite(request.resource.data);
+      allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);
       allow delete: if isAdmin();
 
       // Admin-only private seller metadata, costs, supplier contacts, or internal notes

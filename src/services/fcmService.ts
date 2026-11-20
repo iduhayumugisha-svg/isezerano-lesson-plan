@@ -201,8 +201,16 @@ export const getActiveVapidKey = async (): Promise<string> => {
     const envVapid = (import.meta as any).env?.VITE_FIREBASE_VAPID_KEY;
     if (envVapid && envVapid.trim()) return envVapid.trim();
 
+    const auth = getFirebaseAuth();
+    const currentUser = auth?.currentUser;
+    const isVerifiedAdmin =
+      Boolean(currentUser) &&
+      !currentUser?.isAnonymous &&
+      currentUser?.emailVerified === true &&
+      (currentUser?.email || '').trim().toLowerCase() === 'twizerefelix90@gmail.com';
+
     const db = initFirestoreIfConfigured();
-    if (db) {
+    if (db && isVerifiedAdmin) {
       const snap = await getDoc(doc(db, COLLECTIONS.APP_SETTINGS, FCM_CONFIG_DOC));
       if (snap.exists() && snap.data().vapidKey) {
         return snap.data().vapidKey.trim();

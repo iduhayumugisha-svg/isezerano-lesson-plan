@@ -18,6 +18,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { sha256Hex, buildCommentOwnershipVerifier } from '../src/services/commentService';
 
 interface AuthContext {
   uid?: string;
@@ -187,7 +189,8 @@ class FirestoreRulesEngine {
     commentId: string,
     commentData: any,
     ownershipData?: any,
-    tokenId?: string
+    rawToken?: string,
+    includeTokenDoc: boolean = true
   ): boolean {
     if (this.isAdmin(auth)) {
       this.setDoc(`comments/${commentId}`, commentData);
@@ -198,15 +201,23 @@ class FirestoreRulesEngine {
     if (this.getDoc(`comments/${commentId}`) || this.getDoc(`comments/${commentId}/private/ownership`)) {
       return false;
     }
-    if (!ownershipData || !tokenId || !/^[a-fA-F0-9]{32,128}$/.test(tokenId)) return false;
+    if (!ownershipData || !rawToken || !/^[a-fA-F0-9]{32,128}$/.test(rawToken)) return false;
+    if (!includeTokenDoc) return false;
+    const tokenHash = crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
+    if (typeof ownershipData.tokenHash !== 'string' || !/^[a-f0-9]{64}$/.test(ownershipData.tokenHash)) {
+      return false;
+    }
+    if (ownershipData.tokenHash !== tokenHash) return false;
     if (ownershipData.postId !== commentData.postId) return false;
+    if (ownershipData.createdAt !== commentData.createdAt) return false;
     if (ownershipData.lastSyncedAt !== ownershipData.createdAt || ownershipData.verifier !== '') return false;
     if ('email' in ownershipData && (typeof ownershipData.email !== 'string' || ownershipData.email.length > 160)) {
       return false;
     }
 
     this.setDoc(`comments/${commentId}`, commentData);
-    this.setDoc(`comments/${commentId}/tokens/${tokenId}`, {
+    this.setDoc(`comments/${commentId}/tokens/${tokenHash}`, {
+      tokenHash,
       postId: commentData.postId,
       createdAt: commentData.createdAt
     });
@@ -218,6 +229,33 @@ class FirestoreRulesEngine {
     if (this.isAdmin(auth)) return true;
     // Rule requires !exists(comments/$(commentId)) so attaching a token to an existing comment fails
     return !this.getDoc(`comments/${commentId}`);
+  }
+
+  private hasValidVerifier(
+    commentId: string,
+    verifier: unknown,
+    commentData: any,
+    syncedAt: unknown
+  ): boolean {
+    if (typeof verifier !== 'string' || !/^[a-fA-F0-9]{32,128}:[a-f0-9]{64}$/.test(verifier)) {
+      return false;
+    }
+    if (typeof syncedAt !== 'string' || syncedAt.length < 10) return false;
+    const [rawToken, proof] = verifier.split(':');
+    const tokenHash = crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
+    const ownDoc = this.getDoc(`comments/${commentId}/private/ownership`);
+    if (!ownDoc || ownDoc.tokenHash !== tokenHash) return false;
+    const tokenDoc = this.getDoc(`comments/${commentId}/tokens/${tokenHash}`);
+    if (!tokenDoc) return false;
+    if (tokenDoc.tokenHash !== tokenHash) return false;
+    if (tokenDoc.postId !== commentData.postId || tokenDoc.createdAt !== commentData.createdAt) {
+      return false;
+    }
+    const expectedProof = crypto
+      .createHash('sha256')
+      .update(`${rawToken}:${commentData.postId}:${commentData.createdAt}:${syncedAt}`, 'utf8')
+      .digest('hex');
+    return proof === expectedProof;
   }
 
   public canEditCommentBatch(
@@ -235,12 +273,7 @@ class FirestoreRulesEngine {
 
     const own = this.getDoc(`comments/${commentId}/private/ownership`);
     if (!own) return false;
-    if (typeof verifier !== 'string' || !/^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_-]{4,40}$/.test(verifier)) {
-      return false;
-    }
     if (verifier === own.verifier) return false;
-    const tokenKey = verifier.split(':')[0];
-    if (!this.getDoc(`comments/${commentId}/tokens/${tokenKey}`)) return false;
 
     const allKeys = new Set([...Object.keys(existing), ...Object.keys(nextCommentData)]);
     const changedKeys = Array.from(allKeys).filter(
@@ -258,11 +291,15 @@ class FirestoreRulesEngine {
     if (nextCommentData.edited !== true) return false;
     if (
       typeof nextCommentData.updatedAt !== 'string' ||
-      nextCommentData.updatedAt === existing.updatedAt
+      nextCommentData.updatedAt === existing.updatedAt ||
+      nextCommentData.updatedAt === own.lastSyncedAt
     ) {
       return false;
     }
     if (!(existing.status === 'published' || existing.status === 'approved')) return false;
+    if (!this.hasValidVerifier(commentId, verifier, existing, nextCommentData.updatedAt)) {
+      return false;
+    }
 
     this.setDoc(`comments/${commentId}`, nextCommentData);
     this.setDoc(`comments/${commentId}/private/ownership`, {
@@ -288,15 +325,13 @@ class FirestoreRulesEngine {
 
     const own = this.getDoc(`comments/${commentId}/private/ownership`);
     if (!own) return false;
-    if (typeof verifier !== 'string' || !/^[a-fA-F0-9]{32,128}:[a-zA-Z0-9_-]{4,40}$/.test(verifier)) {
-      return false;
-    }
     if (verifier === own.verifier) return false;
     if (typeof deleteMarker !== 'string' || deleteMarker.length < 10 || deleteMarker === own.lastSyncedAt) {
       return false;
     }
-    const tokenKey = verifier.split(':')[0];
-    if (!this.getDoc(`comments/${commentId}/tokens/${tokenKey}`)) return false;
+    if (!this.hasValidVerifier(commentId, verifier, existing, deleteMarker)) {
+      return false;
+    }
 
     this.setDoc(`comments/${commentId}/private/ownership`, {
       ...own,
@@ -563,6 +598,7 @@ export function runSecurityAuditTests() {
   assert('Admin CAN read hidden/pending/rejected/private comments', engine.canReadComment(admin, 'comment-hidden') && engine.canReadComment(admin, 'comment-pending'));
 
   const aliceToken = 'a1b2c3d4e5f678901234567890abcdef1234567890abcdef';
+  const aliceTokenHash = sha256Hex(aliceToken);
   const aliceTs = '2026-11-18T08:00:00.000Z';
   const aliceComment = {
     postId: 'post-1',
@@ -584,6 +620,7 @@ export function runSecurityAuditTests() {
       'comment_alice_1',
       aliceComment,
       {
+        tokenHash: aliceTokenHash,
         postId: 'post-1',
         createdAt: aliceTs,
         lastSyncedAt: aliceTs,
@@ -598,6 +635,7 @@ export function runSecurityAuditTests() {
   assert('Admin CAN inspect private subcollections when needed', engine.canReadPrivateCommentSubdoc(admin));
 
   const bobToken = 'b1c2d3e4f5a678901234567890abcdef1234567890abcdef';
+  const bobTokenHash = sha256Hex(bobToken);
   const bobTs = '2026-11-18T08:05:00.000Z';
   assert(
     'Public visitor CAN publish instant reply referencing parentId and replyToName',
@@ -617,6 +655,7 @@ export function runSecurityAuditTests() {
         publicSafe: true
       },
       {
+        tokenHash: bobTokenHash,
         postId: 'post-1',
         createdAt: bobTs,
         lastSyncedAt: bobTs,
@@ -633,7 +672,7 @@ export function runSecurityAuditTests() {
       null,
       'comment_leak',
       { ...aliceComment, email: 'leak@example.com' },
-      { postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+      { tokenHash: aliceTokenHash, postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
       aliceToken
     )
   );
@@ -642,14 +681,45 @@ export function runSecurityAuditTests() {
     !engine.canCreateCommentBatch(null, 'comment_no_own', aliceComment, undefined, undefined)
   );
   assert(
+    'Public visitor CANNOT create comment without /tokens/{tokenHash} document or with mismatched tokenHash',
+    !engine.canCreateCommentBatch(
+      null,
+      'comment_no_token_doc',
+      aliceComment,
+      { tokenHash: aliceTokenHash, postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+      aliceToken,
+      false
+    ) &&
+      !engine.canCreateCommentBatch(
+        null,
+        'comment_mismatch_tokenhash',
+        aliceComment,
+        { tokenHash: bobTokenHash, postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+        aliceToken,
+        true
+      )
+  );
+  assert(
     'Public visitor CANNOT attach forged token onto existing legacy comment',
     !engine.canForgeTokenOnExistingComment(null, 'comment-approved-clean')
   );
 
-  // Author edits own comment
-  const aliceEditTs = '2026-11-18T08:10:00.000Z';
+  // Verify commentService.ts SHA-256 matches Node crypto
   assert(
-    'Original author WITH secret ownerToken CAN edit own comment content & edited flag',
+    'commentService.ts sha256Hex matches Node crypto SHA-256 bit-for-bit',
+    sha256Hex(aliceToken) === crypto.createHash('sha256').update(aliceToken, 'utf8').digest('hex')
+  );
+
+  // Author edits own comment using cryptographic proof
+  const aliceEditTs = '2026-11-18T08:10:00.000Z';
+  const validAliceEditVerifier = buildCommentOwnershipVerifier({
+    ownerToken: aliceToken,
+    postId: 'post-1',
+    createdAt: aliceTs,
+    syncedAt: aliceEditTs
+  });
+  assert(
+    'Original author WITH cryptographic ownerToken+proof CAN edit own comment content & edited flag',
     engine.canEditCommentBatch(
       null,
       'comment_alice_1',
@@ -659,7 +729,21 @@ export function runSecurityAuditTests() {
         updatedAt: aliceEditTs,
         edited: true
       },
-      `${aliceToken}:n1a2b3`
+      validAliceEditVerifier
+    )
+  );
+  assert(
+    'Fake or unhashed actionProof part in verifier is REJECTED even with valid ownerToken',
+    !engine.canEditCommentBatch(
+      null,
+      'comment_alice_1',
+      {
+        ...aliceComment,
+        content: 'Tampered nonce proof',
+        updatedAt: '2026-11-18T08:10:30.000Z',
+        edited: true
+      },
+      `${aliceToken}:${'0'.repeat(64)}`
     )
   );
   assert(
@@ -674,7 +758,12 @@ export function runSecurityAuditTests() {
         updatedAt: '2026-11-18T08:11:00.000Z',
         edited: true
       },
-      `${aliceToken}:n4c5d6`
+      buildCommentOwnershipVerifier({
+        ownerToken: aliceToken,
+        postId: 'post-1',
+        createdAt: aliceTs,
+        syncedAt: '2026-11-18T08:11:00.000Z'
+      })
     )
   );
   assert(
@@ -688,11 +777,16 @@ export function runSecurityAuditTests() {
         updatedAt: '2026-11-18T08:12:00.000Z',
         edited: true
       },
-      `${bobToken}:n7e8f9`
+      buildCommentOwnershipVerifier({
+        ownerToken: bobToken,
+        postId: 'post-1',
+        createdAt: aliceTs,
+        syncedAt: '2026-11-18T08:12:00.000Z'
+      })
     )
   );
   assert(
-    'Another visitor CANNOT replay empty/stale verifier after edit',
+    'Another visitor CANNOT replay stale verifier after edit',
     !engine.canEditCommentBatch(
       null,
       'comment_alice_1',
@@ -702,27 +796,50 @@ export function runSecurityAuditTests() {
         updatedAt: '2026-11-18T08:13:00.000Z',
         edited: true
       },
-      `${aliceToken}:n1a2b3`
+      validAliceEditVerifier
     )
   );
 
   // Delete authorization
+  const badDelMarker = 'deleted_10000_del001';
   assert(
     'Non-owner CANNOT delete Alice comment',
-    !engine.canDeleteCommentBatch(null, 'comment_alice_1', `${bobToken}:del001`, 'deleted_10000_del001')
+    !engine.canDeleteCommentBatch(
+      null,
+      'comment_alice_1',
+      buildCommentOwnershipVerifier({
+        ownerToken: bobToken,
+        postId: 'post-1',
+        createdAt: aliceTs,
+        syncedAt: badDelMarker
+      }),
+      badDelMarker
+    )
   );
+  const validBobDelMarker = 'deleted_10001_del002';
   assert(
-    'Original author WITH valid ownerToken CAN delete own reply',
-    engine.canDeleteCommentBatch(null, 'comment_bob_reply_1', `${bobToken}:del002`, 'deleted_10001_del002')
+    'Original author WITH valid cryptographic verifier CAN delete own reply',
+    engine.canDeleteCommentBatch(
+      null,
+      'comment_bob_reply_1',
+      buildCommentOwnershipVerifier({
+        ownerToken: bobToken,
+        postId: 'post-1',
+        createdAt: bobTs,
+        syncedAt: validBobDelMarker
+      }),
+      validBobDelMarker
+    )
   );
+  const resurrectToken = 'c1d2e3f4a5b678901234567890abcdef1234567890abcdef';
   assert(
     'Attacker CANNOT resurrect a deleted comment ID to overwrite ownership',
     !engine.canCreateCommentBatch(
       null,
       'comment_bob_reply_1',
       aliceComment,
-      { postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
-      'c1d2e3f4a5b678901234567890abcdef1234567890abcdef'
+      { tokenHash: sha256Hex(resurrectToken), postId: 'post-1', createdAt: aliceTs, lastSyncedAt: aliceTs, verifier: '' },
+      resurrectToken
     )
   );
   assert('Public/Google non-admin CANNOT hide or moderate comments', !engine.canModerateComment(randomGoogleUser));
@@ -740,11 +857,13 @@ export function runSecurityAuditTests() {
   );
 
   assert(
-    'firestore.rules defines /comments/{commentId}/tokens, /private isolation, publicSafe split get/list comment rules, and hardened verifier delete rules',
+    'firestore.rules defines cryptographic hashing.sha256 verifier without get().id, hasOnly list guards, and /private isolation',
     firestoreRulesSrc.includes('match /tokens/{tokenId}') &&
       firestoreRulesSrc.includes('match /private/{ownershipId}') &&
-      firestoreRulesSrc.includes('allow get: if isAdmin() || (') &&
-      firestoreRulesSrc.includes('resource.data.publicSafe == true') &&
+      firestoreRulesSrc.includes('hashing.sha256') &&
+      !firestoreRulesSrc.includes('.id ==') &&
+      firestoreRulesSrc.includes('hasOnlyPublicCommentFields(resource.data)') &&
+      firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
       firestoreRulesSrc.includes("resource.data.status in ['published', 'approved']") &&
       firestoreRulesSrc.includes("get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=") &&
       firestoreRulesSrc.includes('exists(/databases/$(database)/documents/comments/$(commentId))') &&
@@ -851,8 +970,7 @@ export function runSecurityAuditTests() {
     firestoreRulesSrc.includes('match /mini_shop_products/{productId}') &&
       firestoreRulesSrc.includes('function isValidMiniShopProductWrite(data)') &&
       firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
-      firestoreRulesSrc.includes('request.resource.data.id == productId') &&
-      firestoreRulesSrc.includes('isValidMiniShopProductWrite(request.resource.data);') &&
+      firestoreRulesSrc.includes('allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);') &&
       firestoreRulesSrc.includes('allow delete: if isAdmin();') &&
       firestoreRulesSrc.includes('match /appSettings/fcm_config')
   );

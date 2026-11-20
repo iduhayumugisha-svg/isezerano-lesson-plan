@@ -1,3 +1,13 @@
+import {
+  AdsDisplaySettings,
+  DEFAULT_ADS_DISPLAY_SETTINGS,
+  MiniShopDisplaySettings,
+  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
+} from '../utils/displaySettingsUtils';
+
+export type { AdsDisplaySettings, MiniShopDisplaySettings };
+export { DEFAULT_ADS_DISPLAY_SETTINGS, DEFAULT_MINI_SHOP_DISPLAY_SETTINGS };
+
 // ==================== ADS TYPES ====================
 export type AdPlacement = 'below_header' | 'above_footer';
 export type AdType = 'code' | 'banner';
@@ -16,6 +26,7 @@ export interface AdsSettings {
   masterEnabled: boolean; // Master toggle: false by default
   belowHeaderAd: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
+  displaySettings?: AdsDisplaySettings;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -39,7 +50,8 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     linkUrl: '',
     altText: 'Advertisement',
     label: 'Advertisement'
-  }
+  },
+  displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS
 };
 
 // ==================== AUTH & FIREBASE CONNECTION TYPES ====================
