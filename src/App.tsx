@@ -323,11 +323,8 @@ function AppContent() {
         topOffsetPx={effectiveMiniShopOffset}
       />
 
-      {/* 2. Adscod Banner: directly below the site menu on public pages */}
+      {/* 2. Adscod uses the existing below-header advertisement slot */}
       {currentPage !== 'admin' && <AdscodBannerAd />}
-
-      {/* Existing configurable ad slot remains unchanged */}
-      <AdSlot placement="below_header" className="no-print" />
 
       {/* 3. Natural Document Flow Main Body */}
       <main className="flex-1 w-full min-w-0 relative z-0">
