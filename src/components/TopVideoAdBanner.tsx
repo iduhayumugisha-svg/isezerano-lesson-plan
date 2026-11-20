@@ -79,9 +79,9 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
     <section
       data-testid="top-video-ad-banner"
       aria-label={videoAd.label || 'Sponsored Video Advertisement'}
-      className="no-print w-full md:w-[37.5%] mx-auto bg-slate-950 border border-slate-800 rounded-b-2xl text-white"
+      className="no-print w-full md:w-[28.125%] mx-auto bg-slate-950 border border-slate-800 rounded-b-2xl text-white"
     >
-      <div className="max-w-3xl mx-auto px-3 sm:px-6 py-1.5 space-y-1.5">
+      <div className="w-full mx-auto px-2 sm:px-3 py-1 space-y-1">
         <div className="flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 min-w-0">
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-extrabold uppercase tracking-wider shrink-0">
@@ -121,7 +121,7 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
         </div>
 
         {!isCollapsed && (
-          <div className="w-full max-w-xs mx-auto">
+          <div className="w-full max-w-[240px] mx-auto">
             <Suspense
               fallback={
                 <div className="w-full aspect-video min-h-[180px] rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-semibold text-slate-300">
