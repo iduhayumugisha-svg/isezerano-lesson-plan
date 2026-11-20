@@ -5,8 +5,13 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, getFirebaseAuth } from '../config/firebase';
-import { AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
+import {
+  AdsSettings,
+  DEFAULT_ADS_SETTINGS,
+  DEFAULT_TOP_VIDEO_AD_CONFIG
+} from '../types/platform';
 import { normalizeAdsDisplaySettings } from '../utils/displaySettingsUtils';
+import { normalizeTopVideoAdConfig } from './shopVideoService';
 import { isAuthorizedAdminEmail } from './authService';
 
 // ==================== ADS SETTINGS ====================
@@ -16,6 +21,7 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
   if (!remoteData) {
     return {
       ...DEFAULT_ADS_SETTINGS,
+      aboveHeaderVideoAd: { ...DEFAULT_TOP_VIDEO_AD_CONFIG },
       displaySettings: normalizeAdsDisplaySettings(DEFAULT_ADS_SETTINGS.displaySettings)
     };
   }
@@ -29,6 +35,7 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
       ...DEFAULT_ADS_SETTINGS.aboveFooterAd,
       ...(remoteData.aboveFooterAd || {})
     },
+    aboveHeaderVideoAd: normalizeTopVideoAdConfig(remoteData.aboveHeaderVideoAd),
     displaySettings: normalizeAdsDisplaySettings(remoteData.displaySettings),
     updatedAt: remoteData.updatedAt || new Date().toISOString(),
     updatedBy: remoteData.updatedBy || 'admin'
@@ -194,6 +201,7 @@ export const saveAdsSettings = async (
 
   const payload: AdsSettings = stripUndefinedDeep({
     ...settings,
+    aboveHeaderVideoAd: normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd),
     displaySettings: normalizeAdsDisplaySettings(settings.displaySettings),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid

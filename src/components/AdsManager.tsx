@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { 
   Megaphone, 
   Save, 
@@ -16,10 +16,24 @@ import {
   Tablet,
   Smartphone,
   RotateCcw,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Film,
+  Link2,
+  Trash2
 } from 'lucide-react';
-import { AdsSettings, DEFAULT_ADS_SETTINGS, AdSlotConfig } from '../types/platform';
+import {
+  AdSlotConfig,
+  AdsSettings,
+  DEFAULT_ADS_SETTINGS,
+  DEFAULT_TOP_VIDEO_AD_CONFIG,
+  TopVideoAdConfig
+} from '../types/platform';
 import { getAdsSettings, saveAdsSettings } from '../services/siteSettingsService';
+import {
+  createTopVideoAdConfigFromUrl,
+  normalizeTopVideoAdConfig,
+  parseVimeoVideoUrl
+} from '../services/shopVideoService';
 import { useAuth } from '../context/AuthContext';
 import { DisplayNumericControl } from './DisplayNumericControl';
 import {
@@ -29,6 +43,10 @@ import {
   normalizeAdsDisplaySettings
 } from '../utils/displaySettingsUtils';
 
+const LazyShopVimeoPlayer = lazy(() =>
+  import('./ShopVimeoPlayer').then((m) => ({ default: m.ShopVimeoPlayer }))
+);
+
 export const AdsManager: React.FC = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<AdsSettings>(DEFAULT_ADS_SETTINGS);
@@ -36,6 +54,11 @@ export const AdsManager: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [topVideoUrlInput, setTopVideoUrlInput] = useState('');
+  const [topVideoTitleInput, setTopVideoTitleInput] = useState('');
+  const [topVideoLabelInput, setTopVideoLabelInput] = useState('Sponsored Video');
+  const [confirmRemoveTopVideo, setConfirmRemoveTopVideo] = useState(false);
+  const [topVideoFeedback, setTopVideoFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -45,10 +68,15 @@ export const AdsManager: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await getAdsSettings();
+      const normalizedTopVideo = normalizeTopVideoAdConfig(data.aboveHeaderVideoAd);
       setSettings({
         ...data,
+        aboveHeaderVideoAd: normalizedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(data.displaySettings)
       });
+      setTopVideoUrlInput(normalizedTopVideo.vimeoUrl || '');
+      setTopVideoTitleInput(normalizedTopVideo.title || '');
+      setTopVideoLabelInput(normalizedTopVideo.label || 'Sponsored Video');
     } catch (err) {
       console.error('Error loading ads settings:', err);
     } finally {
@@ -56,17 +84,172 @@ export const AdsManager: React.FC = () => {
     }
   };
 
+  const parsedTopVideoUrl = useMemo(() => {
+    if (!topVideoUrlInput.trim()) return null;
+    return parseVimeoVideoUrl(topVideoUrlInput);
+  }, [topVideoUrlInput]);
+
+  const currentTopVideo: TopVideoAdConfig = normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd);
+
+  const previewTopVideo: TopVideoAdConfig | null = useMemo(() => {
+    if (parsedTopVideoUrl?.valid && parsedTopVideoUrl.videoId && parsedTopVideoUrl.playerEmbedUrl) {
+      return {
+        enabled: currentTopVideo.enabled,
+        vimeoUrl: parsedTopVideoUrl.canonicalUrl || topVideoUrlInput.trim(),
+        videoId: parsedTopVideoUrl.videoId,
+        playerEmbedUrl: parsedTopVideoUrl.playerEmbedUrl,
+        title: topVideoTitleInput.trim(),
+        label: topVideoLabelInput.trim() || 'Sponsored Video'
+      };
+    }
+    if (currentTopVideo.videoId && currentTopVideo.playerEmbedUrl) {
+      return currentTopVideo;
+    }
+    return null;
+  }, [parsedTopVideoUrl, topVideoUrlInput, topVideoTitleInput, topVideoLabelInput, currentTopVideo]);
+
+  const persistTopVideoAd = async (
+    nextTopVideo: TopVideoAdConfig,
+    successText: string
+  ) => {
+    if (!user) return;
+    setIsSaving(true);
+    setTopVideoFeedback(null);
+    setStatusMessage(null);
+    try {
+      const payloadToSave: AdsSettings = {
+        ...settings,
+        aboveHeaderVideoAd: normalizeTopVideoAdConfig(nextTopVideo),
+        displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
+      };
+      const result = await saveAdsSettings(payloadToSave, user.uid);
+      if (result.success) {
+        setSettings(payloadToSave);
+        setTopVideoFeedback({
+          type: 'success',
+          text: result.isLocalFallback
+            ? `${successText} (Saved locally; syncs across devices once Firestore rules are active).`
+            : successText
+        });
+      } else {
+        setTopVideoFeedback({
+          type: 'error',
+          text: result.error || 'Failed to save top-of-site video advertisement.'
+        });
+      }
+    } catch (err: any) {
+      setTopVideoFeedback({
+        type: 'error',
+        text: err?.message || 'Unexpected error saving video advertisement.'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveTopVideoAd = async () => {
+    setTopVideoFeedback(null);
+    setConfirmRemoveTopVideo(false);
+
+    const built = createTopVideoAdConfigFromUrl({
+      url: topVideoUrlInput,
+      enabled: currentTopVideo.videoId ? currentTopVideo.enabled : true,
+      title: topVideoTitleInput,
+      label: topVideoLabelInput
+    });
+
+    if (!built.success || !built.videoAd) {
+      setTopVideoFeedback({
+        type: 'error',
+        text: built.error || 'Please paste a valid Vimeo Video URL.'
+      });
+      return;
+    }
+
+    setTopVideoUrlInput(built.videoAd.vimeoUrl);
+    await persistTopVideoAd(
+      built.videoAd,
+      built.videoAd.enabled
+        ? `Top-of-site Vimeo video ad (ID: ${built.videoAd.videoId}) saved and enabled above the Header.`
+        : `Top-of-site Vimeo video ad (ID: ${built.videoAd.videoId}) saved (currently disabled).`
+    );
+  };
+
+  const handleToggleTopVideoEnabled = async () => {
+    setTopVideoFeedback(null);
+    setConfirmRemoveTopVideo(false);
+    const nextEnabled = !currentTopVideo.enabled;
+
+    if (nextEnabled) {
+      const urlSource = topVideoUrlInput.trim() || currentTopVideo.vimeoUrl;
+      const built = createTopVideoAdConfigFromUrl({
+        url: urlSource,
+        enabled: true,
+        title: topVideoTitleInput,
+        label: topVideoLabelInput
+      });
+      if (!built.success || !built.videoAd) {
+        setTopVideoFeedback({
+          type: 'error',
+          text: built.error || 'Paste a valid Vimeo Video URL before enabling the top video ad.'
+        });
+        return;
+      }
+      setTopVideoUrlInput(built.videoAd.vimeoUrl);
+      await persistTopVideoAd(
+        built.videoAd,
+        `Top-of-site video ad enabled above the Header (ID: ${built.videoAd.videoId}).`
+      );
+      return;
+    }
+
+    const updated: TopVideoAdConfig = {
+      ...currentTopVideo,
+      enabled: false,
+      title: topVideoTitleInput.trim(),
+      label: topVideoLabelInput.trim() || 'Sponsored Video',
+      updatedAt: new Date().toISOString()
+    };
+    await persistTopVideoAd(updated, 'Top-of-site video advertisement disabled.');
+  };
+
+  const handleRemoveTopVideoAd = async () => {
+    setConfirmRemoveTopVideo(false);
+    setTopVideoUrlInput('');
+    setTopVideoTitleInput('');
+    setTopVideoLabelInput('Sponsored Video');
+    await persistTopVideoAd(
+      { ...DEFAULT_TOP_VIDEO_AD_CONFIG, updatedAt: new Date().toISOString() },
+      'Top-of-site video advertisement removed.'
+    );
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setIsSaving(true);
     setStatusMessage(null);
     try {
+      let resolvedTopVideo = normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd);
+      if (topVideoUrlInput.trim()) {
+        const builtTop = createTopVideoAdConfigFromUrl({
+          url: topVideoUrlInput,
+          enabled: resolvedTopVideo.enabled,
+          title: topVideoTitleInput,
+          label: topVideoLabelInput
+        });
+        if (builtTop.success && builtTop.videoAd) {
+          resolvedTopVideo = builtTop.videoAd;
+        }
+      }
+
       const payloadToSave: AdsSettings = {
         ...settings,
+        aboveHeaderVideoAd: resolvedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
       const result = await saveAdsSettings(payloadToSave, user.uid);
       if (result.success) {
+        setSettings(payloadToSave);
         if (result.isLocalFallback) {
           setStatusMessage({
             type: 'success',
@@ -240,6 +423,252 @@ export const AdsManager: React.FC = () => {
             </>
           )}
         </button>
+      </div>
+
+      {/* Site-Wide Vimeo Video Advertisement (Above Header) */}
+      <div
+        data-testid="ads-top-video-manager"
+        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+              <Film className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Site-Wide Above Header Placement</span>
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Top-of-Site Vimeo Video Advertisement (Above Header)</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  currentTopVideo.enabled && currentTopVideo.videoId
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {currentTopVideo.enabled && currentTopVideo.videoId ? 'ACTIVE ABOVE HEADER' : 'DISABLED'}
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Displayed at the very top of every public page above the Website Header using the official Vimeo player. Leaves all below-header, inline, and Adscod slots unchanged.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleToggleTopVideoEnabled}
+            disabled={isSaving}
+            data-testid="ads-top-video-enable-toggle"
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 transition-all cursor-pointer self-start sm:self-center disabled:opacity-50 ${
+              currentTopVideo.enabled
+                ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-500'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            {currentTopVideo.enabled ? (
+              <>
+                <ToggleRight className="w-4 h-4" aria-hidden="true" />
+                <span>Video Ad Enabled</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-4 h-4" aria-hidden="true" />
+                <span>Video Ad Disabled</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {topVideoFeedback && (
+          <div
+            role="status"
+            className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-semibold ${
+              topVideoFeedback.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            {topVideoFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+            )}
+            <span>{topVideoFeedback.text}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="md:col-span-6 space-y-1.5">
+            <label
+              htmlFor="ads-top-video-url"
+              className="block text-xs font-bold text-slate-800"
+            >
+              Vimeo Video URL
+            </label>
+            <div className="relative">
+              <Link2
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                id="ads-top-video-url"
+                data-testid="ads-top-video-url-input"
+                type="url"
+                value={topVideoUrlInput}
+                onChange={(e) => {
+                  setTopVideoUrlInput(e.target.value);
+                  if (topVideoFeedback?.type === 'error') setTopVideoFeedback(null);
+                }}
+                disabled={isSaving}
+                placeholder="https://vimeo.com/1248666228"
+                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            {parsedTopVideoUrl && (
+              <p
+                data-testid="ads-top-video-url-status"
+                className={`text-[11px] font-semibold ${
+                  parsedTopVideoUrl.valid ? 'text-emerald-700' : 'text-rose-700'
+                }`}
+              >
+                {parsedTopVideoUrl.valid
+                  ? `Valid Vimeo link — Extracted Video ID: ${parsedTopVideoUrl.videoId}`
+                  : parsedTopVideoUrl.error}
+              </p>
+            )}
+          </div>
+
+          <div className="md:col-span-3 space-y-1.5">
+            <label
+              htmlFor="ads-top-video-title"
+              className="block text-xs font-bold text-slate-800"
+            >
+              Video Title (Optional)
+            </label>
+            <input
+              id="ads-top-video-title"
+              data-testid="ads-top-video-title-input"
+              type="text"
+              maxLength={120}
+              value={topVideoTitleInput}
+              onChange={(e) => setTopVideoTitleInput(e.target.value)}
+              disabled={isSaving}
+              placeholder="e.g. Featured Sponsor"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="md:col-span-3 space-y-1.5">
+            <label
+              htmlFor="ads-top-video-label"
+              className="block text-xs font-bold text-slate-800"
+            >
+              Badge Label
+            </label>
+            <input
+              id="ads-top-video-label"
+              data-testid="ads-top-video-label-input"
+              type="text"
+              maxLength={40}
+              value={topVideoLabelInput}
+              onChange={(e) => setTopVideoLabelInput(e.target.value)}
+              disabled={isSaving}
+              placeholder="Sponsored Video"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="md:col-span-12 flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="text-[11px] text-slate-500">
+              Attempts muted autoplay on page load with Play/Pause, Sound On/Off, Replay, and Speed controls.
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {currentTopVideo.videoId && (
+                !confirmRemoveTopVideo ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRemoveTopVideo(true)}
+                    disabled={isSaving}
+                    data-testid="ads-top-video-remove-btn"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Remove Video Ad</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 bg-rose-50 border border-rose-300 rounded-xl px-2 py-1">
+                    <button
+                      type="button"
+                      onClick={handleRemoveTopVideoAd}
+                      disabled={isSaving}
+                      data-testid="ads-top-video-confirm-remove"
+                      className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                    >
+                      Confirm Remove
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRemoveTopVideo(false)}
+                      disabled={isSaving}
+                      className="px-2 py-1 rounded-lg bg-white text-slate-700 text-[11px] font-semibold border border-slate-200 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveTopVideoAd}
+                disabled={isSaving || !topVideoUrlInput.trim()}
+                data-testid="ads-top-video-save-btn"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Save Video Ad</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Admin Video Preview */}
+        {previewTopVideo && (
+          <div
+            data-testid="ads-top-video-preview"
+            className="rounded-xl border border-slate-200 bg-slate-100/70 p-4 space-y-2.5"
+          >
+            <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-800">
+              <span className="flex items-center gap-1.5">
+                <Eye className="w-4 h-4 text-teal-700" aria-hidden="true" />
+                <span>Video Advertisement Preview (Vimeo ID: {previewTopVideo.videoId})</span>
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 font-normal">
+                {previewTopVideo.enabled ? 'Will play above Header' : 'Preview only (disabled)'}
+              </span>
+            </div>
+            <div className="max-w-2xl mx-auto">
+              <Suspense
+                fallback={
+                  <div className="w-full aspect-video min-h-[180px] rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-xs text-slate-300">
+                    Loading Vimeo preview...
+                  </div>
+                }
+              >
+                <LazyShopVimeoPlayer
+                  video={{
+                    videoId: previewTopVideo.videoId,
+                    playerEmbedUrl: previewTopVideo.playerEmbedUrl,
+                    title: previewTopVideo.title || previewTopVideo.label || 'Sponsored Video'
+                  }}
+                  autoPlay={false}
+                  playerLabel="Top Video Ad"
+                  fallbackNote="Check that the Vimeo link is public or embeddable."
+                />
+              </Suspense>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Advertisement Display Settings Panel */}

@@ -18,6 +18,7 @@ import {
   MiniShopDisplaySettings,
   DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
 } from '../utils/displaySettingsUtils';
+import type { ShopVideoConfig } from './platform';
 
 export type {
   WhatsAppButtonPosition,
@@ -223,6 +224,7 @@ export interface WebsiteDesignSettings {
   navigationMenus?: NavigationMenuItem[];
   whatsappContact?: WhatsAppContactSettings;
   miniShopDisplay?: MiniShopDisplaySettings;
+  shopVideo?: ShopVideoConfig | null;
   versionHistory?: WebsiteDesignVersion[];
   updatedAt: string;
   updatedBy: string;

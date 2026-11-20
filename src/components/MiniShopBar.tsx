@@ -20,13 +20,15 @@ interface MiniShopBarProps {
   visible?: boolean;
   onHeightChange?: (height: number) => void;
   displaySettings?: MiniShopDisplaySettings;
+  onOpenShop?: () => void;
 }
 
 export const MiniShopBar: React.FC<MiniShopBarProps> = ({
   products,
   visible = true,
   onHeightChange,
-  displaySettings
+  displaySettings,
+  onOpenShop
 }) => {
   const activeProducts = useMemo(() => filterActiveMiniShopProducts(products), [products]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -263,6 +265,19 @@ export const MiniShopBar: React.FC<MiniShopBarProps> = ({
                       <span>Komeza</span>
                       <ChevronRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                     </button>
+
+                    {onOpenShop && (
+                      <button
+                        type="button"
+                        onClick={onOpenShop}
+                        data-testid="mini-shop-open-shop"
+                        aria-label="Open full Shop page with video and all products"
+                        className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer transition-colors"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span>Shop</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -372,24 +387,40 @@ export const MiniShopBar: React.FC<MiniShopBarProps> = ({
               })}
             </div>
 
-            {hasMultiple && (
+            {(hasMultiple || onOpenShop) && (
               <div className="flex items-center justify-end gap-2">
-                <span
-                  data-testid="mini-shop-counter"
-                  className="text-[10px] font-bold text-slate-400 tabular-nums px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800"
-                >
-                  {activeIndex + 1}/{activeProducts.length}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleNextProduct}
-                  data-testid="mini-shop-komeza"
-                  aria-label={`Next product (${activeIndex + 1} of ${activeProducts.length})`}
-                  className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 cursor-pointer shadow-xs"
-                >
-                  <span>Komeza</span>
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                </button>
+                {hasMultiple && (
+                  <>
+                    <span
+                      data-testid="mini-shop-counter"
+                      className="text-[10px] font-bold text-slate-400 tabular-nums px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800"
+                    >
+                      {activeIndex + 1}/{activeProducts.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleNextProduct}
+                      data-testid="mini-shop-komeza"
+                      aria-label={`Next product (${activeIndex + 1} of ${activeProducts.length})`}
+                      className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 cursor-pointer shadow-xs"
+                    >
+                      <span>Komeza</span>
+                      <ChevronRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    </button>
+                  </>
+                )}
+                {onOpenShop && (
+                  <button
+                    type="button"
+                    onClick={onOpenShop}
+                    data-testid="mini-shop-open-shop"
+                    aria-label="Open full Shop page with video and all products"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer shadow-xs"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    <span>Shop</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

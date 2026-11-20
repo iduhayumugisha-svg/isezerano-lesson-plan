@@ -7,7 +7,8 @@ import {
   Newspaper,
   ChevronRight,
   Info,
-  Mail
+  Mail,
+  ShoppingBag
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
@@ -26,6 +27,7 @@ import { scrollMainContentToTop } from '../utils/scrollUtils';
 export type WebsitePage =
   | 'home'
   | 'blog'
+  | 'shop'
   | 'about'
   | 'contact'
   | 'privacy'
@@ -311,6 +313,23 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     <button
                       type="button"
                       role="menuitem"
+                      onClick={() => handleNavClick('shop')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold rounded-xl transition-colors text-left cursor-pointer ${
+                        currentPage === 'shop'
+                          ? 'bg-teal-50 text-teal-900'
+                          : 'text-slate-800 hover:bg-teal-50 hover:text-teal-900'
+                      }`}
+                    >
+                      <span className="flex items-center space-x-3">
+                        <ShoppingBag className="w-4 h-4 text-teal-700 shrink-0" />
+                        <span>Shop</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => handleNavClick('about')}
                       className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold rounded-xl transition-colors text-left cursor-pointer ${
                         currentPage === 'about'
@@ -454,6 +473,17 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 </button>
               );
             })}
+
+            <button
+              type="button"
+              onClick={() => handleNavClick('shop')}
+              data-testid="header-nav-shop"
+              style={resolveCategoryNavItemStyle('Shop', categoryNav, currentPage === 'shop')}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg border-b-2 transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span>Shop</span>
+            </button>
           </nav>
         </div>
       </div>

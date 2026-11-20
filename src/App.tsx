@@ -7,9 +7,11 @@ import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { MiniShopBar } from './components/MiniShopBar';
+import { TopVideoAdBanner } from './components/TopVideoAdBanner';
 
 // Code-split Secondary Public Views & Modals
 const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
+const ShopView = lazy(() => import('./views/ShopView').then((m) => ({ default: m.ShopView })));
 const AboutView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.AboutView })));
 const PrivacyPolicyView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.PrivacyPolicyView })));
 const TermsConditionsView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.TermsConditionsView })));
@@ -57,6 +59,7 @@ const getPageFromUrl = (): AppPage => {
     return 'admin';
   }
   if (pathname === '/blog' || pathname.startsWith('/blog/') || hash === '#blog' || hash.startsWith('#blog/') || search.get('page') === 'blog') return 'blog';
+  if (pathname === '/shop' || pathname.startsWith('/shop/') || hash === '#shop' || search.get('page') === 'shop') return 'shop';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -302,6 +305,7 @@ function AppContent() {
         visible={showMiniShop}
         onHeightChange={setMiniShopHeight}
         displaySettings={miniShopDisplay}
+        onOpenShop={() => handleNavigate('shop')}
       />
       {effectiveMiniShopOffset > 0 && (
         <div
@@ -311,6 +315,9 @@ function AppContent() {
           style={{ height: `${effectiveMiniShopOffset}px` }}
         />
       )}
+
+      {/* 0B. Site-Wide Vimeo Video Advertisement (Displayed above WebsiteHeader on public pages when enabled) */}
+      <TopVideoAdBanner currentPage={currentPage} />
 
       {/* 1. Fixed/Sticky Global Newspaper Header */}
       <WebsiteHeader
@@ -323,7 +330,7 @@ function AppContent() {
         topOffsetPx={effectiveMiniShopOffset}
       />
 
-      {/* 2. Shared below-header advertisement slot (Adscod uses Admin display sizing) */}
+      {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}
       <AdSlot placement="below_header" className="no-print" />
 
       {/* 3. Natural Document Flow Main Body */}
@@ -361,6 +368,14 @@ function AppContent() {
               commentCounts={commentCounts}
               focusComments={focusArticleComments}
               onConsumeFocusComments={() => setFocusArticleComments(false)}
+            />
+          )}
+
+          {/* PUBLIC PAGE 1C: Dedicated Shop Page with Vimeo Video & Products */}
+          {currentPage === 'shop' && (
+            <ShopView
+              products={activeMiniShopProducts}
+              onNavigate={handleNavigate}
             />
           )}
 

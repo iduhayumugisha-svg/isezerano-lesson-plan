@@ -12,6 +12,8 @@ import {
 import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings, resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 import { normalizeMiniShopDisplaySettings } from '../utils/displaySettingsUtils';
+import { normalizeShopVideoConfig } from './shopVideoService';
+import { ShopVideoConfig } from '../types/platform';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -177,6 +179,7 @@ export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
         navigationMenus: normalizeNavigationMenus(parsed.navigationMenus),
         whatsappContact: normalizeWhatsAppSettings(parsed.whatsappContact),
         miniShopDisplay: normalizeMiniShopDisplaySettings(parsed.miniShopDisplay),
+        shopVideo: normalizeShopVideoConfig(parsed.shopVideo),
         versionHistory: parsed.versionHistory || [],
         updatedAt: parsed.updatedAt || DEFAULT_WEBSITE_DESIGN.updatedAt,
         updatedBy: parsed.updatedBy || 'local'
@@ -214,7 +217,7 @@ const DESIGN_PUBLIC_REST_URL =
   '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=typography' +
   '&mask.fieldPaths=logo&mask.fieldPaths=categoryNav&mask.fieldPaths=homepageSections' +
   '&mask.fieldPaths=navigationMenus&mask.fieldPaths=whatsappContact' +
-  '&mask.fieldPaths=miniShopDisplay&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
+  '&mask.fieldPaths=miniShopDisplay&mask.fieldPaths=shopVideo&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
 
 const normalizeWebsiteDesignPayload = (
   data: Partial<WebsiteDesignSettings>,
@@ -233,6 +236,7 @@ const normalizeWebsiteDesignPayload = (
   navigationMenus: normalizeNavigationMenus(data.navigationMenus),
   whatsappContact: normalizeWhatsAppSettings(data.whatsappContact),
   miniShopDisplay: normalizeMiniShopDisplaySettings(data.miniShopDisplay),
+  shopVideo: normalizeShopVideoConfig(data.shopVideo),
   versionHistory: data.versionHistory || fallbackHistory,
   updatedAt: data.updatedAt || new Date().toISOString(),
   updatedBy: data.updatedBy || 'admin'
@@ -384,6 +388,7 @@ export const saveWebsiteDesignSettings = async (
     ),
     whatsappContact: normalizeWhatsAppSettings(settings.whatsappContact),
     miniShopDisplay: normalizeMiniShopDisplaySettings(settings.miniShopDisplay),
+    shopVideo: normalizeShopVideoConfig(settings.shopVideo),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
   };
@@ -575,6 +580,84 @@ export const saveMiniShopDisplayToFirestore = async (
       code === 'permission-denied'
         ? `Missing or insufficient permissions for 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com.`
         : err?.message || 'Failed to save Mini Shop display settings to Cloud Firestore.';
+    return { success: false, normalized, updatedAt, error: message, code };
+  }
+};
+
+/**
+ * Lightweight Shop Vimeo video update writing only `shopVideo`, `updatedAt`, and `updatedBy`
+ * via Firestore merge. Stores public playback metadata only (never Vimeo access tokens).
+ */
+export const saveShopVideoToFirestore = async (
+  shopVideo: ShopVideoConfig | null,
+  adminUid: string
+): Promise<{
+  success: boolean;
+  normalized: ShopVideoConfig | null;
+  updatedAt: string;
+  error?: string;
+  code?: string;
+}> => {
+  const normalized = shopVideo ? normalizeShopVideoConfig(shopVideo) : null;
+  const updatedAt = new Date().toISOString();
+
+  const db = initFirestoreIfConfigured();
+  if (!db) {
+    return {
+      success: false,
+      normalized,
+      updatedAt,
+      code: 'firestore/not-configured',
+      error: 'Cloud Firestore is not configured.'
+    };
+  }
+
+  try {
+    const auth = getAuth();
+    const currentEmail = auth?.currentUser?.email;
+    if (!auth?.currentUser || !isAuthorizedAdminEmail(currentEmail)) {
+      return {
+        success: false,
+        normalized,
+        updatedAt,
+        code: 'permission-denied',
+        error: `Administrator sign-in required. Active account: ${currentEmail || 'Not signed in'}. Authorized admin is twizerefelix90@gmail.com.`
+      };
+    }
+
+    const docRef = doc(db, 'appSettings', 'website_design');
+    await setDoc(
+      docRef,
+      stripUndefinedDeep({
+        shopVideo: normalized,
+        updatedAt,
+        updatedBy: currentEmail || adminUid
+      }),
+      { merge: true }
+    );
+
+    try {
+      const existing = getCachedWebsiteDesignSettingsSync();
+      localStorage.setItem(
+        DESIGN_STORAGE_KEY,
+        JSON.stringify({
+          ...existing,
+          shopVideo: normalized,
+          updatedAt,
+          updatedBy: currentEmail || adminUid
+        })
+      );
+    } catch {
+      // ignore localStorage errors
+    }
+
+    return { success: true, normalized, updatedAt };
+  } catch (err: any) {
+    const code = err?.code || 'unknown';
+    const message =
+      code === 'permission-denied'
+        ? `Missing or insufficient permissions for 'appSettings/website_design'. Ensure you are signed in as twizerefelix90@gmail.com.`
+        : err?.message || 'Failed to save Shop video configuration to Cloud Firestore.';
     return { success: false, normalized, updatedAt, error: message, code };
   }
 };

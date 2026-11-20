@@ -22,10 +22,30 @@ export interface AdSlotConfig {
   label?: string; // e.g. "Advertisement" or "Sponsored"
 }
 
+export interface TopVideoAdConfig {
+  enabled: boolean;
+  vimeoUrl: string;
+  videoId: string;
+  playerEmbedUrl: string;
+  title: string;
+  label?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_TOP_VIDEO_AD_CONFIG: TopVideoAdConfig = {
+  enabled: false,
+  vimeoUrl: '',
+  videoId: '',
+  playerEmbedUrl: '',
+  title: '',
+  label: 'Sponsored Video'
+};
+
 export interface AdsSettings {
   masterEnabled: boolean; // Master toggle: false by default
   belowHeaderAd: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
+  aboveHeaderVideoAd?: TopVideoAdConfig;
   displaySettings?: AdsDisplaySettings;
   updatedAt?: string;
   updatedBy?: string;
@@ -51,11 +71,12 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     altText: 'Advertisement',
     label: 'Advertisement'
   },
+  aboveHeaderVideoAd: DEFAULT_TOP_VIDEO_AD_CONFIG,
   displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS
 };
 
 // ==================== AUTH & FIREBASE CONNECTION TYPES ====================
-export type NavPage = 'home' | 'blog' | 'about' | 'contact' | 'privacy' | 'terms';
+export type NavPage = 'home' | 'blog' | 'shop' | 'about' | 'contact' | 'privacy' | 'terms';
 export type SaasNavPage = NavPage | 'admin';
 
 export type UserRole = 'admin';
@@ -204,3 +225,17 @@ export interface MiniShopProduct {
   updatedAt: string;
 }
 
+// ==================== SHOP VIMEO VIDEO TYPES ====================
+export interface ShopVideoConfig {
+  videoId: string;
+  vimeoUri: string;
+  playerEmbedUrl: string;
+  vimeoLink?: string;
+  title: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
+  published: boolean;
+  status: 'ready' | 'processing' | 'error';
+  uploadedAt: string;
+  updatedAt: string;
+}

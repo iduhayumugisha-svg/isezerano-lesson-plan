@@ -26,6 +26,7 @@ import { MiniShopProduct } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { DisplayNumericControl } from './DisplayNumericControl';
+import { AdminShopVideoManager } from './AdminShopVideoManager';
 import {
   DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
   MINI_SHOP_DISPLAY_LIMITS,
@@ -468,6 +469,9 @@ export const AdminMiniShopManager: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Shop Featured Vimeo Video Manager */}
+      <AdminShopVideoManager />
 
       {/* Mini Shop Display Settings Panel */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
