@@ -121,7 +121,7 @@ export const TopVideoAdBanner: React.FC<TopVideoAdBannerProps> = ({
         </div>
 
         {!isCollapsed && (
-          <div className="w-full max-w-md mx-auto">
+          <div className="w-full max-w-xs mx-auto">
             <Suspense
               fallback={
                 <div className="w-full aspect-video min-h-[180px] rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-semibold text-slate-300">
