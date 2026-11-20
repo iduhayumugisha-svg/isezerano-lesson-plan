@@ -371,7 +371,7 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
           role="group"
           aria-label="Playback speed"
         >
-          <span className="px-1.5 text-[10px] font-bold text-slate-400">Speed</span>
+          <span className={`${compact ? "px-1.5 text-[10px]" : "px-2 text-[11px]"} font-bold text-slate-400`}>Speed</span>
           {PLAYBACK_RATES.map((rate) => {
             const active = Math.abs(playbackRate - rate) < 0.05;
             return (
@@ -381,7 +381,7 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
                 onClick={() => handleSetPlaybackRate(rate)}
                 disabled={!isReady || Boolean(playerError)}
                 data-testid={`shop-vimeo-speed-${rate}`}
-                className={`px-1.5 py-1 rounded-md text-[10px] font-extrabold cursor-pointer transition-colors disabled:opacity-45 ${
+                className={`px-1.5 py-1 rounded-md ${compact ? "text-[10px]" : "text-[11px] px-2"} font-extrabold cursor-pointer transition-colors disabled:opacity-45 ${
                   active
                     ? 'bg-teal-600 text-white'
                     : 'text-slate-300 hover:bg-slate-800'
