@@ -545,7 +545,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
           )}
 
           {/* Ad Format 2: Custom Script / Embed Code (Responsive block wrapper prevents 0px mobile flex collapse) */}
-          {slotConfig.type === 'code' && (
+          {placement !== 'below_header' && slotConfig.type === 'code' && (
             <div className="flex-1 flex items-center justify-center w-full min-w-0">
               <div ref={outerWrapperRef} className="ad-slot-wrapper w-full min-w-0 min-h-[50px] overflow-hidden">
                 <div
