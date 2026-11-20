@@ -317,12 +317,12 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
             {isPlaying ? (
               <>
                 <Pause className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Pause</span>
+                {!compact && <span>Pause</span>}
               </>
             ) : (
               <>
                 <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-                <span>Play</span>
+                {!compact && <span>Play</span>}
               </>
             )}
           </button>
@@ -342,12 +342,12 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
             {isMuted ? (
               <>
                 <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Sound Off</span>
+                {!compact && <span>Sound Off</span>}
               </>
             ) : (
               <>
                 <Volume2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Sound On</span>
+                {!compact && <span>Sound On</span>}
               </>
             )}
           </button>
