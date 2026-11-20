@@ -11,6 +11,7 @@ import {
   normalizeAdsDisplaySettings
 } from '../utils/displaySettingsUtils';
 import { ExternalLink, Sparkles } from 'lucide-react';
+import { AdscodBannerAd } from './AdscodBannerAd';
 
 interface AdSlotProps {
   placement: AdPlacement;
@@ -203,7 +204,8 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   useEffect(() => {
     const rawCode = slotConfig?.code || '';
     const isCodeSlotActive = Boolean(
-      adsSettings.masterEnabled &&
+      placement !== 'below_header' &&
+        adsSettings.masterEnabled &&
         slotConfig &&
         slotConfig.enabled &&
         slotConfig.type === 'code' &&
@@ -445,7 +447,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   }
 
   // Master disabled or slot disabled: render nothing
-  if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
+  if (placement !== 'below_header' && (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled)) {
     return null;
   }
 
@@ -498,17 +500,35 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
             </span>
           </div>
 
-          {/* Ad Format 1: Banner Image with Link */}
-          {slotConfig.type === 'banner' && slotConfig.imageUrl && (
-            <div className="flex-1 flex justify-center items-center w-full min-w-0 px-2.5 min-[360px]:px-0">
-              {slotConfig.linkUrl ? (
-                <a
-                  href={slotConfig.linkUrl}
-                  target="_blank"
-                  rel="noopener noreferrer sponsored"
-                  className="inline-flex items-center justify-center max-w-full group relative overflow-hidden rounded-xl transition-transform hover:scale-[1.005]"
-                  style={{ maxHeight: `${contentMaxHeightPx}px` }}
-                >
+          {/* Adscod fills the shared below-header slot; Admin display settings control its size. */}
+          {placement === 'below_header' ? (
+            <AdscodBannerAd />
+          ) : (
+            <>
+            {/* Ad Format 1: Banner Image with Link */}
+            {slotConfig.type === 'banner' && slotConfig.imageUrl && (
+              <div className="flex-1 flex justify-center items-center w-full min-w-0 px-2.5 min-[360px]:px-0">
+                {slotConfig.linkUrl ? (
+                  <a
+                    href={slotConfig.linkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer sponsored"
+                    className="inline-flex items-center justify-center max-w-full group relative overflow-hidden rounded-xl transition-transform hover:scale-[1.005]"
+                    style={{ maxHeight: `${contentMaxHeightPx}px` }}
+                  >
+                    <img
+                      src={slotConfig.imageUrl}
+                      alt={slotConfig.altText || 'Sponsor Banner'}
+                      className="w-auto max-w-full h-auto object-contain mx-auto rounded-xl"
+                      style={{ maxHeight: `${contentMaxHeightPx}px` }}
+                      loading="lazy"
+                    />
+                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-0.5 rounded flex items-center space-x-1">
+                      <span>Visit Sponsor</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </div>
+                  </a>
+                ) : (
                   <img
                     src={slotConfig.imageUrl}
                     alt={slotConfig.altText || 'Sponsor Banner'}
@@ -516,21 +536,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
                     style={{ maxHeight: `${contentMaxHeightPx}px` }}
                     loading="lazy"
                   />
-                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-0.5 rounded flex items-center space-x-1">
-                    <span>Visit Sponsor</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </div>
-                </a>
-              ) : (
-                <img
-                  src={slotConfig.imageUrl}
-                  alt={slotConfig.altText || 'Sponsor Banner'}
-                  className="w-auto max-w-full h-auto object-contain mx-auto rounded-xl"
-                  style={{ maxHeight: `${contentMaxHeightPx}px` }}
-                  loading="lazy"
-                />
-              )}
-            </div>
+                )}
+              </div>
+            )}
+  
+  
+            </>
           )}
 
           {/* Ad Format 2: Custom Script / Embed Code (Responsive block wrapper prevents 0px mobile flex collapse) */}
