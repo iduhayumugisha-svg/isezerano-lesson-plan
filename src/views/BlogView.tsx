@@ -23,6 +23,7 @@ import { formatPublicationDate } from '../utils/dateUtils';
 import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import { ArticleShareButton } from '../components/ArticleShareButton';
 import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
+import { AdscodInlineAd } from '../components/AdscodInlineAd';
 import {
   extractFirstImageFromContent,
   extractPlainTextExcerpt,
@@ -346,6 +347,9 @@ export const BlogView: React.FC<BlogViewProps> = ({
           className="blog-article-body text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-6 [&_a]:text-teal-700 [&_a]:underline"
           dangerouslySetInnerHTML={{ __html: activePost.content }}
         />
+
+        {/* Adscod inline advertisement below the article body */}
+        <AdscodInlineAd />
 
         {/* Article Action Bar: Leave a Message & Share */}
         <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
