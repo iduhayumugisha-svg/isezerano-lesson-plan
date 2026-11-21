@@ -19,14 +19,27 @@ import {
   SlidersHorizontal,
   Film,
   Link2,
-  Trash2
+  Trash2,
+  Activity
 } from 'lucide-react';
+import {
+  ADSCOD_PLACEMENTS,
+  AdscodDiagnosticsSnapshot,
+  AdscodPlacementDiagnostic
+} from '../types/adscod';
+import {
+  getAdscodDiagnosticsSnapshot,
+  runAllAdscodDiagnostics,
+  subscribeToAdscodDiagnostics
+} from '../services/adscodService';
 import {
   AdSlotConfig,
   AdsSettings,
   DEFAULT_ADS_SETTINGS,
   DEFAULT_TOP_VIDEO_AD_CONFIG,
-  TopVideoAdConfig
+  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS,
+  TopVideoAdConfig,
+  TopVideoAdDisplaySettings
 } from '../types/platform';
 import { getAdsSettings, saveAdsSettings } from '../services/siteSettingsService';
 import {
@@ -40,7 +53,11 @@ import {
   ADS_DISPLAY_LIMITS,
   AdsDisplaySettings,
   DEFAULT_ADS_DISPLAY_SETTINGS,
-  normalizeAdsDisplaySettings
+  TOP_VIDEO_AD_DISPLAY_LIMITS,
+  clampDisplayNumber,
+  normalizeAdsDisplaySettings,
+  normalizeTopVideoAdDisplaySettings,
+  resolveTopVideoBannerHeaderSpacing
 } from '../utils/displaySettingsUtils';
 
 const LazyShopVimeoPlayer = lazy(() =>
@@ -59,10 +76,28 @@ export const AdsManager: React.FC = () => {
   const [topVideoLabelInput, setTopVideoLabelInput] = useState('Sponsored Video');
   const [confirmRemoveTopVideo, setConfirmRemoveTopVideo] = useState(false);
   const [topVideoFeedback, setTopVideoFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [adscodDiagnostics, setAdscodDiagnostics] = useState<AdscodDiagnosticsSnapshot>(() =>
+    getAdscodDiagnosticsSnapshot()
+  );
+  const [isCheckingAdscod, setIsCheckingAdscod] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    const unsubDiagnostics = subscribeToAdscodDiagnostics((snapshot) => {
+      setAdscodDiagnostics(snapshot);
+    });
+    return () => unsubDiagnostics();
   }, []);
+
+  const handleRunAdscodCheck = async () => {
+    setIsCheckingAdscod(true);
+    try {
+      const snapshot = await runAllAdscodDiagnostics();
+      setAdscodDiagnostics(snapshot);
+    } finally {
+      setIsCheckingAdscod(false);
+    }
+  };
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -90,6 +125,104 @@ export const AdsManager: React.FC = () => {
   }, [topVideoUrlInput]);
 
   const currentTopVideo: TopVideoAdConfig = normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd);
+  const currentTopVideoDisplay: TopVideoAdDisplaySettings = normalizeTopVideoAdDisplaySettings(
+    currentTopVideo.displaySettings
+  );
+  const previewHeaderSpacing = resolveTopVideoBannerHeaderSpacing(
+    currentTopVideoDisplay.bannerHeightPx
+  );
+
+  const updateTopVideoDisplay = (
+    key: keyof TopVideoAdDisplaySettings,
+    value: number | boolean
+  ) => {
+    setSettings((prev) => {
+      const existingTop = normalizeTopVideoAdConfig(prev.aboveHeaderVideoAd);
+      const prevDisplay = normalizeTopVideoAdDisplaySettings(existingTop.displaySettings);
+      let nextRaw: TopVideoAdDisplaySettings = { ...prevDisplay };
+
+      if (key === 'preserveAspectRatio') {
+        const locked = Boolean(value);
+        nextRaw.preserveAspectRatio = locked;
+        if (locked) {
+          nextRaw.videoHeightPx = clampDisplayNumber(
+            Math.round((prevDisplay.videoWidthPx * 9) / 16),
+            prevDisplay.videoHeightPx,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.min,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.max
+          );
+        }
+      } else if (key === 'videoWidthPx') {
+        const widthPx = clampDisplayNumber(
+          value,
+          prevDisplay.videoWidthPx,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.min,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.max
+        );
+        nextRaw.videoWidthPx = widthPx;
+        if (prevDisplay.preserveAspectRatio) {
+          nextRaw.videoHeightPx = clampDisplayNumber(
+            Math.round((widthPx * 9) / 16),
+            prevDisplay.videoHeightPx,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.min,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.max
+          );
+        }
+      } else if (key === 'videoHeightPx') {
+        const heightPx = clampDisplayNumber(
+          value,
+          prevDisplay.videoHeightPx,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.min,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.max
+        );
+        nextRaw.videoHeightPx = heightPx;
+        if (prevDisplay.preserveAspectRatio) {
+          nextRaw.videoWidthPx = clampDisplayNumber(
+            Math.round((heightPx * 16) / 9),
+            prevDisplay.videoWidthPx,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.min,
+            TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.max
+          );
+        }
+      } else if (key === 'bannerWidthPx') {
+        nextRaw.bannerWidthPx = clampDisplayNumber(
+          value,
+          prevDisplay.bannerWidthPx,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.min,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.max
+        );
+      } else if (key === 'bannerHeightPx') {
+        nextRaw.bannerHeightPx = clampDisplayNumber(
+          value,
+          prevDisplay.bannerHeightPx,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.min,
+          TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.max
+        );
+      }
+
+      const normalizedNextDisplay = normalizeTopVideoAdDisplaySettings(nextRaw);
+      return {
+        ...prev,
+        aboveHeaderVideoAd: {
+          ...existingTop,
+          displaySettings: normalizedNextDisplay
+        }
+      };
+    });
+  };
+
+  const handleResetTopVideoDisplay = () => {
+    setSettings((prev) => {
+      const existingTop = normalizeTopVideoAdConfig(prev.aboveHeaderVideoAd);
+      return {
+        ...prev,
+        aboveHeaderVideoAd: {
+          ...existingTop,
+          displaySettings: { ...DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS }
+        }
+      };
+    });
+  };
 
   const previewTopVideo: TopVideoAdConfig | null = useMemo(() => {
     if (parsedTopVideoUrl?.valid && parsedTopVideoUrl.videoId && parsedTopVideoUrl.playerEmbedUrl) {
@@ -99,14 +232,25 @@ export const AdsManager: React.FC = () => {
         videoId: parsedTopVideoUrl.videoId,
         playerEmbedUrl: parsedTopVideoUrl.playerEmbedUrl,
         title: topVideoTitleInput.trim(),
-        label: topVideoLabelInput.trim() || 'Sponsored Video'
+        label: topVideoLabelInput.trim() || 'Sponsored Video',
+        displaySettings: currentTopVideoDisplay
       };
     }
     if (currentTopVideo.videoId && currentTopVideo.playerEmbedUrl) {
-      return currentTopVideo;
+      return {
+        ...currentTopVideo,
+        displaySettings: currentTopVideoDisplay
+      };
     }
     return null;
-  }, [parsedTopVideoUrl, topVideoUrlInput, topVideoTitleInput, topVideoLabelInput, currentTopVideo]);
+  }, [
+    parsedTopVideoUrl,
+    topVideoUrlInput,
+    topVideoTitleInput,
+    topVideoLabelInput,
+    currentTopVideo,
+    currentTopVideoDisplay
+  ]);
 
   const persistTopVideoAd = async (
     nextTopVideo: TopVideoAdConfig,
@@ -117,9 +261,15 @@ export const AdsManager: React.FC = () => {
     setTopVideoFeedback(null);
     setStatusMessage(null);
     try {
+      const normalizedTop = normalizeTopVideoAdConfig({
+        ...nextTopVideo,
+        displaySettings: normalizeTopVideoAdDisplaySettings(
+          nextTopVideo.displaySettings || currentTopVideoDisplay
+        )
+      });
       const payloadToSave: AdsSettings = {
         ...settings,
-        aboveHeaderVideoAd: normalizeTopVideoAdConfig(nextTopVideo),
+        aboveHeaderVideoAd: normalizedTop,
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
       const result = await saveAdsSettings(payloadToSave, user.uid);
@@ -155,7 +305,8 @@ export const AdsManager: React.FC = () => {
       url: topVideoUrlInput,
       enabled: currentTopVideo.videoId ? currentTopVideo.enabled : true,
       title: topVideoTitleInput,
-      label: topVideoLabelInput
+      label: topVideoLabelInput,
+      displaySettings: currentTopVideoDisplay
     });
 
     if (!built.success || !built.videoAd) {
@@ -170,7 +321,7 @@ export const AdsManager: React.FC = () => {
     await persistTopVideoAd(
       built.videoAd,
       built.videoAd.enabled
-        ? `Top-of-site Vimeo video ad (ID: ${built.videoAd.videoId}) saved and enabled above the Header.`
+        ? `Top-of-site Vimeo video ad (ID: ${built.videoAd.videoId}, ${currentTopVideoDisplay.videoWidthPx}×${currentTopVideoDisplay.videoHeightPx}px) saved and enabled above the Header.`
         : `Top-of-site Vimeo video ad (ID: ${built.videoAd.videoId}) saved (currently disabled).`
     );
   };
@@ -186,7 +337,8 @@ export const AdsManager: React.FC = () => {
         url: urlSource,
         enabled: true,
         title: topVideoTitleInput,
-        label: topVideoLabelInput
+        label: topVideoLabelInput,
+        displaySettings: currentTopVideoDisplay
       });
       if (!built.success || !built.videoAd) {
         setTopVideoFeedback({
@@ -208,6 +360,7 @@ export const AdsManager: React.FC = () => {
       enabled: false,
       title: topVideoTitleInput.trim(),
       label: topVideoLabelInput.trim() || 'Sponsored Video',
+      displaySettings: currentTopVideoDisplay,
       updatedAt: new Date().toISOString()
     };
     await persistTopVideoAd(updated, 'Top-of-site video advertisement disabled.');
@@ -229,13 +382,17 @@ export const AdsManager: React.FC = () => {
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      let resolvedTopVideo = normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd);
+      let resolvedTopVideo = normalizeTopVideoAdConfig({
+        ...settings.aboveHeaderVideoAd,
+        displaySettings: currentTopVideoDisplay
+      });
       if (topVideoUrlInput.trim()) {
         const builtTop = createTopVideoAdConfigFromUrl({
           url: topVideoUrlInput,
           enabled: resolvedTopVideo.enabled,
           title: topVideoTitleInput,
-          label: topVideoLabelInput
+          label: topVideoLabelInput,
+          displaySettings: currentTopVideoDisplay
         });
         if (builtTop.success && builtTop.videoAd) {
           resolvedTopVideo = builtTop.videoAd;
@@ -632,43 +789,254 @@ export const AdsManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Live Admin Video Preview */}
-        {previewTopVideo && (
-          <div
-            data-testid="ads-top-video-preview"
-            className="rounded-xl border border-slate-200 bg-slate-100/70 p-4 space-y-2.5"
-          >
-            <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-800">
-              <span className="flex items-center gap-1.5">
-                <Eye className="w-4 h-4 text-teal-700" aria-hidden="true" />
-                <span>Video Advertisement Preview (Vimeo ID: {previewTopVideo.videoId})</span>
-              </span>
-              <span className="text-[11px] font-mono text-slate-500 font-normal">
-                {previewTopVideo.enabled ? 'Will play above Header' : 'Preview only (disabled)'}
-              </span>
+        {/* Top Video Ad Size & Header Dimensions Controls */}
+        <div
+          data-testid="ads-top-video-size-controls"
+          className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+            <div>
+              <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                Top Video Ad &amp; Surrounding Header Dimensions
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Configure the exact size of the centered video player and its surrounding top banner/header across desktop and mobile.
+              </p>
             </div>
-            <div className="max-w-2xl mx-auto">
-              <Suspense
-                fallback={
-                  <div className="w-full aspect-video min-h-[180px] rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-xs text-slate-300">
-                    Loading Vimeo preview...
-                  </div>
-                }
-              >
-                <LazyShopVimeoPlayer
-                  video={{
-                    videoId: previewTopVideo.videoId,
-                    playerEmbedUrl: previewTopVideo.playerEmbedUrl,
-                    title: previewTopVideo.title || previewTopVideo.label || 'Sponsored Video'
-                  }}
-                  autoPlay={false}
-                  playerLabel="Top Video Ad"
-                  fallbackNote="Check that the Vimeo link is public or embeddable."
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={currentTopVideoDisplay.preserveAspectRatio}
+                  onChange={(e) => updateTopVideoDisplay('preserveAspectRatio', e.target.checked)}
+                  data-testid="ads-top-video-aspect-toggle"
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                 />
-              </Suspense>
+                <span>Maintain 16:9 Ratio</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={handleResetTopVideoDisplay}
+                data-testid="ads-top-video-reset-sizes"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                <span>Reset Sizes</span>
+              </button>
             </div>
           </div>
-        )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DisplayNumericControl
+              id="ads-top-video-width-px"
+              label="Video Width"
+              description="Width of the centered Vimeo video player (scales to 100% on narrow screens)."
+              value={currentTopVideoDisplay.videoWidthPx}
+              min={TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.min}
+              max={TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.max}
+              step={TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.step}
+              unit="px"
+              onChange={(val) => updateTopVideoDisplay('videoWidthPx', val)}
+            />
+
+            <DisplayNumericControl
+              id="ads-top-video-height-px"
+              label="Video Height"
+              description={
+                currentTopVideoDisplay.preserveAspectRatio
+                  ? 'Linked to Video Width to preserve 16:9 aspect ratio.'
+                  : 'Custom video stage height (16:9 lock disabled).'
+              }
+              value={currentTopVideoDisplay.videoHeightPx}
+              min={TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.min}
+              max={TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.max}
+              step={TOP_VIDEO_AD_DISPLAY_LIMITS.videoHeightPx.step}
+              unit="px"
+              onChange={(val) => updateTopVideoDisplay('videoHeightPx', val)}
+            />
+
+            <DisplayNumericControl
+              id="ads-top-video-banner-width-px"
+              label="Banner / Header Width"
+              description="Width of the framed banner header surrounding the video."
+              value={currentTopVideoDisplay.bannerWidthPx}
+              min={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.min}
+              max={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.max}
+              step={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.step}
+              unit="px"
+              onChange={(val) => updateTopVideoDisplay('bannerWidthPx', val)}
+            />
+
+            <DisplayNumericControl
+              id="ads-top-video-banner-height-px"
+              label="Banner / Header Height"
+              description="Vertical height & spacing of the header strip above the video (-5px to 120px; negative values tighten padding and spacing cleanly)."
+              value={currentTopVideoDisplay.bannerHeightPx}
+              min={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.min}
+              max={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.max}
+              step={TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.step}
+              unit="px"
+              onChange={(val) => updateTopVideoDisplay('bannerHeightPx', val)}
+            />
+          </div>
+        </div>
+
+        {/* Live Admin Video Preview Reflecting Exact Saved/Pending Dimensions */}
+        <div
+          data-testid="ads-top-video-preview"
+          className="rounded-xl border border-slate-200 bg-slate-100/70 p-4 space-y-2.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-800">
+            <span className="flex items-center gap-1.5">
+              <Eye className="w-4 h-4 text-teal-700" aria-hidden="true" />
+              <span>
+                Top Banner &amp; Video Size Preview{' '}
+                {previewTopVideo ? `(Vimeo ID: ${previewTopVideo.videoId})` : '(Wireframe)'}
+              </span>
+            </span>
+            <span className="text-[11px] font-mono text-slate-500 font-normal">
+              Banner {currentTopVideoDisplay.bannerWidthPx}×{currentTopVideoDisplay.bannerHeightPx}px · Video{' '}
+              {currentTopVideoDisplay.videoWidthPx}×{currentTopVideoDisplay.videoHeightPx}px{' '}
+              {currentTopVideoDisplay.preserveAspectRatio ? '(16:9)' : '(Custom)'}
+            </span>
+          </div>
+
+          <div
+            className="w-full overflow-x-auto bg-slate-950/95 rounded-xl px-2 border border-slate-800"
+            style={{
+              paddingTop: `${Math.max(2, previewHeaderSpacing.sectionPaddingTopPx)}px`,
+              paddingBottom: `${Math.max(2, previewHeaderSpacing.sectionPaddingBottomPx)}px`
+            }}
+          >
+            <div
+              className="w-full max-w-full mx-auto bg-slate-900/90 border border-slate-700/80 rounded-xl px-2.5 sm:px-3.5 transition-all flex flex-col"
+              style={{
+                maxWidth: `${currentTopVideoDisplay.bannerWidthPx}px`,
+                paddingTop: `${previewHeaderSpacing.wrapperPaddingTopPx}px`,
+                paddingBottom: `${previewHeaderSpacing.wrapperPaddingBottomPx}px`,
+                gap: `${previewHeaderSpacing.wrapperGapPx}px`
+              }}
+            >
+              <div
+                className="flex items-center justify-between gap-2 text-[11px] text-white"
+                style={{ minHeight: `${previewHeaderSpacing.headerMinHeightPx}px` }}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`rounded bg-amber-400 text-slate-950 font-extrabold uppercase ${
+                      previewHeaderSpacing.compactTier === 'ultra'
+                        ? 'px-1 py-0 text-[8px] leading-[11px]'
+                        : previewHeaderSpacing.compactTier === 'compact'
+                        ? 'px-1.5 py-0 text-[9px] leading-[13px]'
+                        : 'px-1.5 py-0.5 text-[9px] leading-none'
+                    }`}
+                  >
+                    AD
+                  </span>
+                  <span
+                    className={`font-bold text-amber-300 uppercase ${
+                      previewHeaderSpacing.compactTier === 'ultra'
+                        ? 'text-[9px] leading-[11px]'
+                        : previewHeaderSpacing.compactTier === 'compact'
+                        ? 'text-[10px] leading-[13px]'
+                        : 'text-[10px] sm:text-[11px] leading-none'
+                    }`}
+                  >
+                    {topVideoLabelInput.trim() || 'Sponsored Video'}
+                  </span>
+                  {topVideoTitleInput.trim() && (
+                    <span
+                      className={`text-slate-200 truncate ${
+                        previewHeaderSpacing.compactTier === 'ultra'
+                          ? 'text-[9px] leading-[11px]'
+                          : 'text-[11px]'
+                      }`}
+                    >
+                      · {topVideoTitleInput.trim()}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`rounded-md bg-slate-950 border border-slate-700 text-slate-300 font-bold ${
+                    previewHeaderSpacing.compactTier === 'ultra'
+                      ? 'px-1.5 py-0 text-[9px] leading-[12px]'
+                      : previewHeaderSpacing.compactTier === 'compact'
+                      ? 'px-1.5 py-[1px] text-[9px] leading-[13px]'
+                      : 'px-2 py-0.5 text-[10px]'
+                  }`}
+                >
+                  Minimize
+                </span>
+              </div>
+
+              <div
+                className={`w-full max-w-full mx-auto transition-all ${
+                  !currentTopVideoDisplay.preserveAspectRatio
+                    ? '[&_[data-testid=shop-vimeo-player]>div:first-child]:!aspect-auto [&_[data-testid=shop-vimeo-player]>div:first-child]:!h-[var(--top-ad-video-height)] [&_[data-testid=shop-vimeo-mount]>div]:!pt-0 [&_[data-testid=shop-vimeo-mount]>div]:!h-full'
+                    : ''
+                }`}
+                style={{
+                  width: '100%',
+                  maxWidth: `${currentTopVideoDisplay.videoWidthPx}px`,
+                  ...(!currentTopVideoDisplay.preserveAspectRatio
+                    ? ({ '--top-ad-video-height': `${currentTopVideoDisplay.videoHeightPx}px` } as React.CSSProperties)
+                    : {})
+                }}
+              >
+                {previewTopVideo ? (
+                  <Suspense
+                    fallback={
+                      <div
+                        className={`w-full rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-xs text-slate-300 ${
+                          currentTopVideoDisplay.preserveAspectRatio ? 'aspect-video' : ''
+                        }`}
+                        style={
+                          !currentTopVideoDisplay.preserveAspectRatio
+                            ? { height: `${currentTopVideoDisplay.videoHeightPx}px` }
+                            : undefined
+                        }
+                      >
+                        Loading Vimeo preview...
+                      </div>
+                    }
+                  >
+                    <LazyShopVimeoPlayer
+                      video={{
+                        videoId: previewTopVideo.videoId,
+                        playerEmbedUrl: previewTopVideo.playerEmbedUrl,
+                        title: previewTopVideo.title || previewTopVideo.label || 'Sponsored Video'
+                      }}
+                      autoPlay={false}
+                      compact={true}
+                      playerLabel="Top Video Ad"
+                      fallbackNote="Check that the Vimeo link is public or embeddable."
+                    />
+                  </Suspense>
+                ) : (
+                  <div
+                    className={`w-full rounded-xl border border-dashed border-slate-600 bg-slate-950 flex flex-col items-center justify-center text-center px-3 text-slate-400 ${
+                      currentTopVideoDisplay.preserveAspectRatio ? 'aspect-video' : ''
+                    }`}
+                    style={
+                      !currentTopVideoDisplay.preserveAspectRatio
+                        ? { height: `${currentTopVideoDisplay.videoHeightPx}px` }
+                        : undefined
+                    }
+                  >
+                    <span className="text-[11px] font-bold text-slate-200">
+                      Video Area ({currentTopVideoDisplay.videoWidthPx}×{currentTopVideoDisplay.videoHeightPx}px)
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-0.5">
+                      Paste a Vimeo URL above and click &ldquo;Save Video Ad&rdquo; to preview live video
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Advertisement Display Settings Panel */}
@@ -899,10 +1267,145 @@ export const AdsManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Adscod Live Integration & Diagnostics */}
+      <div
+        data-testid="ads-adscod-diagnostics"
+        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+              <Activity className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Production Adscod Monetization</span>
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
+              Adscod Network Status &amp; Placement Diagnostics
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Proxied securely via Cloudflare Worker (<span className="font-mono text-slate-700">{adscodDiagnostics.workerUrl}</span>). Publisher key remains server-side in Worker secrets and is never exposed in browser code.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRunAdscodCheck}
+            disabled={isCheckingAdscod}
+            data-testid="ads-adscod-run-diagnostics"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white cursor-pointer transition-colors self-start sm:self-center disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingAdscod ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <span>{isCheckingAdscod ? 'Checking Worker...' : 'Run Live Adscod Check'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+            <div className="font-bold text-slate-800">Origin &amp; Security Check</div>
+            <div className="text-slate-600">
+              Current origin:{' '}
+              <span className="font-mono text-slate-900">{adscodDiagnostics.currentOrigin || 'unknown'}</span>
+            </div>
+            <div className="text-[11px]">
+              {adscodDiagnostics.isProductionOrigin ? (
+                <span className="text-emerald-700 font-semibold">
+                  Production origin matches Worker allowlist (isezerano.online / www.isezerano.online).
+                </span>
+              ) : (
+                <span className="text-amber-700 font-semibold">
+                  Preview/local origin detected — Cloudflare Worker only allows https://isezerano.online &amp; https://www.isezerano.online (expects 403 outside production).
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+            <div className="font-bold text-slate-800">CPM Viewability &amp; Click Tracking</div>
+            <div className="text-slate-600">
+              Dwell beacon:{' '}
+              <span className="font-mono text-[11px] text-slate-900">{adscodDiagnostics.dwellEndpoint}</span>
+            </div>
+            <div className="text-[11px] text-slate-600">
+              Viewability fires via <span className="font-mono">IntersectionObserver (&ge;50%)</span> + deduplicated <span className="font-mono">sendBeacon</span>; clicks preserve exact <span className="font-mono">clickUrl</span>.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(['banner', 'inline'] as const).map((placementKey) => {
+            const meta = ADSCOD_PLACEMENTS[placementKey];
+            const diag: AdscodPlacementDiagnostic | null = adscodDiagnostics.placements[placementKey];
+            const badgeStyle =
+              diag?.state === 'filled'
+                ? 'bg-emerald-100 text-emerald-800'
+                : diag?.state === 'no-fill'
+                ? 'bg-amber-100 text-amber-800'
+                : diag?.state === 'error'
+                ? 'bg-rose-100 text-rose-800'
+                : 'bg-slate-100 text-slate-600';
+
+            return (
+              <div
+                key={placementKey}
+                data-testid={`ads-adscod-diag-${placementKey}`}
+                className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-slate-900">{meta.label}</div>
+                    <div className="text-[11px] font-mono text-slate-500">
+                      ID: {meta.placementId} (?placement={meta.workerParam})
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeStyle}`}>
+                    {diag ? diag.state : 'Not Checked'}
+                  </span>
+                </div>
+
+                {diag ? (
+                  <div className="space-y-1 text-[11px] text-slate-600 pt-1 border-t border-slate-200/80">
+                    <div>
+                      Worker HTTP: <span className="font-mono font-semibold text-slate-900">{diag.httpStatus || 'Network Error'}</span>
+                      {' · '}Checked: <span className="font-mono">{new Date(diag.checkedAt).toLocaleTimeString()}</span>
+                    </div>
+                    {diag.state === 'filled' && (
+                      <>
+                        <div className="truncate">
+                          Campaign: <span className="font-semibold text-slate-900">{diag.title || diag.campaignId || 'Active Ad'}</span>
+                          {diag.brandName ? ` (${diag.brandName})` : ''}
+                        </div>
+                        <div>
+                          Click Host: <span className="font-mono text-slate-800">{diag.clickUrlHost || 'verified'}</span>
+                          {' · '}Dwell Token: <span className="font-semibold text-emerald-700">{diag.hasClickToken ? 'Present' : 'Missing'}</span>
+                        </div>
+                      </>
+                    )}
+                    {diag.error && (
+                      <div className="text-rose-700 font-medium break-words">
+                        Detail: {diag.error}
+                      </div>
+                    )}
+                    {diag.dwell && (
+                      <div className="text-slate-600">
+                        Viewability Beacon: <span className="font-semibold text-slate-900">{diag.dwell.state}</span>
+                        {diag.dwell.reportedMs > 0 ? ` (${diag.dwell.reportedMs}ms via ${diag.dwell.transport || 'beacon'})` : ''}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/80">
+                    Click &ldquo;Run Live Adscod Check&rdquo; above or visit a public page to inspect live Worker fill &amp; dwell status.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Placement 1: Below Header */}
       <AdPlacementCard
         placementTitle="1. Below Website Header"
-        placementDescription="Displayed directly beneath the top navigation bar across all pages. Highest visibility for announcements, partner banners, and top leaderboard ads."
+        placementDescription="Displayed directly beneath the top navigation bar across all pages. Leave Custom Banner URL / Script Code blank while enabled to automatically serve the live Adscod Banner (fa638e17-ebc6-465c-b3da-7fc78d1cde4c)."
         config={settings.belowHeaderAd}
         onChange={updateBelowHeader}
       />
@@ -910,7 +1413,7 @@ export const AdsManager: React.FC = () => {
       {/* Placement 2: Above Footer */}
       <AdPlacementCard
         placementTitle="2. Above Website Footer"
-        placementDescription="Displayed immediately above the bottom website footer. Ideal for sponsored content, community notices, and educational affiliate links."
+        placementDescription="Displayed immediately above the bottom website footer when a custom banner image or custom HTML/script is configured (collapses cleanly when empty)."
         config={settings.aboveFooterAd}
         onChange={updateAboveFooter}
       />

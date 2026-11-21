@@ -1,8 +1,10 @@
 import {
   DEFAULT_TOP_VIDEO_AD_CONFIG,
   ShopVideoConfig,
-  TopVideoAdConfig
+  TopVideoAdConfig,
+  TopVideoAdDisplaySettings
 } from '../types/platform';
+import { normalizeTopVideoAdDisplaySettings } from '../utils/displaySettingsUtils';
 
 export interface ParsedVimeoUrl {
   valid: boolean;
@@ -273,7 +275,10 @@ export function normalizeShopVideoConfig(raw: unknown): ShopVideoConfig | null {
 
 export function normalizeTopVideoAdConfig(raw: unknown): TopVideoAdConfig {
   if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_TOP_VIDEO_AD_CONFIG };
+    return {
+      ...DEFAULT_TOP_VIDEO_AD_CONFIG,
+      displaySettings: normalizeTopVideoAdDisplaySettings(null)
+    };
   }
 
   const record = raw as Record<string, unknown>;
@@ -292,6 +297,9 @@ export function normalizeTopVideoAdConfig(raw: unknown): TopVideoAdConfig {
     typeof record.label === 'string' && record.label.trim()
       ? record.label.trim().slice(0, 48)
       : 'Sponsored Video';
+  const displaySettings = normalizeTopVideoAdDisplaySettings(
+    (record.displaySettings as Partial<TopVideoAdDisplaySettings> | undefined) || null
+  );
   const updatedAt =
     typeof record.updatedAt === 'string' && record.updatedAt.trim()
       ? record.updatedAt.trim()
@@ -303,6 +311,7 @@ export function normalizeTopVideoAdConfig(raw: unknown): TopVideoAdConfig {
       enabled: false,
       title,
       label,
+      displaySettings,
       ...(updatedAt ? { updatedAt } : {})
     };
   }
@@ -320,6 +329,7 @@ export function normalizeTopVideoAdConfig(raw: unknown): TopVideoAdConfig {
     }),
     title,
     label,
+    displaySettings,
     ...(updatedAt ? { updatedAt } : {})
   };
 }
@@ -329,6 +339,7 @@ export function createTopVideoAdConfigFromUrl(options: {
   enabled?: boolean;
   title?: string;
   label?: string;
+  displaySettings?: Partial<TopVideoAdDisplaySettings> | null;
 }): { success: boolean; videoAd?: TopVideoAdConfig; error?: string } {
   const parsed = parseVimeoVideoUrl(options.url);
   if (!parsed.valid || !parsed.videoId || !parsed.canonicalUrl || !parsed.playerEmbedUrl) {
@@ -347,6 +358,7 @@ export function createTopVideoAdConfigFromUrl(options: {
       playerEmbedUrl: parsed.playerEmbedUrl,
       title: (options.title || '').trim().slice(0, 128),
       label: (options.label || '').trim().slice(0, 48) || 'Sponsored Video',
+      displaySettings: normalizeTopVideoAdDisplaySettings(options.displaySettings),
       updatedAt: new Date().toISOString()
     }
   };

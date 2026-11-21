@@ -11,6 +11,7 @@ import {
   normalizeAdsDisplaySettings
 } from '../utils/displaySettingsUtils';
 import { ExternalLink, Sparkles } from 'lucide-react';
+import { AdscodBannerAd } from './AdscodBannerAd';
 
 interface AdSlotProps {
   placement: AdPlacement;
@@ -430,22 +431,29 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     syncResponsiveEmbedLayout
   ]);
 
-  // Hold compact below-header slot space during initial cold fetch to minimize layout shift
+  // Resolve ads settings cleanly before rendering; collapse empty placeholders
   if (!isAdsResolved) {
-    if (placement === 'below_header') {
-      return (
-        <div
-          className={`w-full max-w-7xl mx-auto px-0 min-[360px]:px-2 sm:px-6 lg:px-8 py-1.5 min-h-[76px] sm:min-h-[84px] ${className}`}
-          data-ad-placement={placement}
-          aria-hidden="true"
-        />
-      );
-    }
     return null;
   }
 
   // Master disabled or slot disabled: render nothing
   if (!adsSettings.masterEnabled || !slotConfig || !slotConfig.enabled) {
+    return null;
+  }
+
+  const hasCustomBanner =
+    slotConfig.type === 'banner' && Boolean(slotConfig.imageUrl && slotConfig.imageUrl.trim());
+  const hasCustomCode =
+    slotConfig.type === 'code' && Boolean(slotConfig.code && slotConfig.code.trim());
+
+  // When below_header has no custom image banner or custom script/HTML override,
+  // automatically serve the production Adscod Banner placement (collapses cleanly on no-fill).
+  if (placement === 'below_header' && !hasCustomBanner && !hasCustomCode) {
+    return <AdscodBannerAd wrapperClassName={className} />;
+  }
+
+  // Never render an empty bordered ad container if neither custom banner nor code is populated
+  if (!hasCustomBanner && !hasCustomCode) {
     return null;
   }
 

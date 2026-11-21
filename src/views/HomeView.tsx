@@ -27,6 +27,7 @@ import {
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
+import { AdscodInlineAd } from '../components/AdscodInlineAd';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
@@ -442,6 +443,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 );
               })()}
 
+              {/* Natural Inline Sponsored Ad inside Category / Search feed */}
+              {filteredPosts.length > 1 && (
+                <AdscodInlineAd
+                  contextCategory={activeCategory !== 'All Categories' ? activeCategory : filteredPosts[0]?.category}
+                  contextQuery={trimmedQuery || filteredPosts[0]?.title}
+                  placementContext="homepage_category_feed"
+                />
+              )}
+
               {/* Remaining stories in category */}
               {filteredPosts.length > 1 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -669,6 +679,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </aside>
               )}
             </section>
+          )}
+
+          {/* Natural Inline Sponsored Ad between Front Page Lead/Wire and Latest News */}
+          {leadPost && (
+            <AdscodInlineAd
+              contextCategory={leadPost.category}
+              contextQuery={leadPost.title}
+              placementContext="homepage_feed"
+            />
           )}
 
           {/* TIER 2: MORE LATEST ARTICLES GRID */}

@@ -17,6 +17,7 @@ import {
 import type { OgDataProviders } from './server/ogMeta.ts';
 import { mountCommentsApi } from './server/commentsApi.ts';
 import type { CommentsApiOptions } from './server/commentsApi.ts';
+import { PUBLIC_SITE_ORIGIN, generateSitemapXml } from './scripts/sitemapGenerator.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +31,7 @@ export interface ServerAppOptions {
 
 /**
  * Creates the Express application with:
+ * - Public `/sitemap.xml` (application/xml) and `/robots.txt` (text/plain)
  * - Public binary thumbnail endpoint `/api/blog-og-image/:slugOrFile` (no auth/cookies required)
  * - Initial HTML Open Graph & Twitter Card injection for `/blog/:slug`, `/blog?post=:slug`, and `/`
  * - Production static file serving + `/api/*` support
@@ -44,6 +46,71 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
     ...options.providers,
     publicDir
   };
+
+  // 0. Public XML Sitemap & Robots.txt (never falls back to SPA index.html)
+  app.all('/sitemap.xml', async (req: Request, res: Response) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(405).type('text/plain').send('Method Not Allowed');
+      return;
+    }
+    try {
+      const distSitemapPath = path.join(distDir, 'sitemap.xml');
+      if (isProd && !options.providers?.fetchPosts && fs.existsSync(distSitemapPath)) {
+        const xml = fs.readFileSync(distSitemapPath, 'utf-8');
+        res.status(200);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        if (req.method === 'HEAD') res.end();
+        else res.send(xml);
+        return;
+      }
+
+      let posts: Awaited<ReturnType<typeof fetchPublishedBlogPostsFromFirestore>> = [];
+      try {
+        const loadPosts =
+          providers.fetchPosts || (() => fetchPublishedBlogPostsFromFirestore(undefined, 2000));
+        posts = await loadPosts();
+      } catch {
+        posts = [];
+      }
+
+      const { xml } = generateSitemapXml({
+        origin: PUBLIC_SITE_ORIGIN,
+        posts
+      });
+      res.status(200);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      if (req.method === 'HEAD') res.end();
+      else res.send(xml);
+    } catch {
+      const { xml } = generateSitemapXml({ origin: PUBLIC_SITE_ORIGIN, posts: [] });
+      res.status(200);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      if (req.method === 'HEAD') res.end();
+      else res.send(xml);
+    }
+  });
+
+  app.all('/robots.txt', (req: Request, res: Response) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(405).type('text/plain').send('Method Not Allowed');
+      return;
+    }
+    const candidates = isProd
+      ? [path.join(distDir, 'robots.txt'), path.join(publicDir, 'robots.txt')]
+      : [path.join(publicDir, 'robots.txt'), path.join(distDir, 'robots.txt')];
+    const matched = candidates.find((p) => fs.existsSync(p));
+    const content = matched
+      ? fs.readFileSync(matched, 'utf-8')
+      : 'User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /manage\nDisallow: /api/\n\nSitemap: https://isezerano.online/sitemap.xml\n';
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    if (req.method === 'HEAD') res.end();
+    else res.send(content);
+  });
 
   // 1. Public Blog Thumbnail Image Endpoints (/og-blog/ static-aligned + legacy /api/blog-og-image/)
   app.all(

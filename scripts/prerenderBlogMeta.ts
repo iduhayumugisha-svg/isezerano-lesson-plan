@@ -19,6 +19,7 @@ import {
   safeFileSlug,
   sniffImageMimeFromBuffer
 } from '../server/ogMeta.ts';
+import { PUBLIC_SITE_ORIGIN, generateSitemapXml } from './sitemapGenerator.ts';
 
 export interface PrerenderStaticOptions {
   distDir?: string;
@@ -29,6 +30,8 @@ export interface PrerenderStaticOptions {
 
 export interface PrerenderStaticResult {
   prerenderedCount: number;
+  sitemapUrlCount?: number;
+  sitemapPath?: string;
   generatedFiles: Array<{
     slug: string;
     htmlPath: string;
@@ -154,9 +157,25 @@ export async function prerenderStaticBlogDist(
   const publishedPosts = posts.filter(
     (p) => p && String(p.status || '').trim().toLowerCase() === 'published'
   );
+
+  // Always write dist/sitemap.xml with canonical homepage, public static pages, and published articles only
+  const sitemapOutPath = path.join(distDir, 'sitemap.xml');
+  const sitemapData = generateSitemapXml({
+    origin: origin || PUBLIC_SITE_ORIGIN,
+    posts: publishedPosts
+  });
+  fs.writeFileSync(sitemapOutPath, sitemapData.xml, 'utf-8');
+
   if (publishedPosts.length === 0) {
-    console.log('[prerenderBlogMeta] 0 published posts found; dist/index.html and dist/blog/index.html preserved cleanly.');
-    return { prerenderedCount: 0, generatedFiles: [] };
+    console.log(
+      `[prerenderBlogMeta] 0 published posts found; dist/index.html, dist/blog/index.html, and dist/sitemap.xml (${sitemapData.urlCount} URLs) written cleanly.`
+    );
+    return {
+      prerenderedCount: 0,
+      sitemapUrlCount: sitemapData.urlCount,
+      sitemapPath: sitemapOutPath,
+      generatedFiles: []
+    };
   }
 
   const generatedFiles: PrerenderStaticResult['generatedFiles'] = [];
@@ -241,9 +260,14 @@ export async function prerenderStaticBlogDist(
   }
 
   console.log(
-    `[prerenderBlogMeta] Pre-rendered ${generatedFiles.length} published blog article page(s) and static thumbnails in dist/.`
+    `[prerenderBlogMeta] Pre-rendered ${generatedFiles.length} published blog article page(s), thumbnails, and dist/sitemap.xml (${sitemapData.urlCount} URLs).`
   );
-  return { prerenderedCount: generatedFiles.length, generatedFiles };
+  return {
+    prerenderedCount: generatedFiles.length,
+    sitemapUrlCount: sitemapData.urlCount,
+    sitemapPath: sitemapOutPath,
+    generatedFiles
+  };
 }
 
 const isDirectRun =

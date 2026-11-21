@@ -15,6 +15,12 @@ import { ShopVimeoPlayer } from '../src/components/ShopVimeoPlayer';
 import { TopVideoAdBanner } from '../src/components/TopVideoAdBanner';
 import { DEFAULT_WEBSITE_DESIGN } from '../src/types/websiteDesign';
 import { DEFAULT_ADS_SETTINGS } from '../src/types/platform';
+import {
+  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS,
+  TOP_VIDEO_AD_DISPLAY_LIMITS,
+  normalizeTopVideoAdDisplaySettings,
+  resolveTopVideoBannerHeaderSpacing
+} from '../src/utils/displaySettingsUtils';
 
 function testVimeoUrlValidationAndExtraction(): void {
   // Standard Vimeo link requested in spec
@@ -106,6 +112,71 @@ function testVimeoUrlValidationAndExtraction(): void {
   assert.equal(normalizeTopVideoAdConfig({ enabled: true, vimeoUrl: 'javascript:alert(1)' }).enabled, false);
   assert.equal(DEFAULT_ADS_SETTINGS.aboveHeaderVideoAd?.enabled, false);
 
+  // Top video ad display settings clamping (-5..120 for bannerHeightPx), aspect ratio locking, and persistence
+  assert.equal(TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.min, -5);
+  assert.equal(TOP_VIDEO_AD_DISPLAY_LIMITS.bannerHeightPx.max, 120);
+
+  const defaultSizes = normalizeTopVideoAdDisplaySettings(null);
+  assert.deepEqual(defaultSizes, DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS);
+
+  const clampedSizes = normalizeTopVideoAdDisplaySettings({
+    videoWidthPx: 50,
+    videoHeightPx: 9999,
+    bannerWidthPx: 9999,
+    bannerHeightPx: -20,
+    preserveAspectRatio: true
+  });
+  assert.equal(clampedSizes.videoWidthPx, TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.min);
+  assert.equal(clampedSizes.videoHeightPx, Math.round((TOP_VIDEO_AD_DISPLAY_LIMITS.videoWidthPx.min * 9) / 16));
+  assert.equal(clampedSizes.bannerWidthPx, TOP_VIDEO_AD_DISPLAY_LIMITS.bannerWidthPx.max);
+  assert.equal(clampedSizes.bannerHeightPx, -5);
+
+  const minusFiveNormalized = normalizeTopVideoAdDisplaySettings({ bannerHeightPx: -5 });
+  const zeroNormalized = normalizeTopVideoAdDisplaySettings({ bannerHeightPx: 0 });
+  const tenNormalized = normalizeTopVideoAdDisplaySettings({ bannerHeightPx: 10 });
+  assert.equal(minusFiveNormalized.bannerHeightPx, -5);
+  assert.equal(zeroNormalized.bannerHeightPx, 0);
+  assert.equal(tenNormalized.bannerHeightPx, 10);
+
+  // Smart header spacing strictly shrinks across 24px -> 10px -> 0px -> -5px with non-negative CSS min-height
+  const totalOverhead = (h: number) => {
+    const s = resolveTopVideoBannerHeaderSpacing(h);
+    assert.ok(s.headerMinHeightPx >= 0, 'headerMinHeightPx must never be negative CSS height');
+    return (
+      s.sectionPaddingTopPx +
+      s.sectionPaddingBottomPx +
+      s.wrapperPaddingTopPx +
+      s.wrapperPaddingBottomPx +
+      s.wrapperGapPx +
+      s.headerMinHeightPx
+    );
+  };
+  assert.ok(totalOverhead(24) > totalOverhead(10), '24px must occupy more overhead than 10px');
+  assert.ok(totalOverhead(10) > totalOverhead(0), '10px must occupy more overhead than 0px');
+  assert.ok(totalOverhead(0) > totalOverhead(-5), '0px must occupy more overhead than -5px');
+  assert.equal(resolveTopVideoBannerHeaderSpacing(-5).compactTier, 'ultra');
+
+  const unlockedCustom = normalizeTopVideoAdDisplaySettings({
+    videoWidthPx: 500,
+    videoHeightPx: 210,
+    bannerWidthPx: 840,
+    bannerHeightPx: 56,
+    preserveAspectRatio: false
+  });
+  assert.equal(unlockedCustom.videoWidthPx, 500);
+  assert.equal(unlockedCustom.videoHeightPx, 210);
+  assert.equal(unlockedCustom.bannerWidthPx, 840);
+  assert.equal(unlockedCustom.bannerHeightPx, 56);
+  assert.equal(unlockedCustom.preserveAspectRatio, false);
+
+  const builtWithSizes = createTopVideoAdConfigFromUrl({
+    url: 'https://vimeo.com/1248666228',
+    enabled: true,
+    displaySettings: unlockedCustom
+  });
+  assert.equal(builtWithSizes.success, true);
+  assert.deepEqual(builtWithSizes.videoAd?.displaySettings, unlockedCustom);
+
   console.log('✓ 1. Vimeo URL validation, video ID extraction, Shop & Top-of-Site Ad config creation verified');
 }
 
@@ -195,20 +266,88 @@ function testNormalizationAndPlayerRendering(): void {
         videoId: '1248666228',
         playerEmbedUrl: 'https://player.vimeo.com/video/1248666228',
         title: 'Top Banner Ad',
-        label: 'Sponsored Video'
+        label: 'Sponsored Video',
+        displaySettings: {
+          videoWidthPx: 480,
+          videoHeightPx: 270,
+          bannerWidthPx: 820,
+          bannerHeightPx: 44,
+          preserveAspectRatio: true
+        }
       }
     })
   );
   assert.match(enabledTopHtml, /data-testid="top-video-ad-banner"/);
+  assert.match(enabledTopHtml, /data-testid="top-video-ad-wrapper"/);
   assert.match(enabledTopHtml, /data-testid="top-video-ad-header"/);
   assert.match(enabledTopHtml, /data-testid="top-video-ad-container"/);
-  assert.match(enabledTopHtml, /max-w-2xl/);
+  assert.match(enabledTopHtml, /max-width:820px/);
+  assert.match(enabledTopHtml, /min-height:44px/);
+  assert.match(enabledTopHtml, /max-width:480px/);
   assert.match(enabledTopHtml, /Sponsored Video/);
   assert.match(enabledTopHtml, /Top Banner Ad/);
   assert.match(enabledTopHtml, /data-testid="top-video-ad-collapse-toggle"/);
 
+  // Custom unlocked height injects --top-ad-video-height and removes forced aspect-video
+  const unlockedTopHtml = renderToString(
+    React.createElement(TopVideoAdBanner, {
+      currentPage: 'home',
+      overrideVideoAd: {
+        enabled: true,
+        vimeoUrl: 'https://vimeo.com/1248666228',
+        videoId: '1248666228',
+        playerEmbedUrl: 'https://player.vimeo.com/video/1248666228',
+        title: 'Custom Height',
+        label: 'AD',
+        displaySettings: {
+          videoWidthPx: 460,
+          videoHeightPx: 190,
+          bannerWidthPx: 760,
+          bannerHeightPx: 40,
+          preserveAspectRatio: false
+        }
+      }
+    })
+  );
+  assert.match(unlockedTopHtml, /max-width:760px/);
+  assert.match(unlockedTopHtml, /min-height:40px/);
+  assert.match(unlockedTopHtml, /max-width:460px/);
+  assert.match(unlockedTopHtml, /--top-ad-video-height:190px/);
+
+  // Negative & zero banner heights render non-negative min-height:0px while collapsing vertical padding cleanly
+  for (const testHeight of [24, 10, 0, -5]) {
+    const html = renderToString(
+      React.createElement(TopVideoAdBanner, {
+        currentPage: 'home',
+        overrideVideoAd: {
+          enabled: true,
+          vimeoUrl: 'https://vimeo.com/1248666228',
+          videoId: '1248666228',
+          playerEmbedUrl: 'https://player.vimeo.com/video/1248666228',
+          title: `Height ${testHeight}`,
+          label: 'AD',
+          displaySettings: {
+            videoWidthPx: 330,
+            videoHeightPx: 186,
+            bannerWidthPx: 672,
+            bannerHeightPx: testHeight,
+            preserveAspectRatio: true
+          }
+        }
+      })
+    );
+    assert.doesNotMatch(html, /min-height:-/, `Must never emit negative CSS min-height at ${testHeight}px`);
+    if (testHeight < 0) {
+      assert.match(html, /min-height:0px/);
+      assert.match(html, /gap:0px/);
+    } else {
+      assert.match(html, new RegExp(`min-height:${testHeight}px`));
+    }
+  }
+
   const topBannerFileSrc = fs.readFileSync(path.resolve('src/components/TopVideoAdBanner.tsx'), 'utf8');
   assert.match(topBannerFileSrc, /compact=\{true\}/);
+  assert.doesNotMatch(topBannerFileSrc, /max-w-2xl/);
 
   const appFileSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
   assert.match(appFileSrc, /data-testid="top-header-sticky-group"/);
@@ -276,6 +415,13 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
   assert.match(adsMgrSrc, /ads-top-video-save-btn/);
   assert.match(adsMgrSrc, /ads-top-video-remove-btn/);
   assert.match(adsMgrSrc, /ads-top-video-preview/);
+  assert.match(adsMgrSrc, /ads-top-video-size-controls/);
+  assert.match(adsMgrSrc, /ads-top-video-width-px/);
+  assert.match(adsMgrSrc, /ads-top-video-height-px/);
+  assert.match(adsMgrSrc, /ads-top-video-banner-width-px/);
+  assert.match(adsMgrSrc, /ads-top-video-banner-height-px/);
+  assert.match(adsMgrSrc, /ads-top-video-aspect-toggle/);
+  assert.match(adsMgrSrc, /ads-top-video-reset-sizes/);
   // Existing belowHeaderAd, aboveFooterAd, displaySettings remain intact
   assert.match(adsMgrSrc, /1\. Below Website Header/);
   assert.match(adsMgrSrc, /2\. Above Website Footer/);

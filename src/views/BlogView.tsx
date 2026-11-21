@@ -30,6 +30,7 @@ import {
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
+import { AdscodInlineAd } from '../components/AdscodInlineAd';
 
 interface BlogViewProps {
   initialSlug?: string | null;
@@ -347,6 +348,13 @@ export const BlogView: React.FC<BlogViewProps> = ({
           dangerouslySetInnerHTML={{ __html: activePost.content }}
         />
 
+        {/* Natural In-Article Sponsored Ad */}
+        <AdscodInlineAd
+          contextCategory={activePost.category}
+          contextQuery={activePost.title}
+          placementContext="article_inline"
+        />
+
         {/* Article Action Bar: Leave a Message & Share */}
         <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <button
@@ -602,6 +610,14 @@ export const BlogView: React.FC<BlogViewProps> = ({
             );
           })}
         </div>
+      )}
+
+      {!isLoading && filteredPosts.length > 0 && (
+        <AdscodInlineAd
+          contextCategory={selectedCategory}
+          contextQuery={searchQuery || filteredPosts[0]?.title}
+          placementContext="blog_index_inline"
+        />
       )}
     </div>
   );

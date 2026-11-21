@@ -24,20 +24,56 @@ export const DisplayNumericControl: React.FC<DisplayNumericControlProps> = ({
   unit,
   onChange
 }) => {
+  const [draftInput, setDraftInput] = React.useState<string>(String(value));
+  const [isEditingNumber, setIsEditingNumber] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isEditingNumber) {
+      setDraftInput(String(value));
+    }
+  }, [value, isEditingNumber]);
+
   const clamp = (raw: number) => Math.min(max, Math.max(min, Math.round(raw)));
 
   const handleDecrement = () => {
-    onChange(clamp(value - step));
+    const next = clamp(value - step);
+    setDraftInput(String(next));
+    onChange(next);
   };
 
   const handleIncrement = () => {
-    onChange(clamp(value + step));
+    const next = clamp(value + step);
+    setDraftInput(String(next));
+    onChange(next);
   };
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const parsed = Number(e.target.value);
+    const raw = e.target.value;
+    setDraftInput(raw);
+    if (raw.trim() === '' || raw.trim() === '-') {
+      return;
+    }
+    const parsed = Number(raw);
     if (!Number.isFinite(parsed)) return;
-    onChange(clamp(parsed));
+    if (parsed >= min && parsed <= max) {
+      onChange(clamp(parsed));
+    }
+  };
+
+  const commitDraftInput = () => {
+    setIsEditingNumber(false);
+    if (draftInput.trim() === '' || draftInput.trim() === '-') {
+      setDraftInput(String(value));
+      return;
+    }
+    const parsed = Number(draftInput);
+    if (!Number.isFinite(parsed)) {
+      setDraftInput(String(value));
+      return;
+    }
+    const next = clamp(parsed);
+    setDraftInput(String(next));
+    onChange(next);
   };
 
   return (
@@ -75,7 +111,11 @@ export const DisplayNumericControl: React.FC<DisplayNumericControlProps> = ({
           max={max}
           step={step}
           value={value}
-          onChange={(e) => onChange(clamp(Number(e.target.value)))}
+          onChange={(e) => {
+            const next = clamp(Number(e.target.value));
+            setDraftInput(String(next));
+            onChange(next);
+          }}
           className="flex-1 min-w-0 accent-teal-700 cursor-pointer h-2"
         />
 
@@ -95,8 +135,18 @@ export const DisplayNumericControl: React.FC<DisplayNumericControlProps> = ({
             min={min}
             max={max}
             step={step}
-            value={value}
+            value={isEditingNumber ? draftInput : String(value)}
+            onFocus={() => {
+              setIsEditingNumber(true);
+              setDraftInput(String(value));
+            }}
             onChange={handleNumberChange}
+            onBlur={commitDraftInput}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                commitDraftInput();
+              }
+            }}
             aria-label={`${label} numeric value (${unit})`}
             className="w-16 px-2 py-1.5 text-xs font-mono font-bold text-slate-900 tabular-nums text-right focus:outline-none"
           />

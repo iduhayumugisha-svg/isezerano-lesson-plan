@@ -2,11 +2,17 @@ import {
   AdsDisplaySettings,
   DEFAULT_ADS_DISPLAY_SETTINGS,
   MiniShopDisplaySettings,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
+  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
+  TopVideoAdDisplaySettings,
+  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
 } from '../utils/displaySettingsUtils';
 
-export type { AdsDisplaySettings, MiniShopDisplaySettings };
-export { DEFAULT_ADS_DISPLAY_SETTINGS, DEFAULT_MINI_SHOP_DISPLAY_SETTINGS };
+export type { AdsDisplaySettings, MiniShopDisplaySettings, TopVideoAdDisplaySettings };
+export {
+  DEFAULT_ADS_DISPLAY_SETTINGS,
+  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
+  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
+};
 
 // ==================== ADS TYPES ====================
 export type AdPlacement = 'below_header' | 'above_footer';
@@ -29,6 +35,7 @@ export interface TopVideoAdConfig {
   playerEmbedUrl: string;
   title: string;
   label?: string;
+  displaySettings?: TopVideoAdDisplaySettings;
   updatedAt?: string;
 }
 
@@ -38,7 +45,8 @@ export const DEFAULT_TOP_VIDEO_AD_CONFIG: TopVideoAdConfig = {
   videoId: '',
   playerEmbedUrl: '',
   title: '',
-  label: 'Sponsored Video'
+  label: 'Sponsored Video',
+  displaySettings: DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
 };
 
 export interface AdsSettings {
