@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Eye
 } from 'lucide-react';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from '../types/blog';
+import { AdsSettings } from '../types/platform';
 import {
   subscribeToBlogPosts,
   incrementPostViews,
@@ -17,12 +18,19 @@ import {
   mergeCategoriesForDisplay
 } from '../services/blogService';
 import { subscribeToApprovedCommentCounts } from '../services/commentService';
+import {
+  getAdsSettings,
+  getCachedAdsSettingsSync,
+  subscribeToAdsSettings
+} from '../services/siteSettingsService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
 import { formatPublicationDate } from '../utils/dateUtils';
 import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import { ArticleShareButton } from '../components/ArticleShareButton';
 import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
+import { InArticleAdSlot } from '../components/InArticleAdSlot';
+import { buildArticleRenderSegments } from '../utils/articleAdInjector';
 import {
   extractFirstImageFromContent,
   extractPlainTextExcerpt,
@@ -30,7 +38,6 @@ import {
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
-import { AdscodInlineAd } from '../components/AdscodInlineAd';
 
 interface BlogViewProps {
   initialSlug?: string | null;
@@ -64,6 +71,11 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [internalSelectedCategory, setInternalSelectedCategory] = useState<string>('All Categories');
   const [autoFocusCommentsForm, setAutoFocusCommentsForm] = useState(false);
+  const [adsSettings, setAdsSettings] = useState<AdsSettings>(() => getCachedAdsSettingsSync());
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
   const incrementedPostIdsRef = useRef<Set<string>>(new Set());
 
   const usesExternalCommentCounts = externalCommentCounts !== undefined;
@@ -110,6 +122,39 @@ export const BlogView: React.FC<BlogViewProps> = ({
     };
   }, [usesExternalCommentCounts]);
 
+  useEffect(() => {
+    let active = true;
+    getAdsSettings()
+      .then((fresh) => {
+        if (active) setAdsSettings(fresh);
+      })
+      .catch(() => {
+        // fail gracefully without disrupting article reading
+      });
+    const unsubAds = subscribeToAdsSettings((fresh) => {
+      if (active) setAdsSettings(fresh);
+    });
+
+    if (typeof window === 'undefined') {
+      return () => {
+        active = false;
+        unsubAds();
+      };
+    }
+
+    const updateViewport = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      active = false;
+      unsubAds();
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
+
   const categories = mergeCategoriesForDisplay(rawCategories, categoriesInitialized, posts);
   const categoryTabs = [
     'All Categories',
@@ -127,6 +172,16 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const activePost = activeSlug
     ? posts.find((p) => p.slug === activeSlug || p.id === activeSlug) || null
     : null;
+
+  const articleRenderPlan = useMemo(
+    () =>
+      buildArticleRenderSegments({
+        html: activePost?.content || '',
+        adsSettings,
+        deviceType: isMobileViewport ? 'mobile' : 'desktop'
+      }),
+    [activePost?.content, adsSettings, isMobileViewport]
+  );
 
   const scrollToCommentsSection = () => {
     if (typeof document === 'undefined') return;
@@ -342,18 +397,28 @@ export const BlogView: React.FC<BlogViewProps> = ({
           </figure>
         )}
 
-        {/* Full Multi-Paragraph Formatted Content (preserves Admin-selected image sizes and alignments) */}
+        {/* Full Multi-Paragraph Formatted Content + Non-Destructive In-Article Ad Slots 1, 2, 3 */}
         <div
+          data-testid="blog-article-body"
           className="blog-article-body text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-6 [&_a]:text-teal-700 [&_a]:underline"
-          dangerouslySetInnerHTML={{ __html: activePost.content }}
-        />
-
-        {/* Natural In-Article Sponsored Ad */}
-        <AdscodInlineAd
-          contextCategory={activePost.category}
-          contextQuery={activePost.title}
-          placementContext="article_inline"
-        />
+        >
+          {articleRenderPlan.segments.map((segment) =>
+            segment.type === 'html' ? (
+              <div
+                key={segment.key}
+                className="space-y-5"
+                dangerouslySetInnerHTML={{ __html: segment.html }}
+              />
+            ) : (
+              <InArticleAdSlot
+                key={segment.key}
+                slotId={segment.slotId}
+                slotConfig={segment.slotConfig}
+                articleId={activePost.id}
+              />
+            )
+          )}
+        </div>
 
         {/* Article Action Bar: Leave a Message & Share */}
         <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -612,13 +677,6 @@ export const BlogView: React.FC<BlogViewProps> = ({
         </div>
       )}
 
-      {!isLoading && filteredPosts.length > 0 && (
-        <AdscodInlineAd
-          contextCategory={selectedCategory}
-          contextQuery={searchQuery || filteredPosts[0]?.title}
-          placementContext="blog_index_inline"
-        />
-      )}
     </div>
   );
 };

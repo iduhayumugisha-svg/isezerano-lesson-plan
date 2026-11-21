@@ -10,8 +10,14 @@ import {
   DEFAULT_ADS_DISPLAY_SETTINGS,
   normalizeAdsDisplaySettings
 } from '../utils/displaySettingsUtils';
+import {
+  hasRenderableAdCode,
+  isSafeAdAssetOrClickUrl,
+  isSafeAdScriptUrl,
+  sanitizeAdCodePayload,
+  sanitizeStaticAdElement
+} from '../utils/inArticleAdUtils';
 import { ExternalLink, Sparkles } from 'lucide-react';
-import { AdscodBannerAd } from './AdscodBannerAd';
 
 interface AdSlotProps {
   placement: AdPlacement;
@@ -19,6 +25,7 @@ interface AdSlotProps {
 }
 
 const AD_EXECUTION_TIMEOUT_MS = 12000;
+const AD_EMPTY_SETTLE_DELAY_MS = 3200;
 let adExecutionQueue: Promise<void> = Promise.resolve();
 
 const needsSerializedAdExecution = (code: string): boolean =>
@@ -36,6 +43,61 @@ function enqueueAdSlotExecution(task: () => Promise<void>): void {
     });
 }
 
+function buildExecutableScriptElement(oldScript: HTMLScriptElement): HTMLScriptElement | null {
+  const src = oldScript.getAttribute('src')?.trim() || '';
+  if (src && !isSafeAdScriptUrl(src)) {
+    return null;
+  }
+
+  const newScript = document.createElement('script');
+  Array.from(oldScript.attributes).forEach((attr) => {
+    if (!attr.name.toLowerCase().startsWith('on')) {
+      newScript.setAttribute(attr.name, attr.value);
+    }
+  });
+  newScript.async = oldScript.hasAttribute('async');
+  newScript.referrerPolicy = 'no-referrer-when-downgrade';
+  if (!src && oldScript.textContent) {
+    newScript.textContent = oldScript.textContent;
+  }
+  return newScript;
+}
+
+function extractNestedScriptsAndSanitizeDom(root: HTMLElement): {
+  scriptTargets: Array<{ oldScript: HTMLScriptElement; placeholder: Comment | null }>;
+  hasStaticMarkup: boolean;
+} {
+  const scriptTargets: Array<{ oldScript: HTMLScriptElement; placeholder: Comment | null }> = [];
+  let hasStaticMarkup = false;
+
+  for (const meta of Array.from(root.querySelectorAll('meta'))) {
+    meta.remove();
+  }
+
+  // Replace top-level and nested <script> nodes with comment anchors so scripts execute inside their wrapper in exact DOM order
+  for (const oldScript of Array.from(root.querySelectorAll('script'))) {
+    const parent = oldScript.parentNode;
+    if (parent) {
+      const marker = document.createComment('isezerano-slot-script');
+      parent.replaceChild(marker, oldScript);
+      scriptTargets.push({ oldScript, placeholder: marker });
+    } else {
+      scriptTargets.push({ oldScript, placeholder: null });
+    }
+  }
+
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType === 1) {
+      sanitizeStaticAdElement(child as HTMLElement);
+      hasStaticMarkup = true;
+    } else if (child.nodeType === 3 && (child.textContent || '').trim()) {
+      hasStaticMarkup = true;
+    }
+  }
+
+  return { scriptTargets, hasStaticMarkup };
+}
+
 function appendWrittenHtmlFragment(
   rawHtml: string,
   container: HTMLElement,
@@ -46,49 +108,86 @@ function appendWrittenHtmlFragment(
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = rawHtml;
 
-  const nodes = Array.from(tempDiv.childNodes);
-  for (const node of nodes) {
+  const { scriptTargets } = extractNestedScriptsAndSanitizeDom(tempDiv);
+  while (tempDiv.firstChild) {
     if (isCancelled()) return;
-    if (node.nodeName === 'SCRIPT') {
-      const oldScript = node as HTMLScriptElement;
-      const newScript = document.createElement('script');
-      Array.from(oldScript.attributes).forEach((attr) => {
-        newScript.setAttribute(attr.name, attr.value);
-      });
-      newScript.async = oldScript.hasAttribute('async');
-      newScript.referrerPolicy = 'no-referrer-when-downgrade';
+    container.appendChild(tempDiv.firstChild);
+  }
 
-      const src = oldScript.getAttribute('src');
-      if (src) {
-        const scriptDone = new Promise<void>((resolve) => {
-          let settled = false;
-          const finish = () => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timerId);
-            resolve();
-          };
-          const timerId = window.setTimeout(finish, AD_EXECUTION_TIMEOUT_MS);
-          newScript.addEventListener('load', finish, { once: true });
-          newScript.addEventListener('error', finish, { once: true });
-          container.appendChild(newScript);
-        });
-        pendingScripts.push(scriptDone);
-      } else {
-        if (oldScript.textContent) {
-          newScript.textContent = oldScript.textContent;
+  for (const { oldScript, placeholder } of scriptTargets) {
+    if (isCancelled()) return;
+    const newScript = buildExecutableScriptElement(oldScript);
+    if (!newScript) {
+      placeholder?.remove();
+      continue;
+    }
+
+    const src = oldScript.getAttribute('src')?.trim() || '';
+    const attachTarget = placeholder?.parentNode ? placeholder.parentNode : container;
+
+    if (src) {
+      const scriptDone = new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timerId);
+          resolve();
+        };
+        const timerId = window.setTimeout(finish, AD_EXECUTION_TIMEOUT_MS);
+        newScript.addEventListener('load', finish, { once: true });
+        newScript.addEventListener('error', finish, { once: true });
+        if (placeholder?.parentNode) {
+          placeholder.parentNode.replaceChild(newScript, placeholder);
+        } else {
+          attachTarget.appendChild(newScript);
         }
-        container.appendChild(newScript);
-      }
+      });
+      pendingScripts.push(scriptDone);
+    } else if (placeholder?.parentNode) {
+      placeholder.parentNode.replaceChild(newScript, placeholder);
     } else {
-      container.appendChild(node);
+      attachTarget.appendChild(newScript);
     }
   }
+}
+
+function hasVisibleAdContent(container: HTMLElement): boolean {
+  if (!container) return false;
+  const visualNodes = container.querySelectorAll(
+    'iframe, img, svg, video, canvas, ins, a, button'
+  );
+  for (const el of Array.from(visualNodes)) {
+    if (el.nodeType === 1) {
+      const htmlEl = el as HTMLElement;
+      if (
+        htmlEl.tagName === 'IFRAME' ||
+        htmlEl.tagName === 'IMG' ||
+        htmlEl.offsetHeight > 4 ||
+        htmlEl.offsetWidth > 4 ||
+        (htmlEl.textContent || '').trim().length > 0
+      ) {
+        return true;
+      }
+    }
+  }
+  const visibleContainers = container.querySelectorAll('div, span, p, section');
+  for (const el of Array.from(visibleContainers)) {
+    const htmlEl = el as HTMLElement;
+    if (
+      el.nodeType === 1 &&
+      (htmlEl.offsetHeight > 8 || (htmlEl.textContent || '').trim().length > 0)
+    ) {
+      return true;
+    }
+  }
+  return (container.textContent || '').trim().length > 0;
 }
 
 export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => {
   const [adsSettings, setAdsSettings] = useState<AdsSettings>(() => getCachedAdsSettingsSync());
   const [isAdsResolved, setIsAdsResolved] = useState<boolean>(() => hasCachedAdsSettingsSync());
+  const [adFillState, setAdFillState] = useState<'pending' | 'filled' | 'empty'>('pending');
   const outerWrapperRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const appliedCodeSignatureRef = useRef<string>('');
@@ -117,7 +216,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     ? adsSettings.belowHeaderAd
     : adsSettings.aboveFooterAd;
 
-  // Responsive mobile layout fit & proportional sizing for banner/code embeds (Adscod, Adsterra, HTML)
+  // Responsive mobile layout fit & proportional sizing for banner/code embeds (Monetag, AdSense, Adsterra, HTML)
   const syncResponsiveEmbedLayout = useCallback(() => {
     const outer = outerWrapperRef.current;
     const container = codeContainerRef.current;
@@ -202,14 +301,31 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
   // Handle script / code execution inside the real document DOM safely (called unconditionally before returns)
   useEffect(() => {
-    const rawCode = slotConfig?.code || '';
-    const isCodeSlotActive = Boolean(
+    const rawCode = sanitizeAdCodePayload(slotConfig?.code);
+    const isAdminRoute =
+      typeof window !== 'undefined' &&
+      window.location.pathname.toLowerCase().startsWith('/admin');
+    const isBannerReady = Boolean(
       adsSettings.masterEnabled &&
         slotConfig &&
         slotConfig.enabled &&
-        slotConfig.type === 'code' &&
-        rawCode.trim().length > 0
+        slotConfig.type === 'banner' &&
+        isSafeAdAssetOrClickUrl(slotConfig.imageUrl)
     );
+    const isCodeSlotActive = Boolean(
+      !isAdminRoute &&
+        adsSettings.masterEnabled &&
+        slotConfig &&
+        slotConfig.enabled &&
+        slotConfig.type === 'code' &&
+        hasRenderableAdCode(rawCode)
+    );
+
+    if (isBannerReady) {
+      setAdFillState('filled');
+    } else {
+      setAdFillState('pending');
+    }
 
     if (!isCodeSlotActive || !codeContainerRef.current) {
       appliedCodeSignatureRef.current = '';
@@ -237,17 +353,17 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = rawCode;
 
-      const scriptNodes: HTMLScriptElement[] = [];
-      const childNodes = Array.from(tempDiv.childNodes);
-      for (const child of childNodes) {
-        if (child.nodeName === 'SCRIPT') {
-          scriptNodes.push(child as HTMLScriptElement);
-        } else {
-          container.appendChild(child);
-        }
+      const { scriptTargets, hasStaticMarkup } = extractNestedScriptsAndSanitizeDom(tempDiv);
+
+      while (tempDiv.firstChild) {
+        container.appendChild(tempDiv.firstChild);
       }
 
-      if (scriptNodes.length > 0) {
+      if (hasStaticMarkup && hasVisibleAdContent(container)) {
+        setAdFillState('filled');
+      }
+
+      if (scriptTargets.length > 0) {
         if (needsSerializedAdExecution(rawCode)) {
           enqueueAdSlotExecution(async () => {
             if (cancelled || !container.isConnected) return;
@@ -288,17 +404,18 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
             };
 
             try {
-              for (const oldScript of scriptNodes) {
+              for (const { oldScript, placeholder } of scriptTargets) {
                 if (cancelled || !container.isConnected) break;
 
-                const newScript = document.createElement('script');
-                Array.from(oldScript.attributes).forEach((attr) => {
-                  newScript.setAttribute(attr.name, attr.value);
-                });
-                newScript.async = oldScript.hasAttribute('async');
-                newScript.referrerPolicy = 'no-referrer-when-downgrade';
+                const newScript = buildExecutableScriptElement(oldScript);
+                if (!newScript) {
+                  placeholder?.remove();
+                  continue;
+                }
 
-                const src = oldScript.getAttribute('src');
+                const src = oldScript.getAttribute('src')?.trim() || '';
+                const attachTarget = placeholder?.parentNode ? placeholder.parentNode : container;
+
                 if (src) {
                   await new Promise<void>((resolve) => {
                     let settled = false;
@@ -311,11 +428,16 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
                     const timeoutId = window.setTimeout(finish, AD_EXECUTION_TIMEOUT_MS);
                     newScript.addEventListener('load', finish, { once: true });
                     newScript.addEventListener('error', finish, { once: true });
-                    container.appendChild(newScript);
+                    if (placeholder?.parentNode) {
+                      placeholder.parentNode.replaceChild(newScript, placeholder);
+                    } else {
+                      attachTarget.appendChild(newScript);
+                    }
                   });
+                } else if (placeholder?.parentNode) {
+                  placeholder.parentNode.replaceChild(newScript, placeholder);
                 } else {
-                  newScript.textContent = oldScript.textContent;
-                  container.appendChild(newScript);
+                  attachTarget.appendChild(newScript);
                 }
               }
 
@@ -330,39 +452,42 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
               document.writeln = originalWriteln;
               if (!cancelled) {
                 syncResponsiveEmbedLayout();
+                if (hasVisibleAdContent(container)) {
+                  setAdFillState('filled');
+                }
               }
             }
           });
         } else {
-          // Async container tags (e.g. Adsterra Native Banner) inject immediately without blocking other slots
-          scriptNodes.forEach((oldScript) => {
+          // Async container tags (e.g. Monetag/Adsterra Native Banner) inject immediately at exact DOM location without blocking other slots
+          scriptTargets.forEach(({ oldScript, placeholder }) => {
             if (cancelled || !container.isConnected) return;
-            const newScript = document.createElement('script');
-            Array.from(oldScript.attributes).forEach((attr) => {
-              newScript.setAttribute(attr.name, attr.value);
-            });
-            newScript.async = oldScript.hasAttribute('async');
-            newScript.referrerPolicy = 'no-referrer-when-downgrade';
-            if (oldScript.textContent) {
-              newScript.textContent = oldScript.textContent;
+            const newScript = buildExecutableScriptElement(oldScript);
+            if (!newScript) {
+              placeholder?.remove();
+              return;
             }
-            container.appendChild(newScript);
+            if (placeholder?.parentNode) {
+              placeholder.parentNode.replaceChild(newScript, placeholder);
+            } else {
+              container.appendChild(newScript);
+            }
           });
         }
+      } else if (!hasStaticMarkup) {
+        setAdFillState('empty');
       }
     }
 
-    const handleCaptureLoad = () => {
-      if (!cancelled) {
-        syncResponsiveEmbedLayout();
+    const evaluateSlotContent = () => {
+      if (cancelled || !container) return;
+      syncResponsiveEmbedLayout();
+      if (hasVisibleAdContent(container)) {
+        setAdFillState('filled');
       }
     };
 
-    const mutationObserver = new MutationObserver(() => {
-      if (!cancelled) {
-        syncResponsiveEmbedLayout();
-      }
-    });
+    const mutationObserver = new MutationObserver(evaluateSlotContent);
     mutationObserver.observe(container, {
       childList: true,
       subtree: true,
@@ -372,33 +497,40 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
 
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => {
-        if (!cancelled) {
-          syncResponsiveEmbedLayout();
-        }
-      });
+      resizeObserver = new ResizeObserver(evaluateSlotContent);
       if (outer) resizeObserver.observe(outer);
       resizeObserver.observe(container);
     }
 
-    container.addEventListener('load', handleCaptureLoad, true);
+    container.addEventListener('load', evaluateSlotContent, true);
     window.addEventListener('resize', syncResponsiveEmbedLayout);
-    const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
-    const lateTimers = [150, 600, 1500, 3000].map((delay) =>
+    const hasRaf = typeof window.requestAnimationFrame === 'function';
+    const rafId = hasRaf
+      ? window.requestAnimationFrame(evaluateSlotContent)
+      : window.setTimeout(evaluateSlotContent, 0);
+    const lateTimers = [150, 600, 1500, AD_EMPTY_SETTLE_DELAY_MS].map((delay) =>
       window.setTimeout(() => {
-        if (!cancelled) {
-          syncResponsiveEmbedLayout();
+        if (cancelled) return;
+        syncResponsiveEmbedLayout();
+        if (hasVisibleAdContent(container)) {
+          setAdFillState('filled');
+        } else if (delay === AD_EMPTY_SETTLE_DELAY_MS) {
+          setAdFillState('empty');
         }
       }, delay)
     );
 
     return () => {
       cancelled = true;
-      container.removeEventListener('load', handleCaptureLoad, true);
+      container.removeEventListener('load', evaluateSlotContent, true);
       mutationObserver.disconnect();
       resizeObserver?.disconnect();
       window.removeEventListener('resize', syncResponsiveEmbedLayout);
-      window.cancelAnimationFrame(rafId);
+      if (hasRaf) {
+        window.cancelAnimationFrame(rafId);
+      } else {
+        window.clearTimeout(rafId);
+      }
       lateTimers.forEach((timerId) => window.clearTimeout(timerId));
       appliedCodeSignatureRef.current = '';
       container.innerHTML = '';
@@ -415,13 +547,18 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     slotConfig?.enabled,
     slotConfig?.type,
     slotConfig?.code,
+    slotConfig?.imageUrl,
     syncResponsiveEmbedLayout
   ]);
 
   // Re-sync code embed scaling whenever admin changes width, maxWidth, height, or spacing settings
   useEffect(() => {
-    const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
-    return () => window.cancelAnimationFrame(rafId);
+    if (typeof window.requestAnimationFrame === 'function') {
+      const rafId = window.requestAnimationFrame(syncResponsiveEmbedLayout);
+      return () => window.cancelAnimationFrame(rafId);
+    }
+    const timerId = window.setTimeout(syncResponsiveEmbedLayout, 0);
+    return () => window.clearTimeout(timerId);
   }, [
     adsSettings.displaySettings?.containerWidthPercent,
     adsSettings.displaySettings?.maxWidthPx,
@@ -442,21 +579,18 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   }
 
   const hasCustomBanner =
-    slotConfig.type === 'banner' && Boolean(slotConfig.imageUrl && slotConfig.imageUrl.trim());
+    slotConfig.type === 'banner' && isSafeAdAssetOrClickUrl(slotConfig.imageUrl);
   const hasCustomCode =
-    slotConfig.type === 'code' && Boolean(slotConfig.code && slotConfig.code.trim());
-
-  // When below_header has no custom image banner or custom script/HTML override,
-  // automatically serve the production Adscod Banner placement (collapses cleanly on no-fill).
-  if (placement === 'below_header' && !hasCustomBanner && !hasCustomCode) {
-    return <AdscodBannerAd wrapperClassName={className} />;
-  }
+    slotConfig.type === 'code' && hasRenderableAdCode(slotConfig.code);
 
   // Never render an empty bordered ad container if neither custom banner nor code is populated
   if (!hasCustomBanner && !hasCustomCode) {
     return null;
   }
 
+  const safeBannerLink = isSafeAdAssetOrClickUrl(slotConfig.linkUrl)
+    ? slotConfig.linkUrl!.trim()
+    : '';
   const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
   const display = normalizeAdsDisplaySettings(adsSettings.displaySettings);
   const hasExplicitDisplay = Boolean(adsSettings.displaySettings);
@@ -472,6 +606,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     <div
       className={`w-full max-w-full min-w-0 px-0 min-[360px]:px-2 sm:px-6 lg:px-8 transition-all relative z-0 ${className}`}
       data-ad-placement={placement}
+      data-ad-fill={hasCustomBanner ? 'filled' : adFillState}
       style={{
         marginTop: `${display.marginY}px`,
         marginBottom: `${display.marginY}px`
@@ -507,11 +642,11 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
           </div>
 
           {/* Ad Format 1: Banner Image with Link */}
-          {slotConfig.type === 'banner' && slotConfig.imageUrl && (
+          {slotConfig.type === 'banner' && hasCustomBanner && (
             <div className="flex-1 flex justify-center items-center w-full min-w-0 px-2.5 min-[360px]:px-0">
-              {slotConfig.linkUrl ? (
+              {safeBannerLink ? (
                 <a
-                  href={slotConfig.linkUrl}
+                  href={safeBannerLink}
                   target="_blank"
                   rel="noopener noreferrer sponsored"
                   className="inline-flex items-center justify-center max-w-full group relative overflow-hidden rounded-xl transition-transform hover:scale-[1.005]"

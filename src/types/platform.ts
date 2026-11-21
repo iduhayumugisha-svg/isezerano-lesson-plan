@@ -17,6 +17,8 @@ export {
 // ==================== ADS TYPES ====================
 export type AdPlacement = 'below_header' | 'above_footer';
 export type AdType = 'code' | 'banner';
+export type AdProviderId = 'monetag' | 'adscod' | 'other';
+export type InArticleAdSlotKey = 'slot1' | 'slot2' | 'slot3';
 
 export interface AdSlotConfig {
   enabled: boolean;
@@ -27,6 +29,73 @@ export interface AdSlotConfig {
   altText?: string;
   label?: string; // e.g. "Advertisement" or "Sponsored"
 }
+
+export interface InArticleAdSlotConfig {
+  enabled: boolean;
+  provider: AdProviderId;
+  providerLabel?: string; // Optional custom network label when provider === 'other'
+  code: string;
+  afterParagraph: number; // Clamped integer 1..50 (defaults: 3, 7, 11)
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  label?: string; // e.g. "Advertisement" or "Kwamamaza"
+  updatedAt?: string;
+}
+
+export interface InArticleAdsSettings {
+  slot1: InArticleAdSlotConfig;
+  slot2: InArticleAdSlotConfig;
+  slot3: InArticleAdSlotConfig;
+}
+
+export interface GlobalAdScriptConfig {
+  enabled: boolean;
+  provider: AdProviderId;
+  providerLabel?: string;
+  code: string; // Single-execution site-wide head tags (e.g., Monetag Multitag, OnClick, Vignette, In-Page Push, Meta verification)
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  updatedAt?: string;
+}
+
+export const IN_ARTICLE_PARAGRAPH_LIMITS = {
+  min: 1,
+  max: 50
+} as const;
+
+export const DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS: Record<InArticleAdSlotKey, number> = {
+  slot1: 3,
+  slot2: 7,
+  slot3: 11
+};
+
+export const createDefaultInArticleSlotConfig = (
+  slotKey: InArticleAdSlotKey
+): InArticleAdSlotConfig => ({
+  enabled: false,
+  provider: 'monetag',
+  providerLabel: '',
+  code: '',
+  afterParagraph: DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS[slotKey],
+  mobileEnabled: true,
+  desktopEnabled: true,
+  label: 'Advertisement'
+});
+
+export const DEFAULT_IN_ARTICLE_ADS_SETTINGS: InArticleAdsSettings = {
+  slot1: createDefaultInArticleSlotConfig('slot1'),
+  slot2: createDefaultInArticleSlotConfig('slot2'),
+  slot3: createDefaultInArticleSlotConfig('slot3')
+};
+
+export const DEFAULT_GLOBAL_AD_SCRIPT_CONFIG: GlobalAdScriptConfig = {
+  enabled: false,
+  provider: 'monetag',
+  providerLabel: '',
+  code: '',
+  mobileEnabled: true,
+  desktopEnabled: true
+};
 
 export interface TopVideoAdConfig {
   enabled: boolean;
@@ -53,6 +122,8 @@ export interface AdsSettings {
   masterEnabled: boolean; // Master toggle: false by default
   belowHeaderAd: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
+  inArticleAds?: InArticleAdsSettings;
+  globalScripts?: GlobalAdScriptConfig;
   aboveHeaderVideoAd?: TopVideoAdConfig;
   displaySettings?: AdsDisplaySettings;
   updatedAt?: string;
@@ -79,9 +150,12 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     altText: 'Advertisement',
     label: 'Advertisement'
   },
+  inArticleAds: DEFAULT_IN_ARTICLE_ADS_SETTINGS,
+  globalScripts: DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   aboveHeaderVideoAd: DEFAULT_TOP_VIDEO_AD_CONFIG,
   displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS
 };
+
 
 // ==================== AUTH & FIREBASE CONNECTION TYPES ====================
 export type NavPage = 'home' | 'blog' | 'shop' | 'about' | 'contact' | 'privacy' | 'terms';

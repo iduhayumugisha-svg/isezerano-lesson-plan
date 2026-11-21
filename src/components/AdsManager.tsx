@@ -20,24 +20,16 @@ import {
   Film,
   Link2,
   Trash2,
-  Activity
+  AlertTriangle
 } from 'lucide-react';
-import {
-  ADSCOD_PLACEMENTS,
-  AdscodDiagnosticsSnapshot,
-  AdscodPlacementDiagnostic
-} from '../types/adscod';
-import {
-  getAdscodDiagnosticsSnapshot,
-  runAllAdscodDiagnostics,
-  subscribeToAdscodDiagnostics
-} from '../services/adscodService';
 import {
   AdSlotConfig,
   AdsSettings,
   DEFAULT_ADS_SETTINGS,
   DEFAULT_TOP_VIDEO_AD_CONFIG,
-  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS,
+  GlobalAdScriptConfig,
+  InArticleAdSlotConfig,
+  InArticleAdSlotKey,
   TopVideoAdConfig,
   TopVideoAdDisplaySettings
 } from '../types/platform';
@@ -49,16 +41,26 @@ import {
 } from '../services/shopVideoService';
 import { useAuth } from '../context/AuthContext';
 import { DisplayNumericControl } from './DisplayNumericControl';
+import { InArticleAdManagerSection } from './InArticleAdManagerSection';
 import {
   ADS_DISPLAY_LIMITS,
   AdsDisplaySettings,
   DEFAULT_ADS_DISPLAY_SETTINGS,
+  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS,
   TOP_VIDEO_AD_DISPLAY_LIMITS,
   clampDisplayNumber,
   normalizeAdsDisplaySettings,
   normalizeTopVideoAdDisplaySettings,
   resolveTopVideoBannerHeaderSpacing
 } from '../utils/displaySettingsUtils';
+import {
+  analyzeAdCodeSnippet,
+  hasRenderableAdCode,
+  isSafeAdAssetOrClickUrl,
+  normalizeGlobalAdScriptConfig,
+  normalizeInArticleAdSlotConfig,
+  normalizeInArticleAdsSettings
+} from '../utils/inArticleAdUtils';
 
 const LazyShopVimeoPlayer = lazy(() =>
   import('./ShopVimeoPlayer').then((m) => ({ default: m.ShopVimeoPlayer }))
@@ -76,36 +78,20 @@ export const AdsManager: React.FC = () => {
   const [topVideoLabelInput, setTopVideoLabelInput] = useState('Sponsored Video');
   const [confirmRemoveTopVideo, setConfirmRemoveTopVideo] = useState(false);
   const [topVideoFeedback, setTopVideoFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [adscodDiagnostics, setAdscodDiagnostics] = useState<AdscodDiagnosticsSnapshot>(() =>
-    getAdscodDiagnosticsSnapshot()
-  );
-  const [isCheckingAdscod, setIsCheckingAdscod] = useState(false);
 
   useEffect(() => {
     loadSettings();
-    const unsubDiagnostics = subscribeToAdscodDiagnostics((snapshot) => {
-      setAdscodDiagnostics(snapshot);
-    });
-    return () => unsubDiagnostics();
   }, []);
-
-  const handleRunAdscodCheck = async () => {
-    setIsCheckingAdscod(true);
-    try {
-      const snapshot = await runAllAdscodDiagnostics();
-      setAdscodDiagnostics(snapshot);
-    } finally {
-      setIsCheckingAdscod(false);
-    }
-  };
 
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const data = await getAdsSettings();
+      const data = await getAdsSettings(true);
       const normalizedTopVideo = normalizeTopVideoAdConfig(data.aboveHeaderVideoAd);
       setSettings({
         ...data,
+        inArticleAds: normalizeInArticleAdsSettings(data.inArticleAds),
+        globalScripts: normalizeGlobalAdScriptConfig(data.globalScripts),
         aboveHeaderVideoAd: normalizedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(data.displaySettings)
       });
@@ -401,6 +387,8 @@ export const AdsManager: React.FC = () => {
 
       const payloadToSave: AdsSettings = {
         ...settings,
+        inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+        globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         aboveHeaderVideoAd: resolvedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
@@ -410,12 +398,12 @@ export const AdsManager: React.FC = () => {
         if (result.isLocalFallback) {
           setStatusMessage({
             type: 'success',
-            text: '✅ Ad settings saved and applied locally! (Will sync to all devices once Firestore rules are published).'
+            text: 'Ad settings saved and applied locally! (Will sync to all devices once Firestore rules are published).'
           });
         } else {
           setStatusMessage({
             type: 'success',
-            text: '🎉 Ad settings & display sizes saved successfully to Cloud Firestore across all devices!'
+            text: 'Ad settings, in-article slots & display sizes saved successfully across all devices!'
           });
         }
       } else {
@@ -447,6 +435,90 @@ export const AdsManager: React.FC = () => {
       ...prev,
       aboveFooterAd: { ...prev.aboveFooterAd, ...patch }
     }));
+  };
+
+  const currentInArticleAds = normalizeInArticleAdsSettings(settings.inArticleAds, false);
+  const currentGlobalScripts = normalizeGlobalAdScriptConfig(settings.globalScripts, false);
+
+  const updateInArticleSlot = (
+    slotKey: InArticleAdSlotKey,
+    patch: Partial<InArticleAdSlotConfig>
+  ) => {
+    setSettings(prev => {
+      const normalized = normalizeInArticleAdsSettings(prev.inArticleAds, false);
+      const updatedSlot = normalizeInArticleAdSlotConfig(
+        slotKey,
+        {
+          ...normalized[slotKey],
+          ...patch
+        },
+        false
+      );
+      return {
+        ...prev,
+        inArticleAds: {
+          ...normalized,
+          [slotKey]: updatedSlot
+        }
+      };
+    });
+  };
+
+  const updateGlobalScripts = (patch: Partial<GlobalAdScriptConfig>) => {
+    setSettings(prev => {
+      const normalized = normalizeGlobalAdScriptConfig(prev.globalScripts, false);
+      return {
+        ...prev,
+        globalScripts: normalizeGlobalAdScriptConfig(
+          {
+            ...normalized,
+            ...patch
+          },
+          false
+        )
+      };
+    });
+  };
+
+  const persistCurrentSettingsSection = async (successLabel: string) => {
+    if (!user) return;
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      const payloadToSave: AdsSettings = {
+        ...settings,
+        inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+        globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
+        aboveHeaderVideoAd: normalizeTopVideoAdConfig({
+          ...settings.aboveHeaderVideoAd,
+          displaySettings: currentTopVideoDisplay
+        }),
+        displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
+      };
+      const result = await saveAdsSettings(payloadToSave, user.uid);
+      if (result.success) {
+        setSettings(payloadToSave);
+        setStatusMessage({
+          type: 'success',
+          text: result.isLocalFallback
+            ? `${successLabel} saved locally (syncs once Firestore rules are active).`
+            : `${successLabel} saved successfully across all devices!`
+        });
+      } else {
+        setStatusMessage({
+          type: 'error',
+          text: result.error || `Failed to save ${successLabel}.`
+        });
+      }
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: err?.message || `Unexpected error saving ${successLabel}.`
+      });
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setStatusMessage(null), 5000);
+    }
   };
 
   const displaySettings: AdsDisplaySettings = normalizeAdsDisplaySettings(settings.displaySettings);
@@ -606,7 +678,7 @@ export const AdsManager: React.FC = () => {
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Displayed at the very top of every public page above the Website Header using the official Vimeo player. Leaves all below-header, inline, and Adscod slots unchanged.
+              Displayed at the very top of every public page above the Website Header using the official Vimeo player. Leaves all header, in-article, and footer ad slots unchanged.
             </p>
           </div>
 
@@ -1161,6 +1233,15 @@ export const AdsManager: React.FC = () => {
           />
         </div>
 
+        {(displaySettings.containerWidthPercent < 70 || displaySettings.maxWidthPx < 480) && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              <strong>Narrow Width Notice:</strong> Container Width ({displaySettings.containerWidthPercent}%) / Max Width ({displaySettings.maxWidthPx}px) is very compact. On 360px mobile screens, {displaySettings.containerWidthPercent}% renders at ~{Math.round((360 * displaySettings.containerWidthPercent) / 100)}px wide, which may squeeze landscape ad banners. Recommended defaults: 90–100% width and 728–970px max width.
+            </span>
+          </div>
+        )}
+
         {/* Live Responsive Preview Before Saving */}
         <div className="rounded-xl border border-slate-200 bg-slate-100/80 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1267,155 +1348,39 @@ export const AdsManager: React.FC = () => {
         </div>
       </div>
 
-      {/* Adscod Live Integration & Diagnostics */}
-      <div
-        data-testid="ads-adscod-diagnostics"
-        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
-              <Activity className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Production Adscod Monetization</span>
-            </div>
-            <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
-              Adscod Network Status &amp; Placement Diagnostics
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Proxied securely via Cloudflare Worker (<span className="font-mono text-slate-700">{adscodDiagnostics.workerUrl}</span>). Publisher key remains server-side in Worker secrets and is never exposed in browser code.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleRunAdscodCheck}
-            disabled={isCheckingAdscod}
-            data-testid="ads-adscod-run-diagnostics"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white cursor-pointer transition-colors self-start sm:self-center disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingAdscod ? 'animate-spin' : ''}`} aria-hidden="true" />
-            <span>{isCheckingAdscod ? 'Checking Worker...' : 'Run Live Adscod Check'}</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-            <div className="font-bold text-slate-800">Origin &amp; Security Check</div>
-            <div className="text-slate-600">
-              Current origin:{' '}
-              <span className="font-mono text-slate-900">{adscodDiagnostics.currentOrigin || 'unknown'}</span>
-            </div>
-            <div className="text-[11px]">
-              {adscodDiagnostics.isProductionOrigin ? (
-                <span className="text-emerald-700 font-semibold">
-                  Production origin matches Worker allowlist (isezerano.online / www.isezerano.online).
-                </span>
-              ) : (
-                <span className="text-amber-700 font-semibold">
-                  Preview/local origin detected — Cloudflare Worker only allows https://isezerano.online &amp; https://www.isezerano.online (expects 403 outside production).
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-            <div className="font-bold text-slate-800">CPM Viewability &amp; Click Tracking</div>
-            <div className="text-slate-600">
-              Dwell beacon:{' '}
-              <span className="font-mono text-[11px] text-slate-900">{adscodDiagnostics.dwellEndpoint}</span>
-            </div>
-            <div className="text-[11px] text-slate-600">
-              Viewability fires via <span className="font-mono">IntersectionObserver (&ge;50%)</span> + deduplicated <span className="font-mono">sendBeacon</span>; clicks preserve exact <span className="font-mono">clickUrl</span>.
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(['banner', 'inline'] as const).map((placementKey) => {
-            const meta = ADSCOD_PLACEMENTS[placementKey];
-            const diag: AdscodPlacementDiagnostic | null = adscodDiagnostics.placements[placementKey];
-            const badgeStyle =
-              diag?.state === 'filled'
-                ? 'bg-emerald-100 text-emerald-800'
-                : diag?.state === 'no-fill'
-                ? 'bg-amber-100 text-amber-800'
-                : diag?.state === 'error'
-                ? 'bg-rose-100 text-rose-800'
-                : 'bg-slate-100 text-slate-600';
-
-            return (
-              <div
-                key={placementKey}
-                data-testid={`ads-adscod-diag-${placementKey}`}
-                className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 text-xs"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-slate-900">{meta.label}</div>
-                    <div className="text-[11px] font-mono text-slate-500">
-                      ID: {meta.placementId} (?placement={meta.workerParam})
-                    </div>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeStyle}`}>
-                    {diag ? diag.state : 'Not Checked'}
-                  </span>
-                </div>
-
-                {diag ? (
-                  <div className="space-y-1 text-[11px] text-slate-600 pt-1 border-t border-slate-200/80">
-                    <div>
-                      Worker HTTP: <span className="font-mono font-semibold text-slate-900">{diag.httpStatus || 'Network Error'}</span>
-                      {' · '}Checked: <span className="font-mono">{new Date(diag.checkedAt).toLocaleTimeString()}</span>
-                    </div>
-                    {diag.state === 'filled' && (
-                      <>
-                        <div className="truncate">
-                          Campaign: <span className="font-semibold text-slate-900">{diag.title || diag.campaignId || 'Active Ad'}</span>
-                          {diag.brandName ? ` (${diag.brandName})` : ''}
-                        </div>
-                        <div>
-                          Click Host: <span className="font-mono text-slate-800">{diag.clickUrlHost || 'verified'}</span>
-                          {' · '}Dwell Token: <span className="font-semibold text-emerald-700">{diag.hasClickToken ? 'Present' : 'Missing'}</span>
-                        </div>
-                      </>
-                    )}
-                    {diag.error && (
-                      <div className="text-rose-700 font-medium break-words">
-                        Detail: {diag.error}
-                      </div>
-                    )}
-                    {diag.dwell && (
-                      <div className="text-slate-600">
-                        Viewability Beacon: <span className="font-semibold text-slate-900">{diag.dwell.state}</span>
-                        {diag.dwell.reportedMs > 0 ? ` (${diag.dwell.reportedMs}ms via ${diag.dwell.transport || 'beacon'})` : ''}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/80">
-                    Click &ldquo;Run Live Adscod Check&rdquo; above or visit a public page to inspect live Worker fill &amp; dwell status.
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Placement 1: Below Header */}
+      {/* Placement 1: Below Header (Header Ads) */}
       <AdPlacementCard
         placementTitle="1. Below Website Header"
-        placementDescription="Displayed directly beneath the top navigation bar across all pages. Leave Custom Banner URL / Script Code blank while enabled to automatically serve the live Adscod Banner (fa638e17-ebc6-465c-b3da-7fc78d1cde4c)."
+        placementDescription="Header Ads position: displayed directly beneath the top navigation bar across website pages using your image banner or ad network HTML/script code (collapses cleanly when empty)."
         config={settings.belowHeaderAd}
         onChange={updateBelowHeader}
       />
 
-      {/* Placement 2: Above Footer */}
+      {/* Placement 2: Above Footer (Below Post Ads) */}
       <AdPlacementCard
         placementTitle="2. Above Website Footer"
-        placementDescription="Displayed immediately above the bottom website footer when a custom banner image or custom HTML/script is configured (collapses cleanly when empty)."
+        placementDescription="Below Post Ads position: displayed immediately above the bottom website footer when a custom banner image or custom HTML/script is configured (collapses cleanly when empty)."
         config={settings.aboveFooterAd}
         onChange={updateAboveFooter}
+      />
+
+      {/* Placements 3, 4, 5 & Global Site-Wide Scripts */}
+      <InArticleAdManagerSection
+        inArticleAds={currentInArticleAds}
+        globalScripts={currentGlobalScripts}
+        isSaving={isSaving}
+        onUpdateSlot={updateInArticleSlot}
+        onSaveSlot={(slotKey) =>
+          persistCurrentSettingsSection(
+            slotKey === 'slot1'
+              ? 'In-Article Ad Slot 1'
+              : slotKey === 'slot2'
+              ? 'In-Article Ad Slot 2'
+              : 'In-Article Ad Slot 3'
+          )
+        }
+        onUpdateGlobalScripts={updateGlobalScripts}
+        onSaveGlobalScripts={() => persistCurrentSettingsSection('Global Site-Wide Scripts')}
       />
 
       {/* Security & Sandbox Info */}
@@ -1446,12 +1411,44 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
   config,
   onChange
 }) => {
+  const hasBannerReady =
+    config.type === 'banner' && isSafeAdAssetOrClickUrl(config.imageUrl);
+  const hasCodeReady =
+    config.type === 'code' && hasRenderableAdCode(config.code);
+  const isReadyToRender = config.enabled && (hasBannerReady || hasCodeReady);
+  const needsConfiguration = config.enabled && !isReadyToRender;
+  const codeAnalysis = useMemo(
+    () => analyzeAdCodeSnippet(config.code || ''),
+    [config.code]
+  );
+
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
       {/* Placement Header & Enable Switch */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
         <div>
-          <h4 className="text-base font-bold text-slate-900">{placementTitle}</h4>
+          <h4 className="text-base font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+            <span>{placementTitle}</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                isReadyToRender
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : needsConfiguration
+                  ? 'bg-amber-100 text-amber-900'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {isReadyToRender
+                ? hasBannerReady
+                  ? 'ACTIVE · BANNER READY'
+                  : 'ACTIVE · CODE READY'
+                : needsConfiguration
+                ? config.type === 'banner'
+                  ? 'ENABLED · NEEDS BANNER URL'
+                  : 'ENABLED · NEEDS AD CODE'
+                : 'DISABLED'}
+            </span>
+          </h4>
           <p className="text-xs text-slate-500 mt-0.5">{placementDescription}</p>
         </div>
 
@@ -1477,6 +1474,17 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
           )}
         </button>
       </div>
+
+      {needsConfiguration && (
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            This placement is switched <strong>ON</strong>, but no{' '}
+            {config.type === 'banner' ? 'valid HTTPS banner image URL' : 'advertising script/HTML code'}{' '}
+            is currently entered. Public pages hide empty containers until you add your code or banner URL and click <strong>Save Ads Settings</strong>.
+          </span>
+        </div>
+      )}
 
       {/* Ad Format Selector */}
       <div className="space-y-3">
@@ -1580,15 +1588,21 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
             <label className="block text-xs font-semibold text-slate-700">
               Paste Ad Embed Code or HTML:
             </label>
-            <span className="text-[11px] text-slate-400 font-mono">HTML / JS / AdSense</span>
+            <span className="text-[11px] text-slate-400 font-mono">HTML / JS / Monetag / AdSense</span>
           </div>
           <textarea
             rows={5}
             value={config.code || ''}
             onChange={(e) => onChange({ code: e.target.value })}
-            placeholder={`<!-- Paste Google AdSense or Ad Network Script here -->\n<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>\n<ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-..." data-ad-slot="..." data-ad-format="auto"></ins>`}
+            placeholder={`<!-- Paste Monetag / AdSense / Ad Network HTML & Script here -->\n<script async src="https://..."></script>`}
             className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg bg-slate-900 text-teal-300 focus:ring-2 focus:ring-teal-500"
           />
+          {codeAnalysis.warnings.length > 0 && (
+            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{codeAnalysis.warnings[0]}</span>
+            </div>
+          )}
           <p className="text-[11px] text-slate-500 leading-relaxed">
             Note: Scripts will be executed safely in the dedicated ad slot container for website visitors when ads are enabled.
           </p>

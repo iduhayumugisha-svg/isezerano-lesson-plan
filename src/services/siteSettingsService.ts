@@ -8,10 +8,16 @@ import { db, getFirebaseAuth } from '../config/firebase';
 import {
   AdsSettings,
   DEFAULT_ADS_SETTINGS,
+  DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
+  DEFAULT_IN_ARTICLE_ADS_SETTINGS,
   DEFAULT_TOP_VIDEO_AD_CONFIG
 } from '../types/platform';
 import { normalizeAdsDisplaySettings } from '../utils/displaySettingsUtils';
 import { normalizeTopVideoAdConfig } from './shopVideoService';
+import {
+  normalizeGlobalAdScriptConfig,
+  normalizeInArticleAdsSettings
+} from '../utils/inArticleAdUtils';
 import { isAuthorizedAdminEmail } from './authService';
 
 // ==================== ADS SETTINGS ====================
@@ -21,6 +27,12 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
   if (!remoteData) {
     return {
       ...DEFAULT_ADS_SETTINGS,
+      inArticleAds: {
+        slot1: { ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot1 },
+        slot2: { ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot2 },
+        slot3: { ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot3 }
+      },
+      globalScripts: { ...DEFAULT_GLOBAL_AD_SCRIPT_CONFIG },
       aboveHeaderVideoAd: { ...DEFAULT_TOP_VIDEO_AD_CONFIG },
       displaySettings: normalizeAdsDisplaySettings(DEFAULT_ADS_SETTINGS.displaySettings)
     };
@@ -35,6 +47,8 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
       ...DEFAULT_ADS_SETTINGS.aboveFooterAd,
       ...(remoteData.aboveFooterAd || {})
     },
+    inArticleAds: normalizeInArticleAdsSettings(remoteData.inArticleAds),
+    globalScripts: normalizeGlobalAdScriptConfig(remoteData.globalScripts),
     aboveHeaderVideoAd: normalizeTopVideoAdConfig(remoteData.aboveHeaderVideoAd),
     displaySettings: normalizeAdsDisplaySettings(remoteData.displaySettings),
     updatedAt: remoteData.updatedAt || new Date().toISOString(),
@@ -201,6 +215,8 @@ export const saveAdsSettings = async (
 
   const payload: AdsSettings = stripUndefinedDeep({
     ...settings,
+    inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+    globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
     aboveHeaderVideoAd: normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd),
     displaySettings: normalizeAdsDisplaySettings(settings.displaySettings),
     updatedAt: new Date().toISOString(),

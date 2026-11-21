@@ -8,6 +8,7 @@ import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { MiniShopBar } from './components/MiniShopBar';
 import { TopVideoAdBanner } from './components/TopVideoAdBanner';
+import { GlobalAdScripts } from './components/GlobalAdScripts';
 
 // Code-split Secondary Public Views & Modals
 const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
@@ -299,6 +300,9 @@ function AppContent() {
         color: colors.bodyText
       }}
     >
+      {/* Site-Wide Global Head Scripts (Monetag Multitag/OnClick/Vignette/In-Page Push/Verification, skipped on /admin) */}
+      <GlobalAdScripts currentPage={currentPage} />
+
       {/* 0. Fixed Mini Shop / Product Showcase (Always pinned above WebsiteHeader on public pages) */}
       <MiniShopBar
         products={activeMiniShopProducts}
