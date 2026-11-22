@@ -8,10 +8,13 @@ import {
   analyzeAdCodeSnippet,
   getProviderDisplayName,
   hasRenderableAdCode,
+  installIntrusivePopunderDomGuard,
+  isIntrusivePopunderElement,
   isSafeAdScriptUrl,
   sanitizeAdCodePayload,
   sanitizeAdConfigText,
-  sanitizeStaticAdElement
+  sanitizeStaticAdElement,
+  shouldSkipDuplicateOverlayScript
 } from '../utils/inArticleAdUtils';
 
 interface HomepageInFeedAdSlotProps {
@@ -39,8 +42,14 @@ function enqueueHomepageInFeedExecution(task: () => Promise<void>): void {
 }
 
 function buildExecutableScriptElement(oldScript: HTMLScriptElement): HTMLScriptElement | null {
+  if (isIntrusivePopunderElement(oldScript)) {
+    return null;
+  }
   const src = oldScript.getAttribute('src')?.trim() || '';
   if (src && !isSafeAdScriptUrl(src)) {
+    return null;
+  }
+  if (shouldSkipDuplicateOverlayScript(oldScript)) {
     return null;
   }
 
@@ -290,6 +299,8 @@ export const HomepageInFeedAdSlot: React.FC<HomepageInFeedAdSlotProps> = ({
         return;
       }
     }
+
+    installIntrusivePopunderDomGuard();
 
     const nextSignature = `${feedContext}::${slotId}::${sanitizedCode}`;
     let cancelled = false;

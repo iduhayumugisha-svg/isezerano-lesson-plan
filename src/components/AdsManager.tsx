@@ -64,7 +64,8 @@ import {
   normalizeHomepageInFeedAdSlotConfig,
   normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdSlotConfig,
-  normalizeInArticleAdsSettings
+  normalizeInArticleAdsSettings,
+  normalizeStandardAdSlotConfig
 } from '../utils/inArticleAdUtils';
 
 const LazyShopVimeoPlayer = lazy(() =>
@@ -95,6 +96,16 @@ export const AdsManager: React.FC = () => {
       const normalizedTopVideo = normalizeTopVideoAdConfig(data.aboveHeaderVideoAd);
       setSettings({
         ...data,
+        belowHeaderAd: normalizeStandardAdSlotConfig(
+          data.belowHeaderAd,
+          DEFAULT_ADS_SETTINGS.belowHeaderAd,
+          true
+        ),
+        aboveFooterAd: normalizeStandardAdSlotConfig(
+          data.aboveFooterAd,
+          DEFAULT_ADS_SETTINGS.aboveFooterAd,
+          true
+        ),
         inArticleAds: normalizeInArticleAdsSettings(data.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(data.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(data.globalScripts),
@@ -261,6 +272,16 @@ export const AdsManager: React.FC = () => {
       });
       const payloadToSave: AdsSettings = {
         ...settings,
+        belowHeaderAd: normalizeStandardAdSlotConfig(
+          settings.belowHeaderAd,
+          DEFAULT_ADS_SETTINGS.belowHeaderAd,
+          true
+        ),
+        aboveFooterAd: normalizeStandardAdSlotConfig(
+          settings.aboveFooterAd,
+          DEFAULT_ADS_SETTINGS.aboveFooterAd,
+          true
+        ),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
@@ -396,6 +417,16 @@ export const AdsManager: React.FC = () => {
 
       const payloadToSave: AdsSettings = {
         ...settings,
+        belowHeaderAd: normalizeStandardAdSlotConfig(
+          settings.belowHeaderAd,
+          DEFAULT_ADS_SETTINGS.belowHeaderAd,
+          true
+        ),
+        aboveFooterAd: normalizeStandardAdSlotConfig(
+          settings.aboveFooterAd,
+          DEFAULT_ADS_SETTINGS.aboveFooterAd,
+          true
+        ),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
@@ -525,6 +556,16 @@ export const AdsManager: React.FC = () => {
     try {
       const payloadToSave: AdsSettings = {
         ...settings,
+        belowHeaderAd: normalizeStandardAdSlotConfig(
+          settings.belowHeaderAd,
+          DEFAULT_ADS_SETTINGS.belowHeaderAd,
+          true
+        ),
+        aboveFooterAd: normalizeStandardAdSlotConfig(
+          settings.aboveFooterAd,
+          DEFAULT_ADS_SETTINGS.aboveFooterAd,
+          true
+        ),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
