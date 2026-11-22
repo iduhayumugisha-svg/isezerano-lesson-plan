@@ -46,15 +46,17 @@ export const MAX_AD_CODE_LENGTH = 25000;
 /**
  * Matches known intrusive tab-opening Monetag OnClick / Popunder script sources or click-hijack blocks
  * (including `https://quge5.com/88/tag.min.js` and zone `313598`), while preserving legitimate
- * `<meta name="monetag" ...>` verification tags, native/banner embeds, and `/sw.js`.
+ * Monetag In-Page Push (`nap5k.com/tag.min.js`), Vignette (`n6wxm.com/vignette.min.js`),
+ * Native Banner embeds, `<meta name="monetag" ...>` verification tags, and `/sw.js`.
  */
 const INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN =
-  /(?:https?:)?\/\/(?:[^/"'\s]+\.)*(?:quge5\.com|glizauvo\.net|thubanoa\.com|niphaume\.com|nap5k\.com|propu\.sh)(?:\/[^"'\s]*)?/i;
+  /(?:https?:)?\/\/(?:[^/"'\s]+\.)*(?:quge5\.com|glizauvo\.net|thubanoa\.com|niphaume\.com|propu\.sh)(?:\/[^"'\s]*)?/i;
 
-const INTRUSIVE_POPUNDER_ZONE_PATTERN = /\bdata-zone\s*=\s*["']?313598["']?/i;
+const INTRUSIVE_POPUNDER_ZONE_PATTERN =
+  /(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?313598["']?/i;
 
 const INTRUSIVE_INLINE_POPUNDER_PATTERN =
-  /\b(?:popunder|onclick[_-]?ad|openPopunder|clickUnder)\b|data-zone\s*=\s*["']?313598["']?|quge5\.com/i;
+  /\b(?:popunder|onclick[_-]?ad|openPopunder|clickUnder)\b|(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?313598["']?|quge5\.com/i;
 
 export interface PopunderSanitizationResult {
   cleanedCode: string;
@@ -62,12 +64,16 @@ export interface PopunderSanitizationResult {
   hadIntrusivePopunder: boolean;
 }
 
+const stripHtmlComments = (raw: string): string => raw.replace(/<!--[\s\S]*?-->/g, '');
+
 export const detectIntrusivePopunderAdCode = (rawCode: unknown): boolean => {
   if (typeof rawCode !== 'string' || !rawCode.trim()) return false;
+  const activeMarkup = stripHtmlComments(rawCode);
+  if (!activeMarkup.trim()) return false;
   return (
-    INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(rawCode) ||
-    INTRUSIVE_POPUNDER_ZONE_PATTERN.test(rawCode) ||
-    INTRUSIVE_INLINE_POPUNDER_PATTERN.test(rawCode)
+    INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(activeMarkup) ||
+    INTRUSIVE_POPUNDER_ZONE_PATTERN.test(activeMarkup) ||
+    INTRUSIVE_INLINE_POPUNDER_PATTERN.test(activeMarkup)
   );
 };
 
@@ -88,7 +94,7 @@ export const stripIntrusivePopunderAdCode = (
     const src = (srcMatch?.[1] ?? srcMatch?.[2] ?? srcMatch?.[3] ?? '').trim();
     const isBlockedSrc = src ? INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(src) : false;
     const isBlockedZone = INTRUSIVE_POPUNDER_ZONE_PATTERN.test(attrs);
-    const isBlockedInline = !src && INTRUSIVE_INLINE_POPUNDER_PATTERN.test(`${attrs}\n${body}`);
+    const isBlockedInline = INTRUSIVE_INLINE_POPUNDER_PATTERN.test(`${attrs}\n${body}`);
 
     if (isBlockedSrc || isBlockedZone || isBlockedInline) {
       removedCount += 1;
@@ -97,7 +103,18 @@ export const stripIntrusivePopunderAdCode = (
     return fullMatch;
   });
 
-  // 2. Also remove bare script-less lines or unclosed script snippets containing quge5.com / zone 313598
+  // 2. Remove unclosed/self-closing tags (e.g., <script ... quge5.com ...> or <iframe ... quge5.com ...>) before line fallback
+  if (detectIntrusivePopunderAdCode(working)) {
+    working = working.replace(/<(?:script|iframe|img|a)\b[^>]*>/gi, (tag) => {
+      if (detectIntrusivePopunderAdCode(tag)) {
+        removedCount += 1;
+        return '';
+      }
+      return tag;
+    });
+  }
+
+  // 3. Also remove bare script-less lines containing quge5.com / zone 313598 / popunder loaders
   if (detectIntrusivePopunderAdCode(working)) {
     const filteredLines = working.split('\n').filter((line) => {
       if (detectIntrusivePopunderAdCode(line)) {
@@ -115,6 +132,154 @@ export const stripIntrusivePopunderAdCode = (
     removedCount,
     hadIntrusivePopunder: removedCount > 0 || detectIntrusivePopunderAdCode(rawCode)
   };
+};
+
+export const isIntrusivePopunderElement = (el: Element | null | undefined): boolean => {
+  if (!el || el.nodeType !== 1) return false;
+  const tag = el.tagName?.toUpperCase();
+  if (tag !== 'SCRIPT' && tag !== 'IFRAME') return false;
+
+  const src = el.getAttribute('src')?.trim() || '';
+  const dataZone = (el.getAttribute('data-zone') || el.getAttribute('zone') || '').trim();
+  const body = el.textContent || '';
+
+  if (src && INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(src)) return true;
+  if (dataZone === '313598') return true;
+  if (detectIntrusivePopunderAdCode(`${el.outerHTML || ''}\n${body}`)) return true;
+  return false;
+};
+
+let popunderDomGuardObserver: MutationObserver | null = null;
+let popunderDomGuardDocument: Document | null = null;
+const executedOverlayScriptKeys = new Set<string>();
+
+export const __resetPopunderGuardAndOverlayCacheForTests = (): void => {
+  if (popunderDomGuardObserver) {
+    popunderDomGuardObserver.disconnect();
+    popunderDomGuardObserver = null;
+  }
+  popunderDomGuardDocument = null;
+  executedOverlayScriptKeys.clear();
+};
+
+export const installIntrusivePopunderDomGuard = (): void => {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+
+  const purgeExistingPopunders = () => {
+    for (const candidate of Array.from(document.querySelectorAll('script, iframe'))) {
+      if (isIntrusivePopunderElement(candidate)) {
+        if (candidate.tagName === 'SCRIPT') {
+          candidate.setAttribute('type', 'javascript/blocked');
+        }
+        candidate.remove();
+      }
+    }
+  };
+
+  purgeExistingPopunders();
+
+  if (popunderDomGuardObserver && popunderDomGuardDocument === document) {
+    return;
+  }
+
+  if (popunderDomGuardObserver) {
+    popunderDomGuardObserver.disconnect();
+    popunderDomGuardObserver = null;
+  }
+
+  const rootTarget = document.documentElement || document.body;
+  if (!rootTarget) return;
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of Array.from(mutation.addedNodes)) {
+        if (node.nodeType !== 1) continue;
+        const el = node as Element;
+        if (isIntrusivePopunderElement(el)) {
+          if (el.tagName === 'SCRIPT') {
+            el.setAttribute('type', 'javascript/blocked');
+          }
+          el.remove();
+          continue;
+        }
+        for (const nested of Array.from(el.querySelectorAll('script, iframe'))) {
+          if (isIntrusivePopunderElement(nested)) {
+            if (nested.tagName === 'SCRIPT') {
+              nested.setAttribute('type', 'javascript/blocked');
+            }
+            nested.remove();
+          }
+        }
+      }
+    }
+  });
+
+  observer.observe(rootTarget, { childList: true, subtree: true });
+  popunderDomGuardObserver = observer;
+  popunderDomGuardDocument = document;
+};
+
+/**
+ * Extracts a unique page-level key ONLY for singleton overlay/page-wide injectors
+ * (e.g. Monetag Vignette `vignette.min.js`, In-Page Push, or MultiTag document.body append loaders).
+ * Returns `null` for container-scoped Native Banners, AdSense, Adsterra, or custom HTML slots
+ * so multiple container ads continue rendering independently.
+ */
+export const extractSingletonOverlayKey = (scriptEl: HTMLScriptElement): string | null => {
+  const src = scriptEl.getAttribute('src')?.trim() || '';
+  const dataZone = (scriptEl.getAttribute('data-zone') || '').trim();
+  const body = scriptEl.textContent || '';
+
+  const isKnownOverlaySrc =
+    /(?:vignette\.min\.js|in-page-push|nap5k\.com\/tag\.min\.js|alwingulla\.com\/88\/tag\.min\.js)/i.test(
+      src
+    );
+  if (src && isKnownOverlaySrc) {
+    return `src:${src}::zone:${dataZone}`;
+  }
+
+  const inlineSrcMatch = body.match(
+    /https?:\/\/[^"'\s]+(?:vignette\.min\.js|in-page-push|nap5k\.com\/tag\.min\.js)/i
+  );
+  if (!src && inlineSrcMatch) {
+    const inlineZoneMatch = body.match(/(?:dataset\.zone|data-zone|\bzone)\s*[:=]\s*["']?(\d+)["']?/i);
+    return `inline:${inlineSrcMatch[0]}::zone:${inlineZoneMatch?.[1] || ''}`;
+  }
+
+  return null;
+};
+
+export const shouldSkipDuplicateOverlayScript = (scriptEl: HTMLScriptElement): boolean => {
+  const key = extractSingletonOverlayKey(scriptEl);
+  if (!key) return false;
+
+  if (executedOverlayScriptKeys.has(key)) {
+    return true;
+  }
+
+  if (typeof document !== 'undefined') {
+    const srcPart = key.startsWith('src:')
+      ? key.slice(4, key.indexOf('::zone:'))
+      : key.startsWith('inline:')
+      ? key.slice(7, key.indexOf('::zone:'))
+      : '';
+    const zonePart = key.split('::zone:')[1] || '';
+
+    if (srcPart) {
+      const alreadyLoaded = Array.from(document.querySelectorAll('script[src]')).some((el) => {
+        const elSrc = el.getAttribute('src')?.trim() || '';
+        const elZone = (el.getAttribute('data-zone') || '').trim();
+        return elSrc === srcPart && (!zonePart || !elZone || elZone === zonePart);
+      });
+      if (alreadyLoaded) {
+        executedOverlayScriptKeys.add(key);
+        return true;
+      }
+    }
+  }
+
+  executedOverlayScriptKeys.add(key);
+  return false;
 };
 
 export const clampInArticleParagraph = (

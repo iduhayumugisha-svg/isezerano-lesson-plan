@@ -15,6 +15,7 @@ import {
   __resetGlobalAdScriptsCacheForTests
 } from '../src/components/GlobalAdScripts';
 import {
+  __resetPopunderGuardAndOverlayCacheForTests,
   analyzeAdCodeSnippet,
   clampInArticleParagraph,
   hasRenderableAdCode,
@@ -426,6 +427,7 @@ function testAdminControlsAndSecurityWiring(): void {
 async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
   __resetGlobalAdScriptsCacheForTests();
   __resetAdsSettingsCacheForTests();
+  __resetPopunderGuardAndOverlayCacheForTests();
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
     url: 'https://isezerano.online/blog/sample-article'
   });
@@ -514,6 +516,7 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
 
 async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
   __resetAdsSettingsCacheForTests();
+  __resetPopunderGuardAndOverlayCacheForTests();
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
     url: 'https://isezerano.online/blog/sample-article'
   });

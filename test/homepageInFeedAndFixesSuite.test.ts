@@ -12,6 +12,7 @@ import {
   DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS
 } from '../src/types/platform';
 import {
+  __resetPopunderGuardAndOverlayCacheForTests,
   analyzeAdCodeSnippet,
   clampHomepageInFeedPosition,
   detectIntrusivePopunderAdCode,
@@ -139,6 +140,7 @@ function testPopunderDetectionAndSanitization(): void {
 
 async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
   __resetGlobalAdScriptsCacheForTests();
+  __resetPopunderGuardAndOverlayCacheForTests();
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
     url: 'https://isezerano.online/'
   });
@@ -255,7 +257,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
       )
     );
 
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 160));
 
     // Zero quge5.com / 313598 scripts anywhere in head or body
     const allScripts = Array.from(dom.window.document.querySelectorAll('script'));
@@ -539,11 +541,265 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   console.log('✓ 4. Admin UI all 8 independent ad positions, orphan-reply fix & streamlined Firestore rules verified');
 }
 
+async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promise<void> {
+  __resetGlobalAdScriptsCacheForTests();
+  __resetAdsSettingsCacheForTests();
+  __resetPopunderGuardAndOverlayCacheForTests();
+
+  // 1. Inline dataset.zone='313598' loader & unclosed quge5 tags are stripped while Vignette (zone 12322670) & In-Page Push remain intact
+  const inlineJsPopunder =
+    "<script>(function(s){s.dataset.zone='313598',s.src='https://quge5.com/88/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
+  const legitimateVignette =
+    "<script>(function(s){s.dataset.zone='12322670',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
+  const legitimateInPagePush =
+    '<script src="https://cdn.example.com/in-page-push.js" data-zone="555111" async></script>';
+  const legitimateNativeBanner =
+    '<div class="native-between-p"><div data-banner-id="native-1">Native Banner Unit</div><script src="https://cdn.example.com/native-banner.js" data-zone="888222"></script></div>';
+
+  assert.equal(detectIntrusivePopunderAdCode(inlineJsPopunder), true);
+  assert.equal(detectIntrusivePopunderAdCode(legitimateVignette), false);
+  assert.equal(detectIntrusivePopunderAdCode(legitimateInPagePush), false);
+  assert.equal(detectIntrusivePopunderAdCode(legitimateNativeBanner), false);
+  assert.equal(sanitizeAdCodePayload(`${inlineJsPopunder}\n${legitimateVignette}`), legitimateVignette);
+
+  // 2. Runtime JSDOM test: MutationObserver DOM guard blocks dynamically injected quge5/313598 nodes,
+  // duplicate Vignette in below_header + above_footer executes ONLY ONCE, native banners between paragraphs work independently,
+  // and clicking an ordinary article link does not invoke window.open.
+  const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div><a id="article-link" href="/blog/test-story">Read Story</a></body></html>', {
+    url: 'https://isezerano.online/blog/test-story'
+  });
+
+  const prevWindow = (globalThis as any).window;
+  const prevDocument = (globalThis as any).document;
+  const prevLocalStorage = (globalThis as any).localStorage;
+  const prevFetch = (globalThis as any).fetch;
+  const prevCss = (globalThis as any).CSS;
+  const prevMutationObserver = (globalThis as any).MutationObserver;
+  const prevResizeObserver = (globalThis as any).ResizeObserver;
+  const prevRAF = (globalThis as any).requestAnimationFrame;
+  const prevCAF = (globalThis as any).cancelAnimationFrame;
+
+  const auditSettings: AdsSettings = {
+    ...DEFAULT_ADS_SETTINGS,
+    masterEnabled: true,
+    belowHeaderAd: {
+      enabled: true,
+      type: 'code',
+      label: 'Advertisement',
+      code: legitimateVignette
+    },
+    aboveFooterAd: {
+      enabled: true,
+      type: 'code',
+      label: 'Advertisement',
+      code: legitimateVignette
+    }
+  };
+
+  const toFirestoreRestFields = (val: any): any => {
+    if (val === null || val === undefined) return { nullValue: null };
+    if (typeof val === 'boolean') return { booleanValue: val };
+    if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    if (typeof val === 'string') return { stringValue: val };
+    if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreRestFields) } };
+    if (typeof val === 'object') {
+      const fields: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) fields[k] = toFirestoreRestFields(v);
+      }
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(val) };
+  };
+
+  let unexpectedOpenCount = 0;
+  (dom.window as any).open = () => {
+    unexpectedOpenCount += 1;
+    return null;
+  };
+  (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
+    dom.window.setTimeout(() => cb(Date.now()), 0);
+  (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
+  (globalThis as any).window = dom.window;
+  (globalThis as any).document = dom.window.document;
+  (globalThis as any).CSS = { escape: (v: string) => v };
+  (globalThis as any).MutationObserver = dom.window.MutationObserver;
+  (globalThis as any).ResizeObserver = undefined;
+  (globalThis as any).requestAnimationFrame = (dom.window as any).requestAnimationFrame;
+  (globalThis as any).cancelAnimationFrame = (dom.window as any).cancelAnimationFrame;
+  (globalThis as any).localStorage = {
+    getItem: (key: string) =>
+      key === 'isezerano_ads_settings' ? JSON.stringify(auditSettings) : null,
+    setItem: () => undefined,
+    removeItem: () => undefined
+  };
+  (globalThis as any).fetch = async () => ({
+    ok: true,
+    json: async () => ({ fields: toFirestoreRestFields(auditSettings).mapValue.fields })
+  });
+
+  const container = dom.window.document.getElementById('root')!;
+  const root = createRoot(container);
+
+  try {
+    root.render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(GlobalAdScripts, { currentPage: 'blog' }),
+        React.createElement(AdSlot, { placement: 'below_header' }),
+        React.createElement(InArticleAdSlot, {
+          slotId: 'slot1',
+          articleId: 'audit-article-1',
+          slotConfig: {
+            enabled: true,
+            provider: 'monetag',
+            afterParagraph: 3,
+            mobileEnabled: true,
+            desktopEnabled: true,
+            label: 'Advertisement',
+            code: legitimateNativeBanner
+          }
+        }),
+        React.createElement(InArticleAdSlot, {
+          slotId: 'slot2',
+          articleId: 'audit-article-1',
+          slotConfig: {
+            enabled: true,
+            provider: 'other',
+            providerLabel: 'Custom Native',
+            afterParagraph: 7,
+            mobileEnabled: true,
+            desktopEnabled: true,
+            label: 'Kwamamaza',
+            code: '<div class="custom-between-p"><script src="https://cdn.example.com/native-banner-2.js" data-zone="888333"></script></div>'
+          }
+        }),
+        React.createElement(AdSlot, { placement: 'above_footer' })
+      )
+    );
+
+    await new Promise((r) => setTimeout(r, 140));
+
+    // A. Duplicate Vignette (zone 12322670) across below_header + above_footer executed ONLY ONCE
+    const vignetteExecScripts = Array.from(
+      container.querySelectorAll('[data-ad-placement="below_header"] script, [data-ad-placement="above_footer"] script')
+    );
+    assert.equal(
+      vignetteExecScripts.length,
+      1,
+      'Duplicate Vignette overlay script across below_header + above_footer must execute only once'
+    );
+
+    // B. Native Banners between paragraphs both rendered and mounted their scripts independently
+    assert.ok(
+      container.querySelector('[data-testid="in-article-ad-slot1"] .native-between-p script[src="https://cdn.example.com/native-banner.js"]')
+    );
+    assert.ok(
+      container.querySelector('[data-testid="in-article-ad-slot2"] .custom-between-p script[src="https://cdn.example.com/native-banner-2.js"]')
+    );
+
+    // C. Runtime MutationObserver DOM guard removes a dynamically appended quge5 / 313598 script immediately
+    const rogueScript = dom.window.document.createElement('script');
+    rogueScript.src = 'https://quge5.com/88/tag.min.js';
+    rogueScript.setAttribute('data-zone', '313598');
+    dom.window.document.body.appendChild(rogueScript);
+
+    const rogueIframe = dom.window.document.createElement('iframe');
+    rogueIframe.src = 'https://quge5.com/pop';
+    dom.window.document.body.appendChild(rogueIframe);
+
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.equal(
+      dom.window.document.querySelectorAll('script[src*="quge5.com"], script[data-zone="313598"], iframe[src*="quge5.com"]').length,
+      0,
+      'MutationObserver DOM guard must immediately strip dynamically appended quge5.com / zone 313598 nodes'
+    );
+
+    // D. Clicking an ordinary article link triggers zero window.open popups
+    const linkEl = dom.window.document.getElementById('article-link') as HTMLAnchorElement;
+    let defaultPrevented = false;
+    linkEl.addEventListener('click', (e) => {
+      defaultPrevented = e.defaultPrevented;
+    });
+    linkEl.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    assert.equal(unexpectedOpenCount, 0);
+    assert.equal(defaultPrevented, false);
+  } finally {
+    root.unmount();
+    await new Promise((r) => setTimeout(r, 20));
+    (globalThis as any).window = prevWindow;
+    (globalThis as any).document = prevDocument;
+    (globalThis as any).localStorage = prevLocalStorage;
+    (globalThis as any).fetch = prevFetch;
+    (globalThis as any).CSS = prevCss;
+    (globalThis as any).MutationObserver = prevMutationObserver;
+    (globalThis as any).ResizeObserver = prevResizeObserver;
+    (globalThis as any).requestAnimationFrame = prevRAF;
+    (globalThis as any).cancelAnimationFrame = prevCAF;
+  }
+
+  console.log('✓ 5. Inline loader blocking, runtime MutationObserver guard, Vignette deduplication, Native Banner preservation & safe article click verified');
+}
+
+function testLegitimateMonetagInPagePushAndAdminStateSaveCleanup(): void {
+  const legitimateInPagePushTag =
+    "<script>(function(s){s.dataset.zone='9451234',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
+  const commentedNativeBanner =
+    '<!-- Monetag Native Banner (no popunder) -->\n<div class="native-slot"><script src="https://cdn.example.com/native-unit.js" async></script></div>';
+
+  // 1. Legitimate Monetag In-Page Push (nap5k.com/tag.min.js) must NOT be flagged or stripped
+  assert.equal(detectIntrusivePopunderAdCode(legitimateInPagePushTag), false);
+  assert.equal(isSafeAdScriptUrl('https://nap5k.com/tag.min.js'), true);
+  const inPageAnalysis = analyzeAdCodeSnippet(legitimateInPagePushTag);
+  assert.equal(inPageAnalysis.hasIntrusivePopunder, false);
+  assert.deepEqual(inPageAnalysis.warnings, []);
+  assert.equal(sanitizeAdCodePayload(legitimateInPagePushTag), legitimateInPagePushTag);
+
+  // 2. HTML comments mentioning popunder alongside legitimate native banners must NOT false-trigger warning
+  assert.equal(detectIntrusivePopunderAdCode(commentedNativeBanner), false);
+  const commentBannerAnalysis = analyzeAdCodeSnippet(commentedNativeBanner);
+  assert.equal(commentBannerAnalysis.hasIntrusivePopunder, false);
+  assert.deepEqual(commentBannerAnalysis.warnings, []);
+  assert.equal(
+    normalizeInArticleAdSlotConfig('slot1', { enabled: true, code: commentedNativeBanner }).code,
+    commentedNativeBanner
+  );
+  assert.equal(
+    normalizeStandardAdSlotConfig({ enabled: true, type: 'code', code: legitimateInPagePushTag }).code,
+    legitimateInPagePushTag
+  );
+  assert.equal(
+    normalizeGlobalAdScriptConfig({ enabled: true, code: legitimateInPagePushTag }).code,
+    legitimateInPagePushTag
+  );
+
+  // 3. Confirmed quge5.com + zone 313598 continues to be blocked cleanly
+  const confirmedPopunder =
+    "<script>(function(s){s.dataset.zone='313598',s.src='https://quge5.com/88/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
+  assert.equal(detectIntrusivePopunderAdCode(confirmedPopunder), true);
+  assert.equal(sanitizeAdCodePayload(confirmedPopunder), '');
+
+  // 4. AdsManager normalizes belowHeaderAd and aboveFooterAd when loading and saving state (preventing stale UI warnings)
+  const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
+  assert.match(adsMgrSrc, /normalizeStandardAdSlotConfig\(/);
+  const stdNormalizeCalls = adsMgrSrc.match(/normalizeStandardAdSlotConfig\(/g) || [];
+  assert.ok(
+    stdNormalizeCalls.length >= 6,
+    'AdsManager load & save paths must normalize belowHeaderAd & aboveFooterAd cleanly'
+  );
+
+  console.log('✓ 6. Monetag In-Page Push (nap5k.com) allowed, comment false-positives resolved & AdsManager save/reload normalization verified');
+}
+
 async function run(): Promise<void> {
   testPopunderDetectionAndSanitization();
   await testRuntimePopunderBlockingAndScriptIsolation();
   testHomepageInFeedDefaultsPlannerAndRendering();
   testAdminUiAllEightPositionsAndCommentRulesAudit();
+  await testAuditPopunderGuardVignetteDeduplicationAndLinkSafety();
+  testLegitimateMonetagInPagePushAndAdminStateSaveCleanup();
   console.log('\nALL HOMEPAGE IN-FEED ADS, POPUNDER REMOVAL & COMMENT REPAIR TESTS PASSED!');
 }
 

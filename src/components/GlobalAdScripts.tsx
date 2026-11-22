@@ -7,8 +7,11 @@ import {
 } from '../services/siteSettingsService';
 import {
   analyzeAdCodeSnippet,
+  installIntrusivePopunderDomGuard,
+  isIntrusivePopunderElement,
   isSafeAdScriptUrl,
-  sanitizeAdCodePayload
+  sanitizeAdCodePayload,
+  shouldSkipDuplicateOverlayScript
 } from '../utils/inArticleAdUtils';
 
 interface GlobalAdScriptsProps {
@@ -51,6 +54,9 @@ export const GlobalAdScripts: React.FC<GlobalAdScriptsProps> = ({ currentPage })
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     if (currentPage === 'admin') return;
+
+    installIntrusivePopunderDomGuard();
+
     if (!adsSettings.masterEnabled || !globalConfig?.enabled) return;
 
     const rawCode = sanitizeAdCodePayload(globalConfig.code);
@@ -86,11 +92,18 @@ export const GlobalAdScripts: React.FC<GlobalAdScriptsProps> = ({ currentPage })
     const scripts = Array.from(tempDiv.querySelectorAll('script'));
 
     for (const oldScript of scripts) {
+      if (isIntrusivePopunderElement(oldScript)) continue;
+
       const src = oldScript.getAttribute('src')?.trim() || '';
       const zoneAttr = oldScript.getAttribute('data-zone')?.trim() || '';
 
       if (src) {
         if (!isSafeAdScriptUrl(src)) continue;
+      }
+
+      if (shouldSkipDuplicateOverlayScript(oldScript)) continue;
+
+      if (src) {
         const srcKey = zoneAttr ? `${src}::${zoneAttr}` : src;
         if (executedGlobalScriptSources.has(srcKey)) continue;
 
