@@ -1,12 +1,19 @@
 import {
   AdProviderId,
+  AdSlotConfig,
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
+  DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS,
   DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS,
   GlobalAdScriptConfig,
+  HOMEPAGE_IN_FEED_POSITION_LIMITS,
+  HomepageInFeedAdSlotConfig,
+  HomepageInFeedAdSlotKey,
+  HomepageInFeedAdsSettings,
   IN_ARTICLE_PARAGRAPH_LIMITS,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
   InArticleAdsSettings,
+  createDefaultHomepageInFeedSlotConfig,
   createDefaultInArticleSlotConfig
 } from '../types/platform';
 
@@ -18,7 +25,7 @@ export const AD_PROVIDER_OPTIONS: ReadonlyArray<{
   {
     id: 'monetag',
     label: 'Monetag',
-    description: 'Supports Monetag native/in-article snippets, banners, and global Multitag / OnClick / Vignette / In-Page Push tags.'
+    description: 'Supports non-intrusive Monetag native/in-article snippets, banners, and verified header meta tags (intrusive OnClick/Popunder tab-opening tags are automatically blocked).'
   },
   {
     id: 'adscod',
@@ -36,6 +43,80 @@ export const AD_DISCLOSURE_LABEL_OPTIONS = ['Advertisement', 'Kwamamaza'] as con
 
 export const MAX_AD_CODE_LENGTH = 25000;
 
+/**
+ * Matches known intrusive tab-opening Monetag OnClick / Popunder script sources or click-hijack blocks
+ * (including `https://quge5.com/88/tag.min.js` and zone `313598`), while preserving legitimate
+ * `<meta name="monetag" ...>` verification tags, native/banner embeds, and `/sw.js`.
+ */
+const INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN =
+  /(?:https?:)?\/\/(?:[^/"'\s]+\.)*(?:quge5\.com|glizauvo\.net|thubanoa\.com|niphaume\.com|nap5k\.com|propu\.sh)(?:\/[^"'\s]*)?/i;
+
+const INTRUSIVE_POPUNDER_ZONE_PATTERN = /\bdata-zone\s*=\s*["']?313598["']?/i;
+
+const INTRUSIVE_INLINE_POPUNDER_PATTERN =
+  /\b(?:popunder|onclick[_-]?ad|openPopunder|clickUnder)\b|data-zone\s*=\s*["']?313598["']?|quge5\.com/i;
+
+export interface PopunderSanitizationResult {
+  cleanedCode: string;
+  removedCount: number;
+  hadIntrusivePopunder: boolean;
+}
+
+export const detectIntrusivePopunderAdCode = (rawCode: unknown): boolean => {
+  if (typeof rawCode !== 'string' || !rawCode.trim()) return false;
+  return (
+    INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(rawCode) ||
+    INTRUSIVE_POPUNDER_ZONE_PATTERN.test(rawCode) ||
+    INTRUSIVE_INLINE_POPUNDER_PATTERN.test(rawCode)
+  );
+};
+
+export const stripIntrusivePopunderAdCode = (
+  rawCode: unknown,
+  trimWhitespace: boolean = true
+): PopunderSanitizationResult => {
+  if (typeof rawCode !== 'string' || !rawCode) {
+    return { cleanedCode: '', removedCount: 0, hadIntrusivePopunder: false };
+  }
+
+  let removedCount = 0;
+  let working = rawCode.replace(/\u0000/g, '').slice(0, MAX_AD_CODE_LENGTH);
+
+  // 1. Remove full <script ...>...</script> tags that reference quge5.com, zone 313598, or explicit popunder scripts
+  working = working.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullMatch, attrs: string, body: string) => {
+    const srcMatch = attrs.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    const src = (srcMatch?.[1] ?? srcMatch?.[2] ?? srcMatch?.[3] ?? '').trim();
+    const isBlockedSrc = src ? INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(src) : false;
+    const isBlockedZone = INTRUSIVE_POPUNDER_ZONE_PATTERN.test(attrs);
+    const isBlockedInline = !src && INTRUSIVE_INLINE_POPUNDER_PATTERN.test(`${attrs}\n${body}`);
+
+    if (isBlockedSrc || isBlockedZone || isBlockedInline) {
+      removedCount += 1;
+      return '';
+    }
+    return fullMatch;
+  });
+
+  // 2. Also remove bare script-less lines or unclosed script snippets containing quge5.com / zone 313598
+  if (detectIntrusivePopunderAdCode(working)) {
+    const filteredLines = working.split('\n').filter((line) => {
+      if (detectIntrusivePopunderAdCode(line)) {
+        removedCount += 1;
+        return false;
+      }
+      return true;
+    });
+    working = filteredLines.join('\n');
+  }
+
+  const finalCode = trimWhitespace ? working.trim() : working;
+  return {
+    cleanedCode: finalCode,
+    removedCount,
+    hadIntrusivePopunder: removedCount > 0 || detectIntrusivePopunderAdCode(rawCode)
+  };
+};
+
 export const clampInArticleParagraph = (
   value: unknown,
   fallback: number
@@ -45,6 +126,18 @@ export const clampInArticleParagraph = (
   return Math.min(
     IN_ARTICLE_PARAGRAPH_LIMITS.max,
     Math.max(IN_ARTICLE_PARAGRAPH_LIMITS.min, Math.round(parsed))
+  );
+};
+
+export const clampHomepageInFeedPosition = (
+  value: unknown,
+  fallback: number
+): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(
+    HOMEPAGE_IN_FEED_POSITION_LIMITS.max,
+    Math.max(HOMEPAGE_IN_FEED_POSITION_LIMITS.min, Math.round(parsed))
   );
 };
 
@@ -74,12 +167,12 @@ export const sanitizeAdCodePayload = (
   trimWhitespace: boolean = true
 ): string => {
   if (typeof raw !== 'string') return '';
-  const cleaned = raw.replace(/\u0000/g, '').slice(0, MAX_AD_CODE_LENGTH);
-  return trimWhitespace ? cleaned.trim() : cleaned;
+  const { cleanedCode } = stripIntrusivePopunderAdCode(raw, trimWhitespace);
+  return cleanedCode;
 };
 
 export const sanitizeAdCodeInput = (raw: unknown): string =>
-  sanitizeAdCodePayload(raw, false);
+  typeof raw === 'string' ? raw.replace(/\u0000/g, '').slice(0, MAX_AD_CODE_LENGTH) : '';
 
 export const hasRenderableAdCode = (raw: unknown): boolean => {
   const cleaned = sanitizeAdCodePayload(raw, true);
@@ -93,6 +186,7 @@ export const isSafeAdScriptUrl = (rawUrl: unknown): boolean => {
   const trimmed = rawUrl.trim();
   if (!trimmed) return false;
   if (/^(javascript|vbscript|data|file):/i.test(trimmed)) return false;
+  if (INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(trimmed)) return false;
   if (trimmed.startsWith('https://') || trimmed.startsWith('//')) {
     return true;
   }
@@ -114,6 +208,30 @@ export const isSafeAdAssetOrClickUrl = (rawUrl: unknown): boolean => {
   return false;
 };
 
+export const normalizeStandardAdSlotConfig = (
+  raw?: Partial<AdSlotConfig> | null,
+  fallback?: AdSlotConfig,
+  trimCode: boolean = true
+): AdSlotConfig => {
+  const base: AdSlotConfig = fallback || {
+    enabled: false,
+    type: 'banner',
+    code: '',
+    imageUrl: '',
+    linkUrl: '',
+    altText: 'Advertisement',
+    label: 'Advertisement'
+  };
+  if (!raw || typeof raw !== 'object') {
+    return { ...base };
+  }
+  return {
+    ...base,
+    ...raw,
+    code: trimCode ? sanitizeAdCodePayload(raw.code, true) : sanitizeAdCodeInput(raw.code)
+  };
+};
+
 export const normalizeInArticleAdSlotConfig = (
   slotKey: InArticleAdSlotKey,
   raw?: Partial<InArticleAdSlotConfig> | null,
@@ -128,7 +246,7 @@ export const normalizeInArticleAdSlotConfig = (
     enabled: Boolean(raw.enabled),
     provider: normalizeAdProvider(raw.provider),
     providerLabel: sanitizeAdConfigText(raw.providerLabel, '', 40),
-    code: sanitizeAdCodePayload(raw.code, trimCode),
+    code: trimCode ? sanitizeAdCodePayload(raw.code, true) : sanitizeAdCodeInput(raw.code),
     afterParagraph: clampInArticleParagraph(
       raw.afterParagraph,
       DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS[slotKey]
@@ -149,6 +267,41 @@ export const normalizeInArticleAdsSettings = (
   slot3: normalizeInArticleAdSlotConfig('slot3', raw?.slot3, trimCode)
 });
 
+export const normalizeHomepageInFeedAdSlotConfig = (
+  slotKey: HomepageInFeedAdSlotKey,
+  raw?: Partial<HomepageInFeedAdSlotConfig> | null,
+  trimCode: boolean = true
+): HomepageInFeedAdSlotConfig => {
+  const defaults = createDefaultHomepageInFeedSlotConfig(slotKey);
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+
+  return {
+    enabled: Boolean(raw.enabled),
+    provider: normalizeAdProvider(raw.provider),
+    providerLabel: sanitizeAdConfigText(raw.providerLabel, '', 40),
+    code: trimCode ? sanitizeAdCodePayload(raw.code, true) : sanitizeAdCodeInput(raw.code),
+    afterPost: clampHomepageInFeedPosition(
+      raw.afterPost,
+      DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS[slotKey]
+    ),
+    mobileEnabled: raw.mobileEnabled !== false,
+    desktopEnabled: raw.desktopEnabled !== false,
+    label: sanitizeAdConfigText(raw.label, 'Advertisement', 40),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  };
+};
+
+export const normalizeHomepageInFeedAdsSettings = (
+  raw?: Partial<HomepageInFeedAdsSettings> | null,
+  trimCode: boolean = true
+): HomepageInFeedAdsSettings => ({
+  slot1: normalizeHomepageInFeedAdSlotConfig('slot1', raw?.slot1, trimCode),
+  slot2: normalizeHomepageInFeedAdSlotConfig('slot2', raw?.slot2, trimCode),
+  slot3: normalizeHomepageInFeedAdSlotConfig('slot3', raw?.slot3, trimCode)
+});
+
 export const normalizeGlobalAdScriptConfig = (
   raw?: Partial<GlobalAdScriptConfig> | null,
   trimCode: boolean = true
@@ -161,7 +314,7 @@ export const normalizeGlobalAdScriptConfig = (
     enabled: Boolean(raw.enabled),
     provider: normalizeAdProvider(raw.provider),
     providerLabel: sanitizeAdConfigText(raw.providerLabel, '', 40),
-    code: sanitizeAdCodePayload(raw.code, trimCode),
+    code: trimCode ? sanitizeAdCodePayload(raw.code, true) : sanitizeAdCodeInput(raw.code),
     mobileEnabled: raw.mobileEnabled !== false,
     desktopEnabled: raw.desktopEnabled !== false,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
@@ -174,6 +327,7 @@ export interface AdCodeSnippetAnalysis {
   hasBareJavaScript: boolean;
   isLikelyGlobalScript: boolean;
   hasUnsafeUrls: boolean;
+  hasIntrusivePopunder: boolean;
   needsSerializedQueue: boolean;
   scriptSources: string[];
   metaTags: Array<{ name: string; content: string }>;
@@ -181,6 +335,7 @@ export interface AdCodeSnippetAnalysis {
 }
 
 export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => {
+  const hasIntrusivePopunder = detectIntrusivePopunderAdCode(rawCode);
   const code = sanitizeAdCodePayload(rawCode);
   if (!code) {
     return {
@@ -189,10 +344,15 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
       hasBareJavaScript: false,
       isLikelyGlobalScript: false,
       hasUnsafeUrls: false,
+      hasIntrusivePopunder,
       needsSerializedQueue: false,
       scriptSources: [],
       metaTags: [],
-      warnings: []
+      warnings: hasIntrusivePopunder
+        ? [
+            'Intrusive OnClick/Popunder script detected (e.g., quge5.com / zone 313598) and automatically removed to stop unwanted new browser tabs.'
+          ]
+        : []
     };
   }
 
@@ -244,12 +404,17 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
   const hasMetaTags = metaTags.length > 0;
   const isLikelyGlobalScript =
     hasMetaTags ||
-    /(alwingulla|quge5|niphaume|nap5k|in-page-push|vignette|multitag|popunder|navigator\.serviceWorker|sw\.js|data-zone\s*=)/i.test(
+    /(alwingulla|in-page-push|vignette|multitag|navigator\.serviceWorker|sw\.js|data-zone\s*=)/i.test(
       code
     );
   const needsSerializedQueue = /atOptions\s*=|document\.write/i.test(code);
 
   const warnings: string[] = [];
+  if (hasIntrusivePopunder) {
+    warnings.push(
+      'Intrusive OnClick/Popunder script detected (e.g., quge5.com / zone 313598) and automatically removed to stop unwanted new browser tabs.'
+    );
+  }
   if (hasUnsafeUrls) {
     warnings.push(
       'Contains non-HTTPS or unsafe URL schemes (only https:// and // script/link URLs execute in production containers).'
@@ -267,6 +432,7 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
     hasBareJavaScript,
     isLikelyGlobalScript,
     hasUnsafeUrls,
+    hasIntrusivePopunder,
     needsSerializedQueue,
     scriptSources,
     metaTags,

@@ -19,6 +19,7 @@ export type AdPlacement = 'below_header' | 'above_footer';
 export type AdType = 'code' | 'banner';
 export type AdProviderId = 'monetag' | 'adscod' | 'other';
 export type InArticleAdSlotKey = 'slot1' | 'slot2' | 'slot3';
+export type HomepageInFeedAdSlotKey = 'slot1' | 'slot2' | 'slot3';
 
 export interface AdSlotConfig {
   enabled: boolean;
@@ -48,11 +49,29 @@ export interface InArticleAdsSettings {
   slot3: InArticleAdSlotConfig;
 }
 
+export interface HomepageInFeedAdSlotConfig {
+  enabled: boolean;
+  provider: AdProviderId;
+  providerLabel?: string; // Optional custom network label when provider === 'other'
+  code: string;
+  afterPost: number; // Clamped integer 1..50 (defaults: 4, 8, 12)
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  label?: string; // e.g. "Advertisement" or "Kwamamaza"
+  updatedAt?: string;
+}
+
+export interface HomepageInFeedAdsSettings {
+  slot1: HomepageInFeedAdSlotConfig;
+  slot2: HomepageInFeedAdSlotConfig;
+  slot3: HomepageInFeedAdSlotConfig;
+}
+
 export interface GlobalAdScriptConfig {
   enabled: boolean;
   provider: AdProviderId;
   providerLabel?: string;
-  code: string; // Single-execution site-wide head tags (e.g., Monetag Multitag, OnClick, Vignette, In-Page Push, Meta verification)
+  code: string; // Single-execution site-wide head tags (e.g., Monetag verification meta, in-page/non-popup native tags)
   mobileEnabled: boolean;
   desktopEnabled: boolean;
   updatedAt?: string;
@@ -67,6 +86,17 @@ export const DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS: Record<InArticleAdSlotKey, numb
   slot1: 3,
   slot2: 7,
   slot3: 11
+};
+
+export const HOMEPAGE_IN_FEED_POSITION_LIMITS = {
+  min: 1,
+  max: 50
+} as const;
+
+export const DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS: Record<HomepageInFeedAdSlotKey, number> = {
+  slot1: 4,
+  slot2: 8,
+  slot3: 12
 };
 
 export const createDefaultInArticleSlotConfig = (
@@ -86,6 +116,25 @@ export const DEFAULT_IN_ARTICLE_ADS_SETTINGS: InArticleAdsSettings = {
   slot1: createDefaultInArticleSlotConfig('slot1'),
   slot2: createDefaultInArticleSlotConfig('slot2'),
   slot3: createDefaultInArticleSlotConfig('slot3')
+};
+
+export const createDefaultHomepageInFeedSlotConfig = (
+  slotKey: HomepageInFeedAdSlotKey
+): HomepageInFeedAdSlotConfig => ({
+  enabled: false,
+  provider: 'monetag',
+  providerLabel: '',
+  code: '',
+  afterPost: DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS[slotKey],
+  mobileEnabled: true,
+  desktopEnabled: true,
+  label: 'Advertisement'
+});
+
+export const DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS: HomepageInFeedAdsSettings = {
+  slot1: createDefaultHomepageInFeedSlotConfig('slot1'),
+  slot2: createDefaultHomepageInFeedSlotConfig('slot2'),
+  slot3: createDefaultHomepageInFeedSlotConfig('slot3')
 };
 
 export const DEFAULT_GLOBAL_AD_SCRIPT_CONFIG: GlobalAdScriptConfig = {
@@ -123,6 +172,7 @@ export interface AdsSettings {
   belowHeaderAd: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
   inArticleAds?: InArticleAdsSettings;
+  homepageInFeedAds?: HomepageInFeedAdsSettings;
   globalScripts?: GlobalAdScriptConfig;
   aboveHeaderVideoAd?: TopVideoAdConfig;
   displaySettings?: AdsDisplaySettings;
@@ -151,6 +201,7 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     label: 'Advertisement'
   },
   inArticleAds: DEFAULT_IN_ARTICLE_ADS_SETTINGS,
+  homepageInFeedAds: DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   globalScripts: DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   aboveHeaderVideoAd: DEFAULT_TOP_VIDEO_AD_CONFIG,
   displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS

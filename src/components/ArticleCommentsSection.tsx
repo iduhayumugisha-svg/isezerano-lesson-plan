@@ -1082,7 +1082,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                       {replies.map((reply) =>
                         renderCommentCard(reply, {
                           isReply: true,
-                          rootParentId: parentId
+                          rootParentId: reply.id
                         })
                       )}
                     </div>

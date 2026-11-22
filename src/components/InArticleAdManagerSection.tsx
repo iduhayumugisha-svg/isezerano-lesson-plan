@@ -127,7 +127,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
         );
       })}
 
-      {/* Site-Wide Global Head & Monetag Scripts (Multitag, OnClick, Vignette, In-Page Push, Meta Verification) */}
+      {/* Site-Wide Global Head & Monetag Scripts (Multitag, Vignette Banner, In-Page Push, Meta Verification) */}
       <div
         data-testid="ads-global-scripts-manager"
         className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5"
@@ -157,7 +157,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
               </span>
             </h4>
             <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
-              Use this panel for Monetag or network formats that belong in <code className="font-mono text-slate-700">&lt;head&gt;</code> once site-wide (Multitag, OnClick/Popunder, Vignette Banner, In-Page Push, or ownership <code className="font-mono text-slate-700">&lt;meta&gt;</code> verification tags). Executed at most once on public pages and never duplicated per article or loaded on <code className="font-mono text-slate-700">/admin</code>.
+              Use this panel for non-intrusive Monetag or network formats that belong in <code className="font-mono text-slate-700">&lt;head&gt;</code> once site-wide (Multitag, Vignette Banner, In-Page Push, or ownership <code className="font-mono text-slate-700">&lt;meta&gt;</code> verification tags). Intrusive OnClick/Popunder tab-opening scripts are automatically blocked. Executed at most once on public pages and never loaded on <code className="font-mono text-slate-700">/admin</code>.
             </p>
           </div>
 
@@ -189,7 +189,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
             <span>
-              Global scripts are switched <strong>ON</strong>, but no script or verification meta tag has been entered yet. Paste your Monetag Multitag / OnClick / Push / <code className="font-mono">&lt;meta&gt;</code> code below and click <strong>Save Global Scripts</strong>.
+              Global scripts are switched <strong>ON</strong>, but no valid script or verification meta tag is currently active. Paste your Monetag Multitag / Push / <code className="font-mono">&lt;meta&gt;</code> verification tag below (without OnClick/Popunder scripts) and click <strong>Save Global Scripts</strong>.
             </span>
           </div>
         )}
@@ -320,12 +320,14 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
               rows={4}
               value={globalScripts.code}
               onChange={(e) => onUpdateGlobalScripts({ code: e.target.value })}
-              placeholder={`<!-- Paste Monetag Multitag, OnClick, Vignette, In-Page Push, or <meta name="monetag" ...> verification tag here -->`}
+              placeholder={`<!-- Paste Monetag <meta name="monetag" ...> verification tag, Vignette, or In-Page Push script here (OnClick/Popunder scripts are blocked) -->`}
               className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg bg-slate-900 text-teal-300 focus:ring-2 focus:ring-teal-500"
             />
           </div>
 
-          {(globalAnalysis.hasUnsafeUrls || globalAnalysis.hasBareJavaScript) && (
+          {(globalAnalysis.hasIntrusivePopunder ||
+            globalAnalysis.hasUnsafeUrls ||
+            globalAnalysis.hasBareJavaScript) && (
             <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
               <span>{globalAnalysis.warnings[0]}</span>
@@ -625,12 +627,14 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
           <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
             <span>
-              This snippet looks like a global site-wide/head tag (Multitag, Vignette, Popunder, Zone Tag, or Verification Meta). Consider placing site-wide tags in the <strong>Global Site-Wide Ad &amp; Verification Scripts</strong> panel below so they load once cleanly instead of per-article.
+              This snippet looks like a global site-wide/head tag (Multitag, Vignette, Zone Tag, or Verification Meta). Consider placing site-wide tags in the <strong>Global Site-Wide Ad &amp; Verification Scripts</strong> panel below so they load once cleanly instead of per-article.
             </span>
           </div>
         )}
 
-        {(analysis.hasUnsafeUrls || analysis.hasBareJavaScript) && (
+        {(analysis.hasIntrusivePopunder ||
+          analysis.hasUnsafeUrls ||
+          analysis.hasBareJavaScript) && (
           <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
             <span>{analysis.warnings[0]}</span>

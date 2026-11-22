@@ -27,6 +27,14 @@ import {
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
+import { AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
+import {
+  getAdsSettings,
+  getCachedAdsSettingsSync,
+  subscribeToAdsSettings
+} from '../services/siteSettingsService';
+import { buildHomepageAdPlan } from '../utils/homepageAdInjector';
+import { HomepageInFeedAdSlot } from '../components/HomepageInFeedAdSlot';
 
 interface HomeViewProps {
   onNavigate: (page: any) => void;
@@ -67,10 +75,45 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalSelectedCategory, setInternalSelectedCategory] = useState('All Categories');
   const [searchQuery, setSearchQuery] = useState('');
+  const [adsSettings, setAdsSettings] = useState<AdsSettings>(() => getCachedAdsSettingsSync());
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   const usesExternalPosts = externalPosts !== undefined;
   const usesExternalCategories = externalCategories !== undefined;
   const usesExternalCommentCounts = externalCommentCounts !== undefined;
+
+  useEffect(() => {
+    let active = true;
+    getAdsSettings()
+      .then((fresh) => {
+        if (active) setAdsSettings(fresh);
+      })
+      .catch(() => {
+        // fail silently on ads settings fetch errors
+      });
+    const unsubAds = subscribeToAdsSettings((fresh) => {
+      if (active) setAdsSettings(fresh);
+    });
+
+    const handleResize = () => {
+      if (typeof window !== 'undefined') {
+        setIsMobileViewport(window.innerWidth < 768);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+    }
+
+    return () => {
+      active = false;
+      unsubAds();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (usesExternalPosts && usesExternalCategories && usesExternalCommentCounts) return;
@@ -214,6 +257,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
       })
       .filter((section) => section.articles.length > 0);
   }, [resolvedCategories, resolvedPosts]);
+
+  const frontPageOffsets = useMemo(() => {
+    const tier1Count = (leadPost ? 1 : 0) + headlineWirePosts.length;
+    const tier2Count = recentGridPosts.length;
+    const sectionStarts: number[] = [];
+    let runningCount = tier1Count + tier2Count;
+    for (const sec of categorySections) {
+      sectionStarts.push(runningCount);
+      runningCount += Math.min(3, sec.articles.length);
+    }
+    return {
+      tier1Count,
+      tier2Start: tier1Count,
+      sectionStarts,
+      totalRenderedFrontPageCards: runningCount
+    };
+  }, [leadPost, headlineWirePosts.length, recentGridPosts.length, categorySections]);
+
+  const activeFeedCardCount = isFiltering
+    ? filteredPosts.length
+    : frontPageOffsets.totalRenderedFrontPageCards;
+
+  const homepageAdPlan = useMemo(
+    () =>
+      buildHomepageAdPlan({
+        totalPosts: activeFeedCardCount,
+        adsSettings: adsSettings || DEFAULT_ADS_SETTINGS,
+        deviceType: isMobileViewport ? 'mobile' : 'desktop'
+      }),
+    [activeFeedCardCount, adsSettings, isMobileViewport]
+  );
+
+  const feedContextKey = isFiltering
+    ? `filtered:${activeCategory}:${trimmedQuery}`
+    : 'frontpage';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3.5 pb-6 sm:pt-5 sm:pb-8 space-y-6 sm:space-y-8">
@@ -382,76 +460,386 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 const topStory = filteredPosts[0];
                 const topThumb = getSingleArticleThumbnailUrl(topStory);
                 const topDate = formatPublicationDate(topStory.publishedAt || topStory.updatedAt);
+                const adAfterFirst = homepageAdPlan.placementsByPosition[1];
 
                 return (
-                  <article
-                    onClick={() => handleOpenPost(topStory)}
-                    className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all grid grid-cols-1 lg:grid-cols-12 cursor-pointer"
-                  >
-                    <div className="lg:col-span-7 aspect-[16/10] bg-slate-100 overflow-hidden">
-                      <ArticleThumbnailImage
-                        src={topThumb}
-                        alt={topStory.thumbnailAlt || topStory.title}
-                        priority={true}
-                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                  <React.Fragment key={`filtered-top-${topStory.id}`}>
+                    <article
+                      onClick={() => handleOpenPost(topStory)}
+                      className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all grid grid-cols-1 lg:grid-cols-12 cursor-pointer"
+                    >
+                      <div className="lg:col-span-7 aspect-[16/10] bg-slate-100 overflow-hidden">
+                        <ArticleThumbnailImage
+                          src={topThumb}
+                          alt={topStory.thumbnailAlt || topStory.title}
+                          priority={true}
+                          className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                        />
+                      </div>
+                      <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                            <span className="font-bold uppercase tracking-wider text-teal-800">
+                              {topStory.category}
+                            </span>
+                            {topDate && (
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <time dateTime={topStory.publishedAt}>{topDate.formattedDate}</time>
+                              </>
+                            )}
+                          </div>
+                          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-tight">
+                            {topStory.title}
+                          </h2>
+                          <p className="text-sm text-slate-600 leading-relaxed line-clamp-4">
+                            {topStory.excerpt || extractPlainTextExcerpt(topStory.content, 220)}
+                          </p>
+                        </div>
+                        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                          <span className="font-medium text-slate-700">
+                            {topStory.author?.name || 'ISEZERANO Newsroom'}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenComments(e, topStory)}
+                              className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="Comments"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span className="tabular-nums">{resolvedCommentCounts[topStory.id] || 0}</span>
+                            </button>
+                            <ArticleShareButton post={topStory} variant="compact" />
+                            <span className="inline-flex items-center space-x-1 font-bold text-teal-800 ml-1">
+                              <span>Read</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+
+                    {adAfterFirst && (
+                      <HomepageInFeedAdSlot
+                        slotId={adAfterFirst.slotId}
+                        slotConfig={adAfterFirst.slotConfig}
+                        feedContext={feedContextKey}
                       />
-                    </div>
-                    <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between space-y-4">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                          <span className="font-bold uppercase tracking-wider text-teal-800">
-                            {topStory.category}
-                          </span>
-                          {topDate && (
-                            <>
-                              <span className="text-slate-300">·</span>
-                              <time dateTime={topStory.publishedAt}>{topDate.formattedDate}</time>
-                            </>
-                          )}
-                        </div>
-                        <h2 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-tight">
-                          {topStory.title}
-                        </h2>
-                        <p className="text-sm text-slate-600 leading-relaxed line-clamp-4">
-                          {topStory.excerpt || extractPlainTextExcerpt(topStory.content, 220)}
-                        </p>
-                      </div>
-                      <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                        <span className="font-medium text-slate-700">
-                          {topStory.author?.name || 'ISEZERANO Newsroom'}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenComments(e, topStory)}
-                            className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                            title="Comments"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span className="tabular-nums">{resolvedCommentCounts[topStory.id] || 0}</span>
-                          </button>
-                          <ArticleShareButton post={topStory} variant="compact" />
-                          <span className="inline-flex items-center space-x-1 font-bold text-teal-800 ml-1">
-                            <span>Read</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
+                    )}
+                  </React.Fragment>
                 );
               })()}
 
               {/* Remaining stories in category */}
               {filteredPosts.length > 1 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredPosts.slice(1).map((post) => {
+                  {filteredPosts.slice(1).map((post, idx) => {
                     const thumb = getSingleArticleThumbnailUrl(post);
                     const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+                    const feedPosition = idx + 2;
+                    const adAfterCard = homepageAdPlan.placementsByPosition[feedPosition];
 
                     return (
+                      <React.Fragment key={post.id}>
+                        <article
+                          onClick={() => handleOpenPost(post)}
+                          className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
+                        >
+                          <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                            <ArticleThumbnailImage
+                              src={thumb}
+                              alt={post.thumbnailAlt || post.title}
+                              className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                                <span className="font-bold text-teal-800">{post.category}</span>
+                                {dateInfo && (
+                                  <>
+                                    <span className="text-slate-300">·</span>
+                                    <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
+                                  </>
+                                )}
+                              </div>
+                              <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                                {post.title}
+                              </h3>
+                              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-3">
+                                {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
+                              </p>
+                            </div>
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+                              <span className="font-medium text-slate-700 truncate">
+                                {post.author?.name || 'ISEZERANO Newsroom'}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenComments(e, post)}
+                                  className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                                  title="View or write comments"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                                </button>
+                                <ArticleShareButton post={post} variant="compact" />
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+
+                        {adAfterCard && (
+                          <div className="col-span-full">
+                            <HomepageInFeedAdSlot
+                              slotId={adAfterCard.slotId}
+                              slotConfig={adAfterCard.slotConfig}
+                              feedContext={feedContextKey}
+                            />
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      ) : (
+        /* ==================== FRONT PAGE NEWSPAPER EDITION ==================== */
+        <div key="home-frontpage-feed" className="space-y-10 sm:space-y-12">
+          {/* TIER 1: LEAD FEATURED STORY + LATEST HEADLINES WIRE */}
+          {leadPost && (
+            <section aria-label="Featured news" className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+              {/* Lead Featured Story (Left 7 or 12 cols if only 1 story exists) */}
+              <div
+                className={`flex flex-col gap-6 ${
+                  headlineWirePosts.length > 0 ? 'lg:col-span-7 xl:col-span-8' : 'lg:col-span-12'
+                }`}
+              >
+                <article
+                  onClick={() => handleOpenPost(leadPost)}
+                  className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer flex-1"
+                >
+                  <div className="aspect-[16/9] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                    <ArticleThumbnailImage
+                      src={getSingleArticleThumbnailUrl(leadPost)}
+                      alt={leadPost.thumbnailAlt || leadPost.title}
+                      priority={true}
+                      className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="p-5 sm:p-7 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
+                        <span className="font-bold uppercase tracking-wider text-teal-800">
+                          {leadPost.category}
+                        </span>
+                        {(() => {
+                          const leadDate = formatPublicationDate(
+                            leadPost.publishedAt || leadPost.updatedAt
+                          );
+                          return leadDate ? (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <time
+                                dateTime={leadPost.publishedAt}
+                                className="inline-flex items-center space-x-1"
+                              >
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{leadDate.formattedDateFull}</span>
+                              </time>
+                            </>
+                          ) : null;
+                        })()}
+                      </div>
+
+                      <h1
+                        className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold group-hover:text-teal-800 transition-colors leading-[1.15] tracking-tight"
+                        style={{ color: colors.headingPrimary }}
+                      >
+                        {leadPost.title}
+                      </h1>
+
+                      <p className="text-sm sm:text-base text-slate-600 leading-relaxed line-clamp-3">
+                        {leadPost.excerpt || extractPlainTextExcerpt(leadPost.content, 240)}
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                      <span className="inline-flex items-center space-x-1.5 font-medium text-slate-700">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{leadPost.author?.name || 'ISEZERANO Newsroom'}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenComments(e, leadPost)}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Comments"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Comment</span>
+                          <span className="tabular-nums font-semibold">
+                            ({resolvedCommentCounts[leadPost.id] || 0})
+                          </span>
+                        </button>
+                        <ArticleShareButton post={leadPost} variant="compact" />
+                        <span className="inline-flex items-center space-x-1 font-bold text-teal-800 group-hover:translate-x-0.5 transition-transform ml-1">
+                          <span>Read story</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                {homepageAdPlan.placementsByPosition[1] && (
+                  <HomepageInFeedAdSlot
+                    slotId={homepageAdPlan.placementsByPosition[1].slotId}
+                    slotConfig={homepageAdPlan.placementsByPosition[1].slotConfig}
+                    feedContext={feedContextKey}
+                  />
+                )}
+              </div>
+
+              {/* Latest Headlines Wire (Right 5 or 4 cols) */}
+              {headlineWirePosts.length > 0 && (
+                <aside className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="border-b-2 border-slate-900 pb-2.5 mb-1 flex items-center justify-between">
+                      <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
+                        Latest Headlines
+                      </h2>
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Recent
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-slate-200">
+                      {headlineWirePosts.map((post, idx) => {
+                        const thumb = getSingleArticleThumbnailUrl(post);
+                        const dateInfo = formatPublicationDate(
+                          post.publishedAt || post.updatedAt
+                        );
+                        const feedPosition = idx + 2;
+                        const isLastWireItem = idx === headlineWirePosts.length - 1;
+                        const adAfterWire = !isLastWireItem
+                          ? homepageAdPlan.placementsByPosition[feedPosition]
+                          : undefined;
+
+                        return (
+                          <React.Fragment key={post.id}>
+                            <article
+                              onClick={() => handleOpenPost(post)}
+                              className="group py-4 first:pt-3 last:pb-1 flex items-start gap-3.5 cursor-pointer"
+                            >
+                              <div className="w-24 h-[72px] sm:w-28 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200/70">
+                                <ArticleThumbnailImage
+                                  src={thumb}
+                                  alt={post.thumbnailAlt || post.title}
+                                  compact={true}
+                                  className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500">
+                                  <span className="font-bold uppercase tracking-wide text-teal-800">
+                                    {post.category}
+                                  </span>
+                                  {dateInfo && (
+                                    <>
+                                      <span className="text-slate-300">·</span>
+                                      <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
+                                    </>
+                                  )}
+                                </div>
+                                <h3 className="font-serif text-sm sm:text-base font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                                  {post.title}
+                                </h3>
+                                <div className="flex items-center justify-between gap-2 pt-0.5 text-xs text-slate-500">
+                                  <span className="truncate">
+                                    {post.author?.name || 'ISEZERANO Newsroom'}
+                                  </span>
+                                  <div className="flex items-center gap-0.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleOpenComments(e, post)}
+                                      className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                                      title="Comments"
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" />
+                                      <span className="tabular-nums">
+                                        {resolvedCommentCounts[post.id] || 0}
+                                      </span>
+                                    </button>
+                                    <ArticleShareButton post={post} variant="compact" />
+                                  </div>
+                                </div>
+                              </div>
+                            </article>
+
+                            {adAfterWire && (
+                              <div className="py-3">
+                                <HomepageInFeedAdSlot
+                                  slotId={adAfterWire.slotId}
+                                  slotConfig={adAfterWire.slotConfig}
+                                  feedContext={feedContextKey}
+                                />
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </aside>
+              )}
+
+              {/* End of Tier 1 boundary (e.g., After Article #5) spans full width cleanly */}
+              {headlineWirePosts.length > 0 &&
+                homepageAdPlan.placementsByPosition[frontPageOffsets.tier1Count] && (
+                  <div className="col-span-full">
+                    <HomepageInFeedAdSlot
+                      slotId={homepageAdPlan.placementsByPosition[frontPageOffsets.tier1Count].slotId}
+                      slotConfig={
+                        homepageAdPlan.placementsByPosition[frontPageOffsets.tier1Count].slotConfig
+                      }
+                      feedContext={feedContextKey}
+                    />
+                  </div>
+                )}
+            </section>
+          )}
+
+          {/* TIER 2: MORE LATEST ARTICLES GRID */}
+          {recentGridPosts.length > 0 && (
+            <section className="space-y-5">
+              <div className="border-t-2 border-slate-900 pt-3 flex items-center justify-between">
+                <h2
+                  className="font-serif text-xl sm:text-2xl font-bold tracking-tight"
+                  style={{ color: colors.headingPrimary }}
+                >
+                  Latest News
+                </h2>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Editorial Feed
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recentGridPosts.map((post, idx) => {
+                  const thumb = getSingleArticleThumbnailUrl(post);
+                  const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+                  const feedPosition = frontPageOffsets.tier2Start + idx + 1;
+                  const adAfterCard = homepageAdPlan.placementsByPosition[feedPosition];
+
+                  return (
+                    <React.Fragment key={post.id}>
                       <article
-                        key={post.id}
                         onClick={() => handleOpenPost(post)}
                         className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
                       >
@@ -477,7 +865,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               {post.title}
                             </h3>
                             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-3">
-                              {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
+                              {post.excerpt || extractPlainTextExcerpt(post.content, 145)}
                             </p>
                           </div>
                           <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
@@ -499,248 +887,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </div>
                         </div>
                       </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      ) : (
-        /* ==================== FRONT PAGE NEWSPAPER EDITION ==================== */
-        <div key="home-frontpage-feed" className="space-y-10 sm:space-y-12">
-          {/* TIER 1: LEAD FEATURED STORY + LATEST HEADLINES WIRE */}
-          {leadPost && (
-            <section aria-label="Featured news" className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-              {/* Lead Featured Story (Left 7 or 12 cols if only 1 story exists) */}
-              <article
-                onClick={() => handleOpenPost(leadPost)}
-                className={`group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer ${
-                  headlineWirePosts.length > 0 ? 'lg:col-span-7 xl:col-span-8' : 'lg:col-span-12'
-                }`}
-              >
-                <div className="aspect-[16/9] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
-                  <ArticleThumbnailImage
-                    src={getSingleArticleThumbnailUrl(leadPost)}
-                    alt={leadPost.thumbnailAlt || leadPost.title}
-                    priority={true}
-                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                  />
-                </div>
-                <div className="p-5 sm:p-7 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
-                      <span className="font-bold uppercase tracking-wider text-teal-800">
-                        {leadPost.category}
-                      </span>
-                      {(() => {
-                        const leadDate = formatPublicationDate(
-                          leadPost.publishedAt || leadPost.updatedAt
-                        );
-                        return leadDate ? (
-                          <>
-                            <span className="text-slate-300">·</span>
-                            <time
-                              dateTime={leadPost.publishedAt}
-                              className="inline-flex items-center space-x-1"
-                            >
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{leadDate.formattedDateFull}</span>
-                            </time>
-                          </>
-                        ) : null;
-                      })()}
-                    </div>
 
-                    <h1
-                      className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold group-hover:text-teal-800 transition-colors leading-[1.15] tracking-tight"
-                      style={{ color: colors.headingPrimary }}
-                    >
-                      {leadPost.title}
-                    </h1>
-
-                    <p className="text-sm sm:text-base text-slate-600 leading-relaxed line-clamp-3">
-                      {leadPost.excerpt || extractPlainTextExcerpt(leadPost.content, 240)}
-                    </p>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                    <span className="inline-flex items-center space-x-1.5 font-medium text-slate-700">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{leadPost.author?.name || 'ISEZERANO Newsroom'}</span>
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenComments(e, leadPost)}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                        title="Comments"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Comment</span>
-                        <span className="tabular-nums font-semibold">
-                          ({resolvedCommentCounts[leadPost.id] || 0})
-                        </span>
-                      </button>
-                      <ArticleShareButton post={leadPost} variant="compact" />
-                      <span className="inline-flex items-center space-x-1 font-bold text-teal-800 group-hover:translate-x-0.5 transition-transform ml-1">
-                        <span>Read story</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </article>
-
-              {/* Latest Headlines Wire (Right 5 or 4 cols) */}
-              {headlineWirePosts.length > 0 && (
-                <aside className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 flex flex-col justify-between">
-                  <div>
-                    <div className="border-b-2 border-slate-900 pb-2.5 mb-1 flex items-center justify-between">
-                      <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-900">
-                        Latest Headlines
-                      </h2>
-                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                        Recent
-                      </span>
-                    </div>
-
-                    <div className="divide-y divide-slate-200">
-                      {headlineWirePosts.map((post) => {
-                        const thumb = getSingleArticleThumbnailUrl(post);
-                        const dateInfo = formatPublicationDate(
-                          post.publishedAt || post.updatedAt
-                        );
-
-                        return (
-                          <article
-                            key={post.id}
-                            onClick={() => handleOpenPost(post)}
-                            className="group py-4 first:pt-3 last:pb-1 flex items-start gap-3.5 cursor-pointer"
-                          >
-                            <div className="w-24 h-[72px] sm:w-28 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200/70">
-                              <ArticleThumbnailImage
-                                src={thumb}
-                                alt={post.thumbnailAlt || post.title}
-                                compact={true}
-                                className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500">
-                                <span className="font-bold uppercase tracking-wide text-teal-800">
-                                  {post.category}
-                                </span>
-                                {dateInfo && (
-                                  <>
-                                    <span className="text-slate-300">·</span>
-                                    <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
-                                  </>
-                                )}
-                              </div>
-                              <h3 className="font-serif text-sm sm:text-base font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
-                                {post.title}
-                              </h3>
-                              <div className="flex items-center justify-between gap-2 pt-0.5 text-xs text-slate-500">
-                                <span className="truncate">
-                                  {post.author?.name || 'ISEZERANO Newsroom'}
-                                </span>
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleOpenComments(e, post)}
-                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                                    title="Comments"
-                                  >
-                                    <MessageSquare className="w-3.5 h-3.5" />
-                                    <span className="tabular-nums">
-                                      {resolvedCommentCounts[post.id] || 0}
-                                    </span>
-                                  </button>
-                                  <ArticleShareButton post={post} variant="compact" />
-                                </div>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </aside>
-              )}
-            </section>
-          )}
-
-          {/* TIER 2: MORE LATEST ARTICLES GRID */}
-          {recentGridPosts.length > 0 && (
-            <section className="space-y-5">
-              <div className="border-t-2 border-slate-900 pt-3 flex items-center justify-between">
-                <h2
-                  className="font-serif text-xl sm:text-2xl font-bold tracking-tight"
-                  style={{ color: colors.headingPrimary }}
-                >
-                  Latest News
-                </h2>
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Editorial Feed
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {recentGridPosts.map((post) => {
-                  const thumb = getSingleArticleThumbnailUrl(post);
-                  const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
-
-                  return (
-                    <article
-                      key={post.id}
-                      onClick={() => handleOpenPost(post)}
-                      className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
-                    >
-                      <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
-                        <ArticleThumbnailImage
-                          src={thumb}
-                          alt={post.thumbnailAlt || post.title}
-                          className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                        />
-                      </div>
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                            <span className="font-bold text-teal-800">{post.category}</span>
-                            {dateInfo && (
-                              <>
-                                <span className="text-slate-300">·</span>
-                                <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
-                              </>
-                            )}
-                          </div>
-                          <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
-                            {post.title}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-3">
-                            {post.excerpt || extractPlainTextExcerpt(post.content, 145)}
-                          </p>
+                      {adAfterCard && (
+                        <div className="col-span-full">
+                          <HomepageInFeedAdSlot
+                            slotId={adAfterCard.slotId}
+                            slotConfig={adAfterCard.slotConfig}
+                            feedContext={feedContextKey}
+                          />
                         </div>
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
-                          <span className="font-medium text-slate-700 truncate">
-                            {post.author?.name || 'ISEZERANO Newsroom'}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenComments(e, post)}
-                              className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                              title="View or write comments"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
-                            </button>
-                            <ArticleShareButton post={post} variant="compact" />
-                          </div>
-                        </div>
-                      </div>
-                    </article>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -748,93 +905,110 @@ export const HomeView: React.FC<HomeViewProps> = ({
           )}
 
           {/* TIER 3: CATEGORY-BASED NEWS SECTIONS */}
-          {categorySections.map(({ category, articles }) => (
-            <section key={category.id || category.name} className="space-y-5 offscreen-section">
-              <div className="border-t-2 border-slate-900 pt-3.5 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-                <div>
-                  <h2
-                    className="font-serif text-xl sm:text-2xl font-bold tracking-tight"
-                    style={{ color: colors.headingPrimary }}
+          {categorySections.map(({ category, articles }, sectionIdx) => {
+            const sectionStart = frontPageOffsets.sectionStarts[sectionIdx] || 0;
+
+            return (
+              <section key={category.id || category.name} className="space-y-5 offscreen-section">
+                <div className="border-t-2 border-slate-900 pt-3.5 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                  <div>
+                    <h2
+                      className="font-serif text-xl sm:text-2xl font-bold tracking-tight"
+                      style={{ color: colors.headingPrimary }}
+                    >
+                      {category.name}
+                    </h2>
+                    {category.description && (
+                      <p className="text-xs sm:text-sm text-slate-600 mt-0.5 max-w-2xl">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCat(category.name)}
+                    className="inline-flex items-center space-x-1 text-xs font-bold text-teal-800 hover:text-teal-950 cursor-pointer shrink-0"
                   >
-                    {category.name}
-                  </h2>
-                  {category.description && (
-                    <p className="text-xs sm:text-sm text-slate-600 mt-0.5 max-w-2xl">
-                      {category.description}
-                    </p>
-                  )}
+                    <span>View all ({articles.length})</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleSelectCat(category.name)}
-                  className="inline-flex items-center space-x-1 text-xs font-bold text-teal-800 hover:text-teal-950 cursor-pointer shrink-0"
-                >
-                  <span>View all ({articles.length})</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {articles.slice(0, 3).map((post, idx) => {
+                    const thumb = getSingleArticleThumbnailUrl(post);
+                    const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+                    const feedPosition = sectionStart + idx + 1;
+                    const adAfterCard = homepageAdPlan.placementsByPosition[feedPosition];
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {articles.slice(0, 3).map((post) => {
-                  const thumb = getSingleArticleThumbnailUrl(post);
-                  const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
+                    return (
+                      <React.Fragment key={post.id}>
+                        <article
+                          onClick={() => handleOpenPost(post)}
+                          className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
+                        >
+                          <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                            <ArticleThumbnailImage
+                              src={thumb}
+                              alt={post.thumbnailAlt || post.title}
+                              className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                                <span className="font-bold text-teal-800">{post.category}</span>
+                                {dateInfo && (
+                                  <>
+                                    <span className="text-slate-300">·</span>
+                                    <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
+                                  </>
+                                )}
+                              </div>
+                              <h3 className="font-serif text-lg font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                                {post.title}
+                              </h3>
+                              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
+                                {post.excerpt || extractPlainTextExcerpt(post.content, 130)}
+                              </p>
+                            </div>
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+                              <span className="font-medium text-slate-700 truncate">
+                                {post.author?.name || 'ISEZERANO Newsroom'}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenComments(e, post)}
+                                  className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                                  title="View or write comments"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
+                                </button>
+                                <ArticleShareButton post={post} variant="compact" />
+                              </div>
+                            </div>
+                          </div>
+                        </article>
 
-                  return (
-                    <article
-                      key={post.id}
-                      onClick={() => handleOpenPost(post)}
-                      className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
-                    >
-                      <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
-                        <ArticleThumbnailImage
-                          src={thumb}
-                          alt={post.thumbnailAlt || post.title}
-                          className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                        />
-                      </div>
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
-                        <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                            <span className="font-bold text-teal-800">{post.category}</span>
-                            {dateInfo && (
-                              <>
-                                <span className="text-slate-300">·</span>
-                                <time dateTime={post.publishedAt}>{dateInfo.formattedDate}</time>
-                              </>
-                            )}
+                        {adAfterCard && (
+                          <div className="col-span-full">
+                            <HomepageInFeedAdSlot
+                              slotId={adAfterCard.slotId}
+                              slotConfig={adAfterCard.slotConfig}
+                              feedContext={feedContextKey}
+                            />
                           </div>
-                          <h3 className="font-serif text-lg font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
-                            {post.title}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
-                            {post.excerpt || extractPlainTextExcerpt(post.content, 130)}
-                          </p>
-                        </div>
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
-                          <span className="font-medium text-slate-700 truncate">
-                            {post.author?.name || 'ISEZERANO Newsroom'}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenComments(e, post)}
-                              className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                              title="View or write comments"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              <span className="tabular-nums">{resolvedCommentCounts[post.id] || 0}</span>
-                            </button>
-                            <ArticleShareButton post={post} variant="compact" />
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
 

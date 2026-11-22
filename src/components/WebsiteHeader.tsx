@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Globe,
   ShieldCheck,
   LogOut,
-  MoreVertical,
+  Menu,
   Newspaper,
   ChevronRight,
+  ChevronDown,
+  Check,
   Info,
   Mail,
   ShoppingBag
@@ -53,7 +54,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   onSelectCategory,
   topOffsetPx = 0
 }) => {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const { user, isAdmin, signOutUser } = useAuth();
   const { logoUrl, logoSettings, colors, typography, branding, categoryNav } = useWebsiteDesign();
   const [logoLoadError, setLogoLoadError] = useState(false);
@@ -85,24 +86,41 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       ? newsCategories
       : mergeCategoriesForDisplay(fallbackRawCategories, fallbackInitialized, []);
 
-  // Three-dot dropdown state & ref for click-outside / Escape key
+  // Three-dot dropdown & nested language dropdown state + refs for click-outside / Escape key
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const langDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      setIsLangDropdownOpen(false);
+    }
+  }, [isMenuOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (langDropdownRef.current && !langDropdownRef.current.contains(target)) {
+        setIsLangDropdownOpen(false);
+      }
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        setIsLangDropdownOpen(false);
         setIsMenuOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsMenuOpen(false);
+        if (isLangDropdownOpen) {
+          setIsLangDropdownOpen(false);
+        } else {
+          setIsMenuOpen(false);
+        }
       }
     };
 
-    if (isMenuOpen) {
+    if (isMenuOpen || isLangDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
       document.addEventListener('keydown', handleEscape);
@@ -113,13 +131,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       document.removeEventListener('touchstart', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isLangDropdownOpen]);
 
   const handleNavClick = (page: WebsitePage) => {
     if (page === 'home') {
       onSelectCategory?.('All Categories');
     }
     onNavigate(page);
+    setIsLangDropdownOpen(false);
     setIsMenuOpen(false);
     scrollMainContentToTop('auto');
   };
@@ -129,6 +148,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     if (currentPage !== 'home') {
       onNavigate('home');
     }
+    setIsLangDropdownOpen(false);
     setIsMenuOpen(false);
     scrollMainContentToTop('auto');
   };
@@ -147,11 +167,13 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   const websiteNameResponsiveSize = `clamp(${Math.min(18, websiteNameBaseSize)}px, 4.5vw, ${websiteNameBaseSize}px)`;
   const websiteNameColor = typography?.websiteNameColor || colors.headerText || '#0f172a';
 
-  const languageOptions: { code: Language; short: string; label: string }[] = [
-    { code: 'en', short: 'EN', label: 'English' },
-    { code: 'rw', short: 'RW', label: 'Kinyarwanda' },
-    { code: 'fr', short: 'FR', label: 'Français' }
+  const languageOptions: { code: Language; short: string; label: string; flag: string }[] = [
+    { code: 'en', short: 'EN', label: 'English', flag: '🇺🇸' },
+    { code: 'rw', short: 'RW', label: 'Kinyarwanda', flag: '🇷🇼' },
+    { code: 'fr', short: 'FR', label: 'Français', flag: '🇫🇷' }
   ];
+  const activeLanguageOption =
+    languageOptions.find((opt) => opt.code === language) || languageOptions[0];
 
   return (
     <header
@@ -164,76 +186,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* TIER 1: UPPER-LEFT BRANDING AREA (LOGO LEFT -> WEBSITE NAME & DESCRIPTION) & UPPER-RIGHT UTILITIES */}
-        <div className="flex items-center justify-between gap-3 h-[78px] border-b border-slate-200/80">
-          {/* Upper-Left Branding Area: Horizontal Logo FIRST, followed by Website Name & Description */}
-          <div
-            onClick={() => handleNavClick('home')}
-            className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer group select-none min-w-0 flex-1"
-            title={`${branding?.platformTitle || 'ISEZERANO ONLINE'}${branding?.platformSubtitle ? ` – ${branding.platformSubtitle}` : ''}`}
-          >
-            {logoSettings?.showInHeader !== false && logoUrl && !logoLoadError && (
-              <div
-                className={`shrink-0 overflow-hidden bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center ${logoSettings?.borderRadius || 'rounded-xl'}`}
-                style={{
-                  height: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`,
-                  width: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`
-                }}
-              >
-                <img
-                  src={logoUrl}
-                  alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
-                  className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
-                  referrerPolicy="no-referrer"
-                  loading="eager"
-                  decoding="async"
-                  onError={() => setLogoLoadError(true)}
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col justify-center min-w-0">
-              {branding?.showWebsiteName !== false && (
-                <>
-                  <span
-                    className="font-extrabold tracking-tight transition-colors leading-tight truncate"
-                    style={{
-                      fontFamily: websiteNameFont,
-                      fontSize: websiteNameResponsiveSize,
-                      color: websiteNameColor
-                    }}
-                  >
-                    {branding?.platformTitle || 'ISEZERANO ONLINE'}
-                  </span>
-                  {branding?.platformSubtitle && (
-                    <span
-                      className="font-semibold tracking-wider uppercase leading-none mt-0.5 text-[11px] sm:text-xs text-teal-700 truncate"
-                      style={{ color: colors.navLinkActive }}
-                    >
-                      {branding.platformSubtitle}
-                    </span>
-                  )}
-                </>
-              )}
-              {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
-                <span
-                  className={`text-[11px] sm:text-xs leading-snug line-clamp-1 max-w-xl ${
-                    branding?.showWebsiteName !== false ? 'mt-0.5' : ''
-                  }`}
-                  style={{ color: colors.mutedText || '#64748b' }}
-                >
-                  {branding.websiteDescription}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Upper-Right Utilities: Notification Bell & Three-Dot Overflow Menu (⋮) */}
-          <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
-            <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
-
-            {/* Three-Dot Overflow Menu (⋮): Language, Site Pages, Admin Portal */}
-            <div className="relative" ref={menuRef}>
+        {/* TIER 1: FAR-LEFT HAMBURGER MENU & BRANDING AREA (LOGO LEFT -> WEBSITE NAME & DESCRIPTION) + UPPER-RIGHT UTILITIES */}
+        <div className="flex items-center justify-between gap-2.5 sm:gap-3 h-[78px] border-b border-slate-200/80">
+          {/* Far-Left Hamburger Menu (☰) + Branding Area */}
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+            {/* Hamburger Menu (☰): Language, Site Pages, Admin Portal */}
+            <div className="relative shrink-0" ref={menuRef}>
               <button
                 type="button"
                 onClick={() => setIsMenuOpen((prev) => !prev)}
@@ -241,13 +199,13 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
                 title="Menu & Settings"
-                className={`min-w-[40px] min-h-[40px] px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   isMenuOpen
                     ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-teal-500/30'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
                 }`}
               >
-                <MoreVertical className="w-5 h-5" />
+                <Menu className="w-5 h-5 shrink-0" aria-hidden="true" />
                 {isAdmin && (
                   <span
                     className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
@@ -258,7 +216,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
               {isMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
+                  className="absolute left-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800"
                   role="menu"
                 >
                   {/* Admin Session Badge (Only shown when Admin is authenticated) */}
@@ -339,7 +297,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     >
                       <span className="flex items-center space-x-3">
                         <Info className="w-4 h-4 text-slate-600 shrink-0" />
-                        <span>About Us</span>
+                        <span>{t.navAbout || 'About Us'}</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
@@ -356,47 +314,94 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                     >
                       <span className="flex items-center space-x-3">
                         <Mail className="w-4 h-4 text-slate-600 shrink-0" />
-                        <span>Contact Us</span>
+                        <span>{t.navContact || 'Contact Us'}</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                   </div>
 
-                  {/* Language / Translation Switcher inside Three-Dot Menu */}
+                  {/* Language / Translation Dropdown inside Hamburger Menu */}
                   <div className="my-1.5 border-t border-slate-100" />
-                  <div className="px-3.5 py-2 space-y-2" role="group" aria-label="Language selection">
-                    <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      <Globe className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                      <span>Language / Ururimi</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {languageOptions.map((langOpt) => {
-                        const isSelectedLang = language === langOpt.code;
-                        return (
-                          <button
-                            key={langOpt.code}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={isSelectedLang}
-                            aria-label={`Switch language to ${langOpt.label}`}
-                            onClick={() => {
-                              setLanguage(langOpt.code);
-                              setIsMenuOpen(false);
-                            }}
-                            className={`min-h-[36px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight ${
-                              isSelectedLang
-                                ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
-                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            <span>{langOpt.short}</span>
-                            <span className={`text-[9px] font-medium ${isSelectedLang ? 'text-teal-100' : 'text-slate-400'}`}>
-                              {langOpt.label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  <div className="px-3.5 py-2 space-y-2" ref={langDropdownRef}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Language / Ururimi
+                    </p>
+
+                    <button
+                      type="button"
+                      data-testid="language-dropdown-trigger"
+                      aria-haspopup="menu"
+                      aria-expanded={isLangDropdownOpen}
+                      aria-label={`Language selector: ${activeLanguageOption.label}`}
+                      onClick={() => setIsLangDropdownOpen((prev) => !prev)}
+                      className={`w-full min-h-[42px] px-3 py-2 rounded-xl border text-left transition-colors cursor-pointer flex items-center justify-between gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/40 ${
+                        isLangDropdownOpen
+                          ? 'bg-teal-50/70 border-teal-600 text-slate-900 shadow-2xs'
+                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="font-sans text-[17px] leading-none shrink-0 inline-flex items-center justify-center select-none"
+                          aria-hidden="true"
+                        >
+                          {activeLanguageOption.flag}
+                        </span>
+                        <span className="text-xs font-bold truncate">
+                          {activeLanguageOption.label}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-500 shrink-0 transition-transform duration-200 ${
+                          isLangDropdownOpen ? 'rotate-180 text-teal-700' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+
+                    {isLangDropdownOpen && (
+                      <div
+                        role="menu"
+                        aria-label="Language selection"
+                        data-testid="language-dropdown-menu"
+                        className="rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y divide-slate-100"
+                      >
+                        {languageOptions.map((langOpt) => {
+                          const isSelectedLang = language === langOpt.code;
+                          return (
+                            <button
+                              key={langOpt.code}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={isSelectedLang}
+                              aria-label={`Switch language to ${langOpt.label}`}
+                              onClick={() => {
+                                setLanguage(langOpt.code);
+                                setIsLangDropdownOpen(false);
+                              }}
+                              className={`w-full min-h-[44px] px-3 py-2.5 text-xs transition-colors cursor-pointer flex items-center justify-between gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600/40 ${
+                                isSelectedLang
+                                  ? 'bg-teal-50 text-teal-900 font-bold'
+                                  : 'bg-white hover:bg-slate-50 text-slate-700 font-semibold'
+                              }`}
+                            >
+                              <span className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className="font-sans text-[17px] leading-none shrink-0 inline-flex items-center justify-center select-none"
+                                  aria-hidden="true"
+                                >
+                                  {langOpt.flag}
+                                </span>
+                                <span className="truncate">{langOpt.label}</span>
+                              </span>
+                              {isSelectedLang && (
+                                <Check className="w-4 h-4 text-teal-700 shrink-0" aria-hidden="true" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Administrator Portal */}
@@ -440,6 +445,73 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Branding Area: Horizontal Logo FIRST, followed by Website Name & Description */}
+            <div
+              onClick={() => handleNavClick('home')}
+              className="flex items-center gap-2.5 sm:gap-3.5 cursor-pointer group select-none min-w-0 flex-1"
+              title={`${branding?.platformTitle || 'ISEZERANO ONLINE'}${branding?.platformSubtitle ? ` – ${branding.platformSubtitle}` : ''}`}
+            >
+              {logoSettings?.showInHeader !== false && logoUrl && !logoLoadError && (
+                <div
+                  className={`shrink-0 overflow-hidden bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center ${logoSettings?.borderRadius || 'rounded-xl'}`}
+                  style={{
+                    height: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`,
+                    width: `${Math.min(Math.max(logoSettings?.displayHeight || 44, 32), 64)}px`
+                  }}
+                >
+                  <img
+                    src={logoUrl}
+                    alt={logoSettings?.altText || branding?.platformTitle || 'Website Logo'}
+                    className={`w-full h-full ${logoSettings?.displayFit === 'contain' ? 'object-contain p-0.5' : 'object-cover'}`}
+                    referrerPolicy="no-referrer"
+                    loading="eager"
+                    decoding="async"
+                    onError={() => setLogoLoadError(true)}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col justify-center min-w-0">
+                {branding?.showWebsiteName !== false && (
+                  <>
+                    <span
+                      className="font-extrabold tracking-tight transition-colors leading-tight truncate"
+                      style={{
+                        fontFamily: websiteNameFont,
+                        fontSize: websiteNameResponsiveSize,
+                        color: websiteNameColor
+                      }}
+                    >
+                      {branding?.platformTitle || 'ISEZERANO ONLINE'}
+                    </span>
+                    {branding?.platformSubtitle && (
+                      <span
+                        className="font-semibold tracking-wider uppercase leading-none mt-0.5 text-[11px] sm:text-xs text-teal-700 truncate"
+                        style={{ color: colors.navLinkActive }}
+                      >
+                        {branding.platformSubtitle}
+                      </span>
+                    )}
+                  </>
+                )}
+                {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
+                  <span
+                    className={`text-[11px] sm:text-xs leading-snug line-clamp-1 max-w-xl ${
+                      branding?.showWebsiteName !== false ? 'mt-0.5' : ''
+                    }`}
+                    style={{ color: colors.mutedText || '#64748b' }}
+                  >
+                    {branding.websiteDescription}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Upper-Right Utilities: Notification Bell */}
+          <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
+            <NotificationBell onSelectAnnouncement={onSelectAnnouncement} />
           </div>
         </div>
 

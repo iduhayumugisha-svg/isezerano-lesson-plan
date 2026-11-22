@@ -24,6 +24,12 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     return 'en';
   });
 
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language;
+    }
+  }, [language]);
+
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     try {

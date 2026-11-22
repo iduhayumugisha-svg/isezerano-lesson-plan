@@ -28,6 +28,8 @@ import {
   DEFAULT_ADS_SETTINGS,
   DEFAULT_TOP_VIDEO_AD_CONFIG,
   GlobalAdScriptConfig,
+  HomepageInFeedAdSlotConfig,
+  HomepageInFeedAdSlotKey,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
   TopVideoAdConfig,
@@ -42,6 +44,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { DisplayNumericControl } from './DisplayNumericControl';
 import { InArticleAdManagerSection } from './InArticleAdManagerSection';
+import { HomepageInFeedAdManagerSection } from './HomepageInFeedAdManagerSection';
 import {
   ADS_DISPLAY_LIMITS,
   AdsDisplaySettings,
@@ -58,6 +61,8 @@ import {
   hasRenderableAdCode,
   isSafeAdAssetOrClickUrl,
   normalizeGlobalAdScriptConfig,
+  normalizeHomepageInFeedAdSlotConfig,
+  normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdSlotConfig,
   normalizeInArticleAdsSettings
 } from '../utils/inArticleAdUtils';
@@ -91,6 +96,7 @@ export const AdsManager: React.FC = () => {
       setSettings({
         ...data,
         inArticleAds: normalizeInArticleAdsSettings(data.inArticleAds),
+        homepageInFeedAds: normalizeHomepageInFeedAdsSettings(data.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(data.globalScripts),
         aboveHeaderVideoAd: normalizedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(data.displaySettings)
@@ -255,6 +261,9 @@ export const AdsManager: React.FC = () => {
       });
       const payloadToSave: AdsSettings = {
         ...settings,
+        inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+        homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
+        globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         aboveHeaderVideoAd: normalizedTop,
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
@@ -388,6 +397,7 @@ export const AdsManager: React.FC = () => {
       const payloadToSave: AdsSettings = {
         ...settings,
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+        homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         aboveHeaderVideoAd: resolvedTopVideo,
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
@@ -438,6 +448,10 @@ export const AdsManager: React.FC = () => {
   };
 
   const currentInArticleAds = normalizeInArticleAdsSettings(settings.inArticleAds, false);
+  const currentHomepageInFeedAds = normalizeHomepageInFeedAdsSettings(
+    settings.homepageInFeedAds,
+    false
+  );
   const currentGlobalScripts = normalizeGlobalAdScriptConfig(settings.globalScripts, false);
 
   const updateInArticleSlot = (
@@ -457,6 +471,30 @@ export const AdsManager: React.FC = () => {
       return {
         ...prev,
         inArticleAds: {
+          ...normalized,
+          [slotKey]: updatedSlot
+        }
+      };
+    });
+  };
+
+  const updateHomepageInFeedSlot = (
+    slotKey: HomepageInFeedAdSlotKey,
+    patch: Partial<HomepageInFeedAdSlotConfig>
+  ) => {
+    setSettings(prev => {
+      const normalized = normalizeHomepageInFeedAdsSettings(prev.homepageInFeedAds, false);
+      const updatedSlot = normalizeHomepageInFeedAdSlotConfig(
+        slotKey,
+        {
+          ...normalized[slotKey],
+          ...patch
+        },
+        false
+      );
+      return {
+        ...prev,
+        homepageInFeedAds: {
           ...normalized,
           [slotKey]: updatedSlot
         }
@@ -488,6 +526,7 @@ export const AdsManager: React.FC = () => {
       const payloadToSave: AdsSettings = {
         ...settings,
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
+        homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         aboveHeaderVideoAd: normalizeTopVideoAdConfig({
           ...settings.aboveHeaderVideoAd,
@@ -1381,6 +1420,22 @@ export const AdsManager: React.FC = () => {
         }
         onUpdateGlobalScripts={updateGlobalScripts}
         onSaveGlobalScripts={() => persistCurrentSettingsSection('Global Site-Wide Scripts')}
+      />
+
+      {/* Placements 6, 7, 8: Homepage In-Feed Ads */}
+      <HomepageInFeedAdManagerSection
+        homepageInFeedAds={currentHomepageInFeedAds}
+        isSaving={isSaving}
+        onUpdateSlot={updateHomepageInFeedSlot}
+        onSaveSlot={(slotKey) =>
+          persistCurrentSettingsSection(
+            slotKey === 'slot1'
+              ? 'Homepage In-Feed Ad Slot 1'
+              : slotKey === 'slot2'
+              ? 'Homepage In-Feed Ad Slot 2'
+              : 'Homepage In-Feed Ad Slot 3'
+          )
+        }
       />
 
       {/* Security & Sandbox Info */}

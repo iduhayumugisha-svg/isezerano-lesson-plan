@@ -162,6 +162,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
   // Fast 16KB initial load for public visitors; full doc + real-time listener when admin/user signs in
   useEffect(() => {
     loadPublicSettings();
+    return () => {
+      loadSeqRef.current += 1;
+    };
   }, []);
 
   useEffect(() => {
@@ -179,6 +182,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     });
 
     return () => {
+      loadSeqRef.current += 1;
       unsubscribe();
     };
   }, [user?.uid, isAdmin]);
@@ -195,9 +199,13 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       applyDesignCssVariables(data);
     } catch (err) {
-      console.error('Error loading public design settings:', err);
+      if (seq === loadSeqRef.current) {
+        console.error('Error loading public design settings:', err);
+      }
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeqRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

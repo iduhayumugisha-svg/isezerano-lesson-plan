@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import React from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
+import { JSDOM } from 'jsdom';
 import {
   buildWhatsAppChatUrl,
   cleanPhoneInput,
@@ -211,7 +213,7 @@ function testMobileAdDisplay() {
 // PART 4: LANGUAGE SWITCHER INSIDE THREE-DOT OVERFLOW MENU
 // =========================================================================
 
-function testHeaderLanguageMovedToMenu() {
+async function testHeaderLanguageMovedToMenu(): Promise<void> {
   const headerSrc = fs.readFileSync(path.resolve('src/components/WebsiteHeader.tsx'), 'utf8');
   const tier2Index = headerSrc.indexOf('TIER 2: NEWSPAPER CATEGORY NAVIGATION BAR');
   assert.ok(tier2Index > 0);
@@ -230,11 +232,212 @@ function testHeaderLanguageMovedToMenu() {
   assert.match(overflowDropdown, /role="menuitemradio"/);
   assert.match(overflowDropdown, /setLanguage\(langOpt\.code\)/);
   assert.match(overflowDropdown, /languageOptions\.map/);
-  assert.match(headerSrc, /code:\s*'en',\s*short:\s*'EN',\s*label:\s*'English'/);
-  assert.match(headerSrc, /code:\s*'rw',\s*short:\s*'RW',\s*label:\s*'Kinyarwanda'/);
-  assert.match(headerSrc, /code:\s*'fr',\s*short:\s*'FR',\s*label:\s*'Français'/);
+  assert.match(headerSrc, /code:\s*'en',\s*short:\s*'EN',\s*label:\s*'English',\s*flag:\s*'🇺🇸'/);
+  assert.match(headerSrc, /code:\s*'rw',\s*short:\s*'RW',\s*label:\s*'Kinyarwanda',\s*flag:\s*'🇷🇼'/);
+  assert.match(headerSrc, /code:\s*'fr',\s*short:\s*'FR',\s*label:\s*'Français',\s*flag:\s*'🇫🇷'/);
+  assert.doesNotMatch(headerSrc, /🇬🇧/, 'WebsiteHeader must use 🇺🇸 (not 🇬🇧) for English');
+  assert.doesNotMatch(overflowDropdown, /<Globe\b/, 'Language selector must not use generic Globe icon');
 
-  console.log('✓ 4. Language translation controls moved cleanly into three-dot menu');
+  // Runtime JSDOM verification: closed dropdown shows active flag + name only,
+  // opening reveals all flags + names, selection translates + persists + closes, click outside closes.
+  const dom = new JSDOM('<!doctype html><html lang="en"><body><div id="root"></div></body></html>', {
+    url: 'https://isezerano.online/'
+  });
+  const prevWindow = (globalThis as any).window;
+  const prevDocument = (globalThis as any).document;
+  const prevLocalStorage = (globalThis as any).localStorage;
+  const prevNode = (globalThis as any).Node;
+  const prevFetch = (globalThis as any).fetch;
+  const storageMap = new Map<string, string>();
+
+  (globalThis as any).window = dom.window;
+  (globalThis as any).document = dom.window.document;
+  (globalThis as any).Node = dom.window.Node;
+  (globalThis as any).fetch = async () => ({ ok: false, json: async () => null });
+  (globalThis as any).localStorage = {
+    getItem: (key: string) => storageMap.get(key) ?? null,
+    setItem: (key: string, val: string) => {
+      storageMap.set(key, String(val));
+    },
+    removeItem: (key: string) => {
+      storageMap.delete(key);
+    }
+  };
+
+  const { AuthProvider } = await import('../src/context/AuthContext');
+  const { LanguageProvider } = await import('../src/i18n/LanguageContext');
+  const { WebsiteDesignProvider } = await import('../src/context/WebsiteDesignContext');
+  const { WebsiteHeader } = await import('../src/components/WebsiteHeader');
+  const { WebsiteFooter } = await import('../src/components/WebsiteFooter');
+
+  const container = dom.window.document.getElementById('root')!;
+  let root = createRoot(container);
+
+  const renderTree = (currentPage: 'home' | 'contact') =>
+    React.createElement(
+      AuthProvider,
+      null,
+      React.createElement(
+        LanguageProvider,
+        null,
+        React.createElement(
+          WebsiteDesignProvider,
+          null,
+          React.createElement(WebsiteHeader, {
+            currentPage,
+            onNavigate: () => undefined,
+            newsCategories: []
+          }),
+          React.createElement(WebsiteFooter, {
+            onNavigate: () => undefined
+          })
+        )
+      )
+    );
+
+  try {
+    root.render(renderTree('home'));
+    await new Promise((r) => setTimeout(r, 80));
+
+    // Hamburger menu button (☰) is positioned on the far left BEFORE the logo and title,
+    // renders 3 clean equal-length horizontal lines, anchors dropdown left-0, and toggles cleanly.
+    const menuBtn = container.querySelector('button[aria-label="More sections menu"]') as HTMLButtonElement | null;
+    assert.ok(menuBtn, 'Hamburger menu button must render');
+    assert.equal(menuBtn.getAttribute('aria-expanded'), 'false');
+    assert.match(menuBtn.className, /min-w-\[44px\]/);
+    assert.match(menuBtn.className, /min-h-\[44px\]/);
+    const brandTitleSpan = Array.from(container.querySelectorAll('header span')).find((s) =>
+      (s.textContent || '').includes('ISEZERANO ONLINE')
+    );
+    assert.ok(brandTitleSpan, 'Website title span must render inside header');
+    assert.ok(
+      Boolean(menuBtn.compareDocumentPosition(brandTitleSpan) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING),
+      'Hamburger menu button must appear BEFORE the logo and website name on the left'
+    );
+    const menuSvg = menuBtn.querySelector('svg');
+    assert.ok(menuSvg, 'Hamburger Menu SVG icon must render');
+    const menuLines = Array.from(menuSvg.querySelectorAll('line, path'));
+    assert.equal(menuLines.length, 3, 'Hamburger icon must render 3 horizontal lines');
+
+    menuBtn.click();
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(menuBtn.getAttribute('aria-expanded'), 'true');
+    const openedMenu = container.querySelector('[role="menu"]') as HTMLElement | null;
+    assert.ok(openedMenu, 'Navigation menu must open on click');
+    assert.match(openedMenu.className, /\bleft-0\b/, 'Left-aligned hamburger menu dropdown must anchor left-0');
+
+    // Toggle click closes menu cleanly, then re-open to test language selector inside menu
+    menuBtn.click();
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(menuBtn.getAttribute('aria-expanded'), 'false');
+    assert.equal(container.querySelector('[role="menu"]'), null, 'Navigation menu must close on second click');
+
+    menuBtn.click();
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(menuBtn.getAttribute('aria-expanded'), 'true');
+
+    // Closed dropdown: displays current language flag + name only; options menu not rendered yet
+    const langTrigger = container.querySelector('[data-testid="language-dropdown-trigger"]') as HTMLButtonElement | null;
+    assert.ok(langTrigger, 'Language dropdown trigger must render inside menu');
+    assert.match(langTrigger.textContent || '', /🇺🇸/);
+    assert.match(langTrigger.textContent || '', /English/);
+    assert.equal(langTrigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(container.querySelector('[data-testid="language-dropdown-menu"]'), null);
+
+    // Open dropdown: all 3 supported flags & names appear
+    langTrigger.click();
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(langTrigger.getAttribute('aria-expanded'), 'true');
+    const langMenu = container.querySelector('[data-testid="language-dropdown-menu"]') as HTMLElement | null;
+    assert.ok(langMenu, 'Language dropdown options panel must appear when opened');
+    const langItems = Array.from(langMenu.querySelectorAll('button[role="menuitemradio"]')) as HTMLButtonElement[];
+    assert.equal(langItems.length, 3);
+    assert.match(langMenu.textContent || '', /🇺🇸\s*English/);
+    assert.match(langMenu.textContent || '', /🇷🇼\s*Kinyarwanda/);
+    assert.match(langMenu.textContent || '', /🇫🇷\s*Français/);
+
+    // Click Kinyarwanda -> applies translation, saves to localStorage, closes dropdown, updates trigger
+    const rwOption = langMenu.querySelector('button[aria-label="Switch language to Kinyarwanda"]') as HTMLButtonElement | null;
+    assert.ok(rwOption);
+    rwOption.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(storageMap.get('isezerano_news_lang'), 'rw');
+    assert.equal(dom.window.document.documentElement.lang, 'rw');
+    assert.equal(container.querySelector('[data-testid="language-dropdown-menu"]'), null, 'Dropdown must close after selecting a language');
+    assert.match(langTrigger.textContent || '', /🇷🇼/);
+    assert.match(langTrigger.textContent || '', /Kinyarwanda/);
+    assert.match(container.textContent || '', /Twandikire/);
+    assert.match(container.textContent || '', /Ibyerekeye Twebwe/);
+
+    // Re-open dropdown, then click outside -> closes cleanly
+    langTrigger.click();
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(container.querySelector('[data-testid="language-dropdown-menu"]'));
+    dom.window.document.body.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(container.querySelector('[data-testid="language-dropdown-menu"]'), null);
+
+    // Navigate to another page -> preserves selected language
+    root.render(renderTree('contact'));
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(dom.window.document.documentElement.lang, 'rw');
+    assert.match(container.textContent || '', /Twandikire/);
+
+    // Simulate full browser reload (unmount + remount new root using persisted localStorage)
+    root.unmount();
+    await new Promise((r) => setTimeout(r, 30));
+    root = createRoot(container);
+    root.render(renderTree('home'));
+    await new Promise((r) => setTimeout(r, 80));
+
+    assert.equal(dom.window.document.documentElement.lang, 'rw');
+    assert.match(container.textContent || '', /Twandikire/);
+    const reloadedMenuBtn = container.querySelector('button[aria-label="More sections menu"]') as HTMLButtonElement;
+    reloadedMenuBtn.click();
+    await new Promise((r) => setTimeout(r, 40));
+    const reloadedTrigger = container.querySelector('[data-testid="language-dropdown-trigger"]') as HTMLButtonElement;
+    assert.match(reloadedTrigger.textContent || '', /🇷🇼/);
+    assert.match(reloadedTrigger.textContent || '', /Kinyarwanda/);
+
+    // Switch to Français -> verifies French flag, name, translations & persistence
+    reloadedTrigger.click();
+    await new Promise((r) => setTimeout(r, 30));
+    const frOption = container.querySelector('button[aria-label="Switch language to Français"]') as HTMLButtonElement;
+    assert.ok(frOption);
+    frOption.click();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(storageMap.get('isezerano_news_lang'), 'fr');
+    assert.equal(dom.window.document.documentElement.lang, 'fr');
+    assert.match(reloadedTrigger.textContent || '', /🇫🇷/);
+    assert.match(reloadedTrigger.textContent || '', /Français/);
+    assert.match(container.textContent || '', /Contactez-nous/);
+    assert.match(container.textContent || '', /Confidentialité/);
+
+    // Switch back to English -> verifies US flag, name, translations & persistence
+    reloadedTrigger.click();
+    await new Promise((r) => setTimeout(r, 30));
+    const enOption = container.querySelector('button[aria-label="Switch language to English"]') as HTMLButtonElement;
+    assert.ok(enOption);
+    enOption.click();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(storageMap.get('isezerano_news_lang'), 'en');
+    assert.equal(dom.window.document.documentElement.lang, 'en');
+    assert.match(reloadedTrigger.textContent || '', /🇺🇸/);
+    assert.match(reloadedTrigger.textContent || '', /English/);
+    assert.match(container.textContent || '', /Contact Us/);
+    assert.match(container.textContent || '', /Privacy Policy/);
+  } finally {
+    root.unmount();
+    await new Promise((r) => setTimeout(r, 80));
+    (globalThis as any).window = prevWindow;
+    (globalThis as any).document = prevDocument;
+    (globalThis as any).localStorage = prevLocalStorage;
+    (globalThis as any).Node = prevNode;
+    (globalThis as any).fetch = prevFetch;
+  }
+
+  console.log('✓ 4. Language dropdown selector (flags, closed/open states, outside click, translations & persistence) verified');
 }
 
 // =========================================================================
@@ -584,7 +787,7 @@ async function runSuite(): Promise<void> {
   testFcmPushSystemAudit();
   testWhatsAppContactSettings();
   testMobileAdDisplay();
-  testHeaderLanguageMovedToMenu();
+  await testHeaderLanguageMovedToMenu();
   await testWebsiteNameTypographyControls();
   await testStaticInfoPagesCleanAndAdminGated();
   await testCategoryCustomizationFooterAndAnnouncementRemoval();
@@ -592,7 +795,11 @@ async function runSuite(): Promise<void> {
   console.log('\nALL NEWS PLATFORM MODULES (FCM, WHATSAPP, ADS, MENU, TYPOGRAPHY, CMS PAGES, CATEGORIES, FOOTER, SCROLLING) TESTS PASSED!');
 }
 
-runSuite().catch((err) => {
-  console.error('PLATFORM MODULES SUITE FAILURE:', err);
-  process.exit(1);
-});
+runSuite()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('PLATFORM MODULES SUITE FAILURE:', err);
+    process.exit(1);
+  });

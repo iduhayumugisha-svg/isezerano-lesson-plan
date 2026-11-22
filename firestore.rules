@@ -204,6 +204,15 @@ service cloud.firestore {
              hasNoPrivateCommentFields(data);
     }
 
+    function hasValidParentComment(data) {
+      let parent = get(/databases/$(database)/documents/comments/$(data.parentId));
+      return isValidCommentId(data.parentId) &&
+             parent != null &&
+             parent.data.postId == data.postId &&
+             parent.data.status in ['published', 'approved'] &&
+             parent.data.publicSafe == true;
+    }
+
     function isValidPublicCommentCreate(data) {
       return hasRequiredPublicCommentFields(data) &&
              data.postId is string &&
@@ -211,13 +220,7 @@ service cloud.firestore {
              data.postId.size() <= 120 &&
              (
                data.parentId == null ||
-               (
-                 isValidCommentId(data.parentId) &&
-                 exists(/databases/$(database)/documents/comments/$(data.parentId)) &&
-                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.postId == data.postId &&
-                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.status in ['published', 'approved'] &&
-                 get(/databases/$(database)/documents/comments/$(data.parentId)).data.publicSafe == true
-               )
+               hasValidParentComment(data)
              ) &&
              (
                (data.parentId == null && data.replyToName == null) ||
@@ -244,34 +247,67 @@ service cloud.firestore {
              data.edited == false;
     }
 
+    function hasValidOwnershipAfterForComment(commentId, data) {
+      let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      return ownershipAfter != null &&
+             ownershipAfter.data.tokenHash is string &&
+             ownershipAfter.data.tokenHash.matches('^[a-f0-9]{64}$') &&
+             ownershipAfter.data.postId == data.postId &&
+             ownershipAfter.data.createdAt == data.createdAt;
+    }
+
+    function hasValidOwnershipAfterForToken(commentId, tokenId, data) {
+      let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      return ownershipAfter != null &&
+             ownershipAfter.data.tokenHash == tokenId &&
+             ownershipAfter.data.postId == data.postId &&
+             ownershipAfter.data.createdAt == data.createdAt;
+    }
+
+    function hasValidPeerDocsAfterForOwnership(commentId, data) {
+      let commentAfter = getAfter(/databases/$(database)/documents/comments/$(commentId));
+      let tokenAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
+      return commentAfter != null &&
+             tokenAfter != null &&
+             commentAfter.data.postId == data.postId &&
+             commentAfter.data.createdAt == data.createdAt &&
+             tokenAfter.data.tokenHash == data.tokenHash &&
+             tokenAfter.data.postId == data.postId &&
+             tokenAfter.data.createdAt == data.createdAt;
+    }
+
     function sha256LowerHex(value) {
       return hashing.sha256(value.toUtf8()).toHexString().lower();
     }
 
     function hasValidCommentVerifier(commentId, verifier, commentData, syncedAt) {
+      let tokenParts = verifier is string ? verifier.split(':') : [];
+      let rawToken = tokenParts.size() == 2 ? tokenParts[0] : '';
+      let expectedHash = sha256LowerHex(rawToken);
+      let ownershipDoc = get(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      let tokenDoc = get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(expectedHash));
       return verifier is string &&
              verifier.size() >= 97 &&
              verifier.size() <= 193 &&
              verifier.matches('^[a-fA-F0-9]{32,128}:[a-f0-9]{64}$') &&
-             verifier.split(':').size() == 2 &&
+             tokenParts.size() == 2 &&
              syncedAt is string &&
              syncedAt.size() >= 10 &&
-             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash ==
-               sha256LowerHex(verifier.split(':')[0]) &&
-             exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))) &&
-             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.tokenHash ==
-               sha256LowerHex(verifier.split(':')[0]) &&
-             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.postId ==
-               commentData.postId &&
-             get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(sha256LowerHex(verifier.split(':')[0]))).data.createdAt ==
-               commentData.createdAt &&
-             verifier.split(':')[1] ==
+             ownershipDoc != null &&
+             ownershipDoc.data.tokenHash == expectedHash &&
+             tokenDoc != null &&
+             tokenDoc.data.tokenHash == expectedHash &&
+             tokenDoc.data.postId == commentData.postId &&
+             tokenDoc.data.createdAt == commentData.createdAt &&
+             tokenParts[1] ==
                sha256LowerHex(
-                 verifier.split(':')[0] + ':' + commentData.postId + ':' + commentData.createdAt + ':' + syncedAt
+                 rawToken + ':' + commentData.postId + ':' + commentData.createdAt + ':' + syncedAt
                );
     }
 
     function isValidPublicCommentOwnerEdit(data, existingData, commentId) {
+      let ownershipBefore = get(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
       return hasRequiredPublicCommentFields(data) &&
              data.diff(existingData).affectedKeys().hasOnly(['content', 'updatedAt', 'edited']) &&
              data.content is string &&
@@ -284,18 +320,15 @@ service cloud.firestore {
              data.updatedAt != existingData.updatedAt &&
              existingData.status in ['published', 'approved'] &&
              existingData.publicSafe == true &&
-             exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
-               existingData.postId &&
-             get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
-               getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
-             getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=
-               get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier &&
-             getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt ==
-               data.updatedAt &&
+             ownershipBefore != null &&
+             ownershipAfter != null &&
+             ownershipBefore.data.postId == existingData.postId &&
+             ownershipBefore.data.lastSyncedAt != ownershipAfter.data.lastSyncedAt &&
+             ownershipAfter.data.verifier != ownershipBefore.data.verifier &&
+             ownershipAfter.data.lastSyncedAt == data.updatedAt &&
              hasValidCommentVerifier(
                commentId,
-               getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier,
+               ownershipAfter.data.verifier,
                existingData,
                data.updatedAt
              );
@@ -325,16 +358,7 @@ service cloud.firestore {
         isValidCommentId(commentId) &&
         isValidPublicCommentCreate(request.resource.data) &&
         !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-        getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash is string &&
-        getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash.matches('^[a-f0-9]{64}$') &&
-        existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)) &&
-        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.tokenHash ==
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash &&
-        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.postId ==
-          request.resource.data.postId &&
-        getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash)).data.createdAt ==
-          request.resource.data.createdAt
+        hasValidOwnershipAfterForComment(commentId, request.resource.data)
       );
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) can edit ONLY content/updatedAt/edited;
@@ -380,20 +404,7 @@ service cloud.firestore {
           request.resource.data.createdAt.size() >= 10 &&
           request.resource.data.createdAt.size() <= 60 &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
-          !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-          !exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(tokenId)) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId ==
-            request.resource.data.postId &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.createdAt ==
-            request.resource.data.createdAt &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.tokenHash ==
-            tokenId &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
-            request.resource.data.postId &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.createdAt ==
-            request.resource.data.createdAt
+          hasValidOwnershipAfterForToken(commentId, tokenId, request.resource.data)
         );
       }
 
@@ -419,18 +430,7 @@ service cloud.firestore {
             request.resource.data.email.size() <= 160
           )) &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)) &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.postId ==
-            request.resource.data.postId &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)).data.createdAt ==
-            request.resource.data.createdAt &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.tokenHash ==
-            request.resource.data.tokenHash &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.postId ==
-            request.resource.data.postId &&
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(request.resource.data.tokenHash)).data.createdAt ==
-            request.resource.data.createdAt
+          hasValidPeerDocsAfterForOwnership(commentId, request.resource.data)
         );
         allow update: if isAdmin() || (
           ownershipId == 'ownership' &&

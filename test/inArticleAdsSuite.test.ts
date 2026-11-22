@@ -33,6 +33,7 @@ import {
   splitTopLevelHtmlBlocks
 } from '../src/utils/articleAdInjector';
 import { InArticleAdSlot } from '../src/components/InArticleAdSlot';
+import { __resetAdsSettingsCacheForTests } from '../src/services/siteSettingsService';
 import { AdSlot } from '../src/components/AdSlot';
 import { updateBlogPostSeo } from '../src/services/seoService';
 import { BlogPost } from '../src/types/blog';
@@ -424,6 +425,7 @@ function testAdminControlsAndSecurityWiring(): void {
 
 async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
   __resetGlobalAdScriptsCacheForTests();
+  __resetAdsSettingsCacheForTests();
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
     url: 'https://isezerano.online/blog/sample-article'
   });
@@ -446,6 +448,22 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
     }
   };
 
+  const toFirestoreRestFields = (val: any): any => {
+    if (val === null || val === undefined) return { nullValue: null };
+    if (typeof val === 'boolean') return { booleanValue: val };
+    if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    if (typeof val === 'string') return { stringValue: val };
+    if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreRestFields) } };
+    if (typeof val === 'object') {
+      const fields: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) fields[k] = toFirestoreRestFields(v);
+      }
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(val) };
+  };
+
   (globalThis as any).window = dom.window;
   (globalThis as any).document = dom.window.document;
   (globalThis as any).CSS = { escape: (v: string) => v };
@@ -455,7 +473,10 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
     setItem: () => undefined,
     removeItem: () => undefined
   };
-  (globalThis as any).fetch = async () => ({ ok: false, json: async () => null });
+  (globalThis as any).fetch = async () => ({
+    ok: true,
+    json: async () => ({ fields: toFirestoreRestFields(seededSettings).mapValue.fields })
+  });
 
   const container = dom.window.document.getElementById('root')!;
   const root = createRoot(container);
@@ -492,6 +513,7 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
 }
 
 async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
+  __resetAdsSettingsCacheForTests();
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
     url: 'https://isezerano.online/blog/sample-article'
   });
@@ -522,6 +544,22 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
     }
   };
 
+  const toFirestoreRestFields = (val: any): any => {
+    if (val === null || val === undefined) return { nullValue: null };
+    if (typeof val === 'boolean') return { booleanValue: val };
+    if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    if (typeof val === 'string') return { stringValue: val };
+    if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreRestFields) } };
+    if (typeof val === 'object') {
+      const fields: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) fields[k] = toFirestoreRestFields(v);
+      }
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(val) };
+  };
+
   (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
     dom.window.setTimeout(() => cb(Date.now()), 0);
   (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
@@ -537,7 +575,10 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
     setItem: () => undefined,
     removeItem: () => undefined
   };
-  (globalThis as any).fetch = async () => ({ ok: false, json: async () => null });
+  (globalThis as any).fetch = async () => ({
+    ok: true,
+    json: async () => ({ fields: toFirestoreRestFields(seededSettings).mapValue.fields })
+  });
 
   const container = dom.window.document.getElementById('root')!;
   const root = createRoot(container);
