@@ -8,13 +8,10 @@ import {
   analyzeAdCodeSnippet,
   getProviderDisplayName,
   hasRenderableAdCode,
-  installIntrusivePopunderDomGuard,
-  isIntrusivePopunderElement,
   isSafeAdScriptUrl,
   sanitizeAdCodePayload,
   sanitizeAdConfigText,
-  sanitizeStaticAdElement,
-  shouldSkipDuplicateOverlayScript
+  sanitizeStaticAdElement
 } from '../utils/inArticleAdUtils';
 
 interface InArticleAdSlotProps {
@@ -42,14 +39,8 @@ function enqueueInArticleExecution(task: () => Promise<void>): void {
 }
 
 function buildExecutableScriptElement(oldScript: HTMLScriptElement): HTMLScriptElement | null {
-  if (isIntrusivePopunderElement(oldScript)) {
-    return null;
-  }
   const src = oldScript.getAttribute('src')?.trim() || '';
   if (src && !isSafeAdScriptUrl(src)) {
-    return null;
-  }
-  if (shouldSkipDuplicateOverlayScript(oldScript)) {
     return null;
   }
 
@@ -298,8 +289,6 @@ export const InArticleAdSlot: React.FC<InArticleAdSlotProps> = ({
         return;
       }
     }
-
-    installIntrusivePopunderDomGuard();
 
     const nextSignature = `${articleId}::${slotId}::${sanitizedCode}`;
     let cancelled = false;

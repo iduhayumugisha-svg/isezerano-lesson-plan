@@ -12,13 +12,10 @@ import {
 } from '../utils/displaySettingsUtils';
 import {
   hasRenderableAdCode,
-  installIntrusivePopunderDomGuard,
-  isIntrusivePopunderElement,
   isSafeAdAssetOrClickUrl,
   isSafeAdScriptUrl,
   sanitizeAdCodePayload,
-  sanitizeStaticAdElement,
-  shouldSkipDuplicateOverlayScript
+  sanitizeStaticAdElement
 } from '../utils/inArticleAdUtils';
 import { ExternalLink, Sparkles } from 'lucide-react';
 
@@ -47,14 +44,8 @@ function enqueueAdSlotExecution(task: () => Promise<void>): void {
 }
 
 function buildExecutableScriptElement(oldScript: HTMLScriptElement): HTMLScriptElement | null {
-  if (isIntrusivePopunderElement(oldScript)) {
-    return null;
-  }
   const src = oldScript.getAttribute('src')?.trim() || '';
   if (src && !isSafeAdScriptUrl(src)) {
-    return null;
-  }
-  if (shouldSkipDuplicateOverlayScript(oldScript)) {
     return null;
   }
 
@@ -346,8 +337,6 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
       }
       return;
     }
-
-    installIntrusivePopunderDomGuard();
 
     const container = codeContainerRef.current;
     const outer = outerWrapperRef.current;
