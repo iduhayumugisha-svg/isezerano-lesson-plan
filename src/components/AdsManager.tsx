@@ -20,7 +20,8 @@ import {
   Film,
   Link2,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Layers
 } from 'lucide-react';
 import {
   AdSlotConfig,
@@ -32,6 +33,8 @@ import {
   HomepageInFeedAdSlotKey,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
+  MonetagInPagePushConfig,
+  MonetagVignetteConfig,
   TopVideoAdConfig,
   TopVideoAdDisplaySettings
 } from '../types/platform';
@@ -58,14 +61,19 @@ import {
 } from '../utils/displaySettingsUtils';
 import {
   analyzeAdCodeSnippet,
+  extractBareSafeDirectLinkUrl,
+  formatDeviceVisibilitySummary,
   hasRenderableAdCode,
   isSafeAdAssetOrClickUrl,
+  isSafeAdScriptUrl,
   normalizeGlobalAdScriptConfig,
   normalizeHomepageInFeedAdSlotConfig,
   normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdSlotConfig,
   normalizeInArticleAdsSettings,
-  normalizeStandardAdSlotConfig
+  normalizeInPagePushAdConfig,
+  normalizeStandardAdSlotConfig,
+  normalizeVignetteAdConfig
 } from '../utils/inArticleAdUtils';
 
 const LazyShopVimeoPlayer = lazy(() =>
@@ -96,16 +104,18 @@ export const AdsManager: React.FC = () => {
       const normalizedTopVideo = normalizeTopVideoAdConfig(data.aboveHeaderVideoAd);
       setSettings({
         ...data,
-        belowHeaderAd: normalizeStandardAdSlotConfig(
-          data.belowHeaderAd,
-          DEFAULT_ADS_SETTINGS.belowHeaderAd,
-          true
-        ),
+        belowHeaderAd: {
+          ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
+          enabled: false,
+          code: ''
+        },
         aboveFooterAd: normalizeStandardAdSlotConfig(
           data.aboveFooterAd,
           DEFAULT_ADS_SETTINGS.aboveFooterAd,
           true
         ),
+        vignetteAd: normalizeVignetteAdConfig(data.vignetteAd),
+        inPagePushAd: normalizeInPagePushAdConfig(data.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(data.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(data.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(data.globalScripts),
@@ -417,16 +427,18 @@ export const AdsManager: React.FC = () => {
 
       const payloadToSave: AdsSettings = {
         ...settings,
-        belowHeaderAd: normalizeStandardAdSlotConfig(
-          settings.belowHeaderAd,
-          DEFAULT_ADS_SETTINGS.belowHeaderAd,
-          true
-        ),
+        belowHeaderAd: {
+          ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
+          enabled: false,
+          code: ''
+        },
         aboveFooterAd: normalizeStandardAdSlotConfig(
           settings.aboveFooterAd,
           DEFAULT_ADS_SETTINGS.aboveFooterAd,
           true
         ),
+        vignetteAd: normalizeVignetteAdConfig(settings.vignetteAd),
+        inPagePushAd: normalizeInPagePushAdConfig(settings.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
@@ -464,13 +476,6 @@ export const AdsManager: React.FC = () => {
     }
   };
 
-  const updateBelowHeader = (patch: Partial<AdSlotConfig>) => {
-    setSettings(prev => ({
-      ...prev,
-      belowHeaderAd: { ...prev.belowHeaderAd, ...patch }
-    }));
-  };
-
   const updateAboveFooter = (patch: Partial<AdSlotConfig>) => {
     setSettings(prev => ({
       ...prev,
@@ -478,12 +483,34 @@ export const AdsManager: React.FC = () => {
     }));
   };
 
+  const currentVignetteAd = normalizeVignetteAdConfig(settings.vignetteAd);
+  const currentInPagePushAd = normalizeInPagePushAdConfig(settings.inPagePushAd);
   const currentInArticleAds = normalizeInArticleAdsSettings(settings.inArticleAds, false);
   const currentHomepageInFeedAds = normalizeHomepageInFeedAdsSettings(
     settings.homepageInFeedAds,
     false
   );
   const currentGlobalScripts = normalizeGlobalAdScriptConfig(settings.globalScripts, false);
+
+  const updateVignetteAd = (patch: Partial<MonetagVignetteConfig>) => {
+    setSettings(prev => ({
+      ...prev,
+      vignetteAd: normalizeVignetteAdConfig({
+        ...normalizeVignetteAdConfig(prev.vignetteAd),
+        ...patch
+      })
+    }));
+  };
+
+  const updateInPagePushAd = (patch: Partial<MonetagInPagePushConfig>) => {
+    setSettings(prev => ({
+      ...prev,
+      inPagePushAd: normalizeInPagePushAdConfig({
+        ...normalizeInPagePushAdConfig(prev.inPagePushAd),
+        ...patch
+      })
+    }));
+  };
 
   const updateInArticleSlot = (
     slotKey: InArticleAdSlotKey,
@@ -556,16 +583,18 @@ export const AdsManager: React.FC = () => {
     try {
       const payloadToSave: AdsSettings = {
         ...settings,
-        belowHeaderAd: normalizeStandardAdSlotConfig(
-          settings.belowHeaderAd,
-          DEFAULT_ADS_SETTINGS.belowHeaderAd,
-          true
-        ),
+        belowHeaderAd: {
+          ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
+          enabled: false,
+          code: ''
+        },
         aboveFooterAd: normalizeStandardAdSlotConfig(
           settings.aboveFooterAd,
           DEFAULT_ADS_SETTINGS.aboveFooterAd,
           true
         ),
+        vignetteAd: normalizeVignetteAdConfig(settings.vignetteAd),
+        inPagePushAd: normalizeInPagePushAdConfig(settings.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
@@ -633,12 +662,18 @@ export const AdsManager: React.FC = () => {
   }
 
   const previewSampleBanner =
-    (settings.belowHeaderAd.type === 'banner' && settings.belowHeaderAd.imageUrl) ||
-    (settings.aboveFooterAd.type === 'banner' && settings.aboveFooterAd.imageUrl) ||
-    '';
+    (settings.aboveFooterAd.type === 'banner' && settings.aboveFooterAd.imageUrl) || '';
 
   const previewFrameWidth =
     previewViewport === 'mobile' ? 340 : previewViewport === 'tablet' ? 680 : 960;
+
+  const vignetteReady = Boolean(
+    currentVignetteAd.enabled &&
+      currentVignetteAd.scriptUrl &&
+      isSafeAdScriptUrl(currentVignetteAd.scriptUrl) &&
+      (currentVignetteAd.desktopEnabled || currentVignetteAd.mobileEnabled)
+  );
+  const vignetteNeedsConfig = currentVignetteAd.enabled && !vignetteReady;
 
   return (
     <div className="space-y-6">
@@ -654,7 +689,7 @@ export const AdsManager: React.FC = () => {
               Ads & Sponsorship Management
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Configure advertisements and sponsorship placements directly below the website header and above the footer. Supports Google AdSense scripts, ad network embeds, and direct graphic banners. Ads remain completely disabled by default until turned on.
+              Manage Monetag Vignette Banner overlays, In-Page Push, In-Article Sponsored Direct Link cards, Homepage In-Feed slots, Top Vimeo Video sponsorship, and Above Website Footer banners cleanly without any below-header clutter box.
             </p>
           </div>
 
@@ -1388,7 +1423,7 @@ export const AdsManager: React.FC = () => {
                   <div className="shrink-0 flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200/70 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
                     <span className="flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-amber-500" />
-                      <span>{settings.belowHeaderAd.label || 'Partner Announcement'}</span>
+                      <span>{settings.aboveFooterAd.label || 'Sponsored Content'}</span>
                     </span>
                     <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
                       AD
@@ -1414,7 +1449,7 @@ export const AdsManager: React.FC = () => {
                       }}
                     >
                       <span className="text-xs font-bold text-slate-700">
-                        Below-Header &amp; Above-Footer Ad Preview ({previewViewport})
+                        Above-Footer Ad Preview ({previewViewport})
                       </span>
                       <span className="text-[11px] text-slate-500 mt-0.5">
                         Width {displaySettings.containerWidthPercent}% · Max {displaySettings.maxWidthPx}px · Height {displaySettings.containerHeightPx}px · Aspect Ratio Preserved
@@ -1428,13 +1463,152 @@ export const AdsManager: React.FC = () => {
         </div>
       </div>
 
-      {/* Placement 1: Below Header (Header Ads) */}
-      <AdPlacementCard
-        placementTitle="1. Below Website Header"
-        placementDescription="Header Ads position: displayed directly beneath the top navigation bar across website pages using your image banner or ad network HTML/script code (collapses cleanly when empty)."
-        config={settings.belowHeaderAd}
-        onChange={updateBelowHeader}
-      />
+      {/* Placement 1: Dedicated Monetag Vignette Banner (Site-Wide Overlay) */}
+      <div
+        data-testid="ads-vignette-manager"
+        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+              <Layers className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Monetag Vignette Banner Overlay Integration</span>
+            </div>
+            <h4 className="text-base font-bold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>1. Monetag Vignette Banner (Site-Wide Overlay)</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  vignetteReady
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : vignetteNeedsConfig
+                    ? 'bg-amber-100 text-amber-900'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {vignetteReady
+                  ? 'ACTIVE SITE-WIDE'
+                  : vignetteNeedsConfig
+                  ? 'ENABLED · NEEDS SCRIPT URL'
+                  : 'DISABLED'}
+              </span>
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
+              Runs Monetag Vignette Banner cleanly once per session across public SPA navigation with native frequency capping and dismissal. Never boxed inside the header area and never executed on <code className="font-mono">/admin</code>.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => updateVignetteAd({ enabled: !currentVignetteAd.enabled })}
+            data-testid="ads-vignette-enable-toggle"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center space-x-1.5 transition-all cursor-pointer self-start sm:self-center shrink-0 ${
+              currentVignetteAd.enabled
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            {currentVignetteAd.enabled ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Vignette Enabled</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Vignette Disabled</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {vignetteNeedsConfig && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              Vignette Banner is enabled, but requires a valid HTTPS Vignette script URL (e.g. <code className="font-mono">https://n6wxm.com/vignette.min.js</code>) before activating on public pages.
+            </span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="space-y-1.5">
+            <label htmlFor="ads-vignette-zone" className="block text-xs font-bold text-slate-700">
+              Monetag Vignette Zone ID
+            </label>
+            <input
+              id="ads-vignette-zone"
+              data-testid="ads-vignette-zone-input"
+              type="text"
+              inputMode="numeric"
+              value={currentVignetteAd.zoneId}
+              onChange={(e) =>
+                updateVignetteAd({ zoneId: e.target.value.replace(/\D/g, '').slice(0, 20) })
+              }
+              placeholder="e.g. 12322670"
+              className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
+            <label htmlFor="ads-vignette-url" className="block text-xs font-bold text-slate-700">
+              Vignette Script URL (HTTPS)
+            </label>
+            <input
+              id="ads-vignette-url"
+              data-testid="ads-vignette-script-input"
+              type="url"
+              value={currentVignetteAd.scriptUrl}
+              onChange={(e) => updateVignetteAd({ scriptUrl: e.target.value })}
+              placeholder="https://n6wxm.com/vignette.min.js"
+              className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <div className="md:col-span-3 flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={currentVignetteAd.desktopEnabled}
+                  onChange={(e) => updateVignetteAd({ desktopEnabled: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+                <span>Desktop</span>
+              </label>
+
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={currentVignetteAd.mobileEnabled}
+                  onChange={(e) => updateVignetteAd({ mobileEnabled: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+                <span>Mobile</span>
+              </label>
+
+              <span className="text-[11px] text-slate-500">
+                {formatDeviceVisibilitySummary(
+                  currentVignetteAd.mobileEnabled,
+                  currentVignetteAd.desktopEnabled
+                )}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => persistCurrentSettingsSection('Monetag Vignette Banner')}
+              disabled={isSaving}
+              data-testid="ads-vignette-save"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Save Vignette Settings</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Placement 2: Above Footer (Below Post Ads) */}
       <AdPlacementCard
@@ -1444,10 +1618,11 @@ export const AdsManager: React.FC = () => {
         onChange={updateAboveFooter}
       />
 
-      {/* Placements 3, 4, 5 & Global Site-Wide Scripts */}
+      {/* Placements 3, 4, 5 & In-Page Push & Global Site-Wide Scripts */}
       <InArticleAdManagerSection
         inArticleAds={currentInArticleAds}
         globalScripts={currentGlobalScripts}
+        inPagePushAd={currentInPagePushAd}
         isSaving={isSaving}
         onUpdateSlot={updateInArticleSlot}
         onSaveSlot={(slotKey) =>
@@ -1459,6 +1634,8 @@ export const AdsManager: React.FC = () => {
               : 'In-Article Ad Slot 3'
           )
         }
+        onUpdateInPagePush={updateInPagePushAd}
+        onSaveInPagePush={() => persistCurrentSettingsSection('Monetag In-Page Push')}
         onUpdateGlobalScripts={updateGlobalScripts}
         onSaveGlobalScripts={() => persistCurrentSettingsSection('Global Site-Wide Scripts')}
       />
@@ -1509,8 +1686,12 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
 }) => {
   const hasBannerReady =
     config.type === 'banner' && isSafeAdAssetOrClickUrl(config.imageUrl);
+  const bareDirectLink = useMemo(
+    () => extractBareSafeDirectLinkUrl(config.code || ''),
+    [config.code]
+  );
   const hasCodeReady =
-    config.type === 'code' && hasRenderableAdCode(config.code);
+    config.type === 'code' && !bareDirectLink && hasRenderableAdCode(config.code);
   const isReadyToRender = config.enabled && (hasBannerReady || hasCodeReady);
   const needsConfiguration = config.enabled && !isReadyToRender;
   const codeAnalysis = useMemo(
@@ -1693,6 +1874,14 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
             placeholder={`<!-- Paste Monetag / AdSense / Ad Network HTML & Script here -->\n<script async src="https://..."></script>`}
             className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg bg-slate-900 text-teal-300 focus:ring-2 focus:ring-teal-500"
           />
+          {bareDirectLink && (
+            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>
+                Bare Direct Link URLs (<code className="font-mono">{bareDirectLink}</code>) are hidden here so raw URLs do not appear as text. Use HTML/JS banner code here, or use <strong>In-Article Direct Link Ad Cards</strong> in Slots 1–3.
+              </span>
+            </div>
+          )}
           {codeAnalysis.warnings.length > 0 && (
             <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />

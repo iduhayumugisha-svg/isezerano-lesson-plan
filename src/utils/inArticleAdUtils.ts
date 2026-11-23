@@ -4,16 +4,23 @@ import {
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS,
   DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS,
+  DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
+  DEFAULT_MONETAG_VIGNETTE_CONFIG,
   GlobalAdScriptConfig,
   HOMEPAGE_IN_FEED_POSITION_LIMITS,
   HomepageInFeedAdSlotConfig,
   HomepageInFeedAdSlotKey,
   HomepageInFeedAdsSettings,
   IN_ARTICLE_PARAGRAPH_LIMITS,
+  InArticleAdFormat,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
   InArticleAdsSettings,
+  InArticleDirectLinkCardConfig,
+  MonetagInPagePushConfig,
+  MonetagVignetteConfig,
   createDefaultHomepageInFeedSlotConfig,
+  createDefaultInArticleDirectLinkCardConfig,
   createDefaultInArticleSlotConfig
 } from '../types/platform';
 
@@ -39,7 +46,7 @@ export const AD_PROVIDER_OPTIONS: ReadonlyArray<{
   }
 ];
 
-export const AD_DISCLOSURE_LABEL_OPTIONS = ['Advertisement', 'Kwamamaza'] as const;
+export const AD_DISCLOSURE_LABEL_OPTIONS = ['Advertisement', 'Sponsored', 'Kwamamaza'] as const;
 
 export const MAX_AD_CODE_LENGTH = 25000;
 
@@ -358,6 +365,28 @@ export const isSafeAdScriptUrl = (rawUrl: unknown): boolean => {
   return false;
 };
 
+export const isSafeDirectLinkUrl = (rawUrl: unknown): boolean => {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.length > 500) return false;
+  if (!/^https:\/\/[^\s<>"']+$/i.test(trimmed)) return false;
+  if (INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(trimmed)) return false;
+  if (/[?&](?:zone|z|zoneId)=313598\b/i.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' && Boolean(parsed.hostname) && parsed.hostname.includes('.');
+  } catch {
+    return false;
+  }
+};
+
+export const extractBareSafeDirectLinkUrl = (rawCode: unknown): string | null => {
+  if (typeof rawCode !== 'string') return null;
+  const trimmed = rawCode.trim();
+  if (!trimmed || trimmed.includes('<') || trimmed.includes('>')) return null;
+  return isSafeDirectLinkUrl(trimmed) ? trimmed : null;
+};
+
 export const isSafeAdAssetOrClickUrl = (rawUrl: unknown): boolean => {
   if (typeof rawUrl !== 'string') return false;
   const trimmed = rawUrl.trim();
@@ -397,6 +426,56 @@ export const normalizeStandardAdSlotConfig = (
   };
 };
 
+export const normalizeDisclosureLabel = (
+  raw: unknown,
+  fallback: 'Advertisement' | 'Sponsored' | 'Kwamamaza' = 'Sponsored'
+): 'Advertisement' | 'Sponsored' | 'Kwamamaza' => {
+  if (raw === 'Advertisement' || raw === 'Sponsored' || raw === 'Kwamamaza') {
+    return raw;
+  }
+  return fallback;
+};
+
+export const normalizeInArticleDirectLinkCardConfig = (
+  raw?: Partial<InArticleDirectLinkCardConfig> | null,
+  fallbackUrl: string = '',
+  fallbackDisclosure: 'Advertisement' | 'Sponsored' | 'Kwamamaza' = 'Sponsored'
+): InArticleDirectLinkCardConfig => {
+  const defaults = createDefaultInArticleDirectLinkCardConfig();
+  const candidateUrl = typeof raw?.directLinkUrl === 'string' ? raw.directLinkUrl.trim() : fallbackUrl;
+  const candidateThumb = typeof raw?.thumbnailUrl === 'string' ? raw.thumbnailUrl.trim() : '';
+
+  return {
+    directLinkUrl: isSafeDirectLinkUrl(candidateUrl) ? candidateUrl : '',
+    headline: sanitizeAdConfigText(raw?.headline, defaults.headline, 120),
+    description: sanitizeAdConfigText(raw?.description, defaults.description || '', 240),
+    thumbnailUrl:
+      candidateThumb && isSafeAdAssetOrClickUrl(candidateThumb) ? candidateThumb.slice(0, 500) : '',
+    ctaText: sanitizeAdConfigText(raw?.ctaText, defaults.ctaText, 40),
+    disclosureLabel: normalizeDisclosureLabel(raw?.disclosureLabel, fallbackDisclosure)
+  };
+};
+
+export const isInArticleSlotRenderable = (slot?: Partial<InArticleAdSlotConfig> | null): boolean => {
+  if (!slot || !slot.enabled) return false;
+  if (slot.adFormat === 'direct_link') {
+    const card = slot.directLinkCard;
+    return Boolean(
+      card &&
+        isSafeDirectLinkUrl(card.directLinkUrl) &&
+        typeof card.headline === 'string' &&
+        card.headline.trim().length > 0 &&
+        typeof card.ctaText === 'string' &&
+        card.ctaText.trim().length > 0
+    );
+  }
+  // In 'code' mode, reject bare raw URLs so plain links never print as raw text inside articles
+  if (extractBareSafeDirectLinkUrl(slot.code)) {
+    return false;
+  }
+  return hasRenderableAdCode(slot.code);
+};
+
 export const normalizeInArticleAdSlotConfig = (
   slotKey: InArticleAdSlotKey,
   raw?: Partial<InArticleAdSlotConfig> | null,
@@ -407,18 +486,40 @@ export const normalizeInArticleAdSlotConfig = (
     return defaults;
   }
 
+  const normalizedLabel = sanitizeAdConfigText(raw.label, 'Advertisement', 40);
+  const rawCodeNormalized = trimCode
+    ? sanitizeAdCodePayload(raw.code, true)
+    : sanitizeAdCodeInput(raw.code);
+  const bareLegacyDirectUrl = extractBareSafeDirectLinkUrl(rawCodeNormalized);
+
+  const resolvedFormat: InArticleAdFormat =
+    raw.adFormat === 'direct_link' || raw.adFormat === 'code'
+      ? raw.adFormat
+      : bareLegacyDirectUrl
+      ? 'direct_link'
+      : 'code';
+
+  const disclosureFallback = normalizeDisclosureLabel(normalizedLabel, 'Sponsored');
+  const directLinkCard = normalizeInArticleDirectLinkCardConfig(
+    raw.directLinkCard,
+    bareLegacyDirectUrl || '',
+    disclosureFallback
+  );
+
   return {
     enabled: Boolean(raw.enabled),
     provider: normalizeAdProvider(raw.provider),
     providerLabel: sanitizeAdConfigText(raw.providerLabel, '', 40),
-    code: trimCode ? sanitizeAdCodePayload(raw.code, true) : sanitizeAdCodeInput(raw.code),
+    adFormat: resolvedFormat,
+    code: rawCodeNormalized,
+    directLinkCard,
     afterParagraph: clampInArticleParagraph(
       raw.afterParagraph,
       DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS[slotKey]
     ),
     mobileEnabled: raw.mobileEnabled !== false,
     desktopEnabled: raw.desktopEnabled !== false,
-    label: sanitizeAdConfigText(raw.label, 'Advertisement', 40),
+    label: normalizedLabel,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
   };
 };
@@ -485,6 +586,96 @@ export const normalizeGlobalAdScriptConfig = (
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
   };
 };
+
+export const normalizeVignetteAdConfig = (
+  raw?: Partial<MonetagVignetteConfig> | null
+): MonetagVignetteConfig => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_MONETAG_VIGNETTE_CONFIG };
+  }
+  const zoneId =
+    typeof raw.zoneId === 'string' ? raw.zoneId.replace(/\D/g, '').slice(0, 20) : '';
+  const candidateUrl = typeof raw.scriptUrl === 'string' ? raw.scriptUrl.trim() : '';
+  return {
+    enabled: Boolean(raw.enabled),
+    zoneId,
+    scriptUrl: isSafeAdScriptUrl(candidateUrl) ? candidateUrl : '',
+    mobileEnabled: raw.mobileEnabled !== false,
+    desktopEnabled: raw.desktopEnabled !== false,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  };
+};
+
+export const normalizeInPagePushAdConfig = (
+  raw?: Partial<MonetagInPagePushConfig> | null
+): MonetagInPagePushConfig => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG };
+  }
+  const zoneId =
+    typeof raw.zoneId === 'string' ? raw.zoneId.replace(/\D/g, '').slice(0, 20) : '';
+  const candidateUrl = typeof raw.scriptUrl === 'string' ? raw.scriptUrl.trim() : '';
+  return {
+    enabled: Boolean(raw.enabled),
+    zoneId,
+    scriptUrl: isSafeAdScriptUrl(candidateUrl) ? candidateUrl : '',
+    mobileEnabled: raw.mobileEnabled !== false,
+    desktopEnabled: raw.desktopEnabled !== false,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  };
+};
+
+export interface ExtractedMonetagTagInfo {
+  zoneId: string;
+  scriptUrl: string;
+  cleanedRemainder: string;
+}
+
+export const extractMonetagScriptByPattern = (
+  rawCode: unknown,
+  srcPattern: RegExp
+): ExtractedMonetagTagInfo | null => {
+  if (typeof rawCode !== 'string' || !rawCode.trim()) return null;
+  const sanitized = sanitizeAdCodePayload(rawCode, true);
+  if (!sanitized || !srcPattern.test(sanitized)) return null;
+
+  let foundZone = '';
+  let foundSrc = '';
+
+  const cleanedRemainder = sanitized
+    .replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullMatch, attrs: string, body: string) => {
+      const combined = `${attrs}\n${body}`;
+      if (!srcPattern.test(combined)) {
+        return fullMatch;
+      }
+      const urlMatch = combined.match(/https?:\/\/[^\s"'`<>]+/i);
+      const zoneMatch = combined.match(/(?:dataset\.zone|data-zone|\bzone)\s*[:=]\s*["']?(\d{4,16})["']?/i);
+      const srcCandidate = urlMatch?.[0]?.trim() || '';
+      if (srcCandidate && isSafeAdScriptUrl(srcCandidate)) {
+        foundSrc = srcCandidate;
+      }
+      if (zoneMatch?.[1]) {
+        foundZone = zoneMatch[1];
+      }
+      return '';
+    })
+    .trim();
+
+  if (!foundSrc) return null;
+  return {
+    zoneId: foundZone,
+    scriptUrl: foundSrc,
+    cleanedRemainder
+  };
+};
+
+export const extractLegacyVignetteFromSnippet = (rawCode: unknown): ExtractedMonetagTagInfo | null =>
+  extractMonetagScriptByPattern(rawCode, /vignette\.min\.js/i);
+
+export const extractLegacyInPagePushFromSnippet = (
+  rawCode: unknown
+): ExtractedMonetagTagInfo | null =>
+  extractMonetagScriptByPattern(rawCode, /nap5k\.com\/tag\.min\.js|in-page-push/i);
 
 export interface AdCodeSnippetAnalysis {
   hasCode: boolean;

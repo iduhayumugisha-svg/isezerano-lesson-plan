@@ -98,6 +98,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
   } | null>(null);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const submitLockRef = useRef(false);
+  const replyLockRef = useRef(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -112,24 +114,36 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
     setConfirmDeleteId(null);
     setThreadNotice(null);
 
-    const unsubscribe = subscribeToPublishedCommentsForPost(postId, (items) => {
-      setLiveComments(items);
-      setIsLoading(false);
+    const unsubscribe = subscribeToPublishedCommentsForPost(
+      postId,
+      (items) => {
+        setLiveComments(items);
+        setIsLoading(false);
 
-      const liveById = new Map(items.map((item) => [item.id, item]));
-      setOptimisticAdded((prev) => prev.filter((opt) => !liveById.has(opt.id)));
-      setOptimisticDeletedIds((prev) => prev.filter((delId) => liveById.has(delId)));
-      setOptimisticEdits((prev) => {
-        const next: Record<string, { content: string; updatedAt: string }> = {};
-        for (const [id, edit] of Object.entries(prev)) {
-          const liveItem = liveById.get(id);
-          if (liveItem && liveItem.updatedAt !== edit.updatedAt) {
-            next[id] = edit;
+        const liveById = new Map(items.map((item) => [item.id, item]));
+        setOptimisticAdded((prev) => prev.filter((opt) => !liveById.has(opt.id)));
+        setOptimisticDeletedIds((prev) => prev.filter((delId) => liveById.has(delId)));
+        setOptimisticEdits((prev) => {
+          const next: Record<string, { content: string; updatedAt: string }> = {};
+          for (const [id, edit] of Object.entries(prev)) {
+            const liveItem = liveById.get(id);
+            if (liveItem && liveItem.updatedAt !== edit.updatedAt) {
+              next[id] = edit;
+            }
           }
-        }
-        return next;
-      });
-    });
+          return next;
+        });
+      },
+      () => {
+        setIsLoading(false);
+        setThreadNotice((prev) =>
+          prev || {
+            type: 'error',
+            message: 'Unable to load existing comments right now. You can still submit a new comment below.'
+          }
+        );
+      }
+    );
 
     return () => unsubscribe();
   }, [postId]);
@@ -192,6 +206,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
   // Submit new top-level comment (instant publishing)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLockRef.current || isSubmitting) return;
+    submitLockRef.current = true;
     setErrorMsg(null);
     setSuccessMsg(null);
     setThreadNotice(null);
@@ -223,6 +239,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       setHoneypot('');
       setSuccessMsg('Your comment has been published.');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -246,8 +263,9 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
 
   const handleSubmitReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyTarget) return;
+    if (!replyTarget || replyLockRef.current || isSubmittingReply) return;
 
+    replyLockRef.current = true;
     setReplyErrorMsg(null);
     setThreadNotice(null);
     setIsSubmittingReply(true);
@@ -286,6 +304,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       setReplyTarget(null);
       showThreadNotice('success', 'Your reply has been published.');
     } finally {
+      replyLockRef.current = false;
       setIsSubmittingReply(false);
     }
   };
@@ -798,7 +817,6 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       id="article-comments"
       aria-labelledby="article-comments-heading"
       className="pt-8 border-t border-slate-200 space-y-6 scroll-mt-36 sm:scroll-mt-40"
-      style={{ scrollMarginTop: 'calc(9rem + var(--mini-shop-height, 0px))' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center space-x-2.5">

@@ -23,7 +23,6 @@ export const DEFAULT_PROJECT_ID = 'isezerano-news';
 export const DEFAULT_DATABASE_ID = '(default)';
 export const DEFAULT_ROOT_COLLECTIONS = [
   'comments',
-  'mini_shop_products',
   'appSettings',
   'siteSettings',
   'posts'
@@ -49,43 +48,6 @@ export const COMMENT_PRIVATE_FIELDS = [
   'ownerSecret',
   'ipAddress',
   'verifier'
-];
-
-export const MINI_SHOP_REQUIRED_FIELDS = [
-  'id',
-  'title',
-  'description',
-  'imageUrl',
-  'active',
-  'displayOrder',
-  'createdAt',
-  'updatedAt',
-  'publicSafe'
-];
-
-export const MINI_SHOP_PUBLIC_FIELDS = [
-  'id',
-  'title',
-  'description',
-  'price',
-  'imageUrl',
-  'imageStorageMode',
-  'whatsappNumber',
-  'phoneNumber',
-  'active',
-  'displayOrder',
-  'createdAt',
-  'updatedAt',
-  'publicSafe'
-];
-
-export const MINI_SHOP_KNOWN_PRIVATE_FIELDS = [
-  'sellerEmail',
-  'supplierPhone',
-  'updatedBy',
-  'costPrice',
-  'internalNotes',
-  'adminNotes'
 ];
 
 export const PUBLIC_ALLOWLISTED_SETTINGS_PATHS = new Set([
@@ -582,129 +544,6 @@ export function buildCommentsDryRunPlan(commentsBackup) {
 }
 
 /**
- * Evaluates a backed-up /mini_shop_products collection against the hardened firestore.rules schema.
- */
-export function buildMiniShopDryRunPlan(productsBackup) {
-  const summary = {
-    totalProductDocs: productsBackup.documents.length,
-    existingDocs: 0,
-    missingParentPlaceholders: 0,
-    activeProducts: 0,
-    inactiveProducts: 0,
-    compliantWithNewRules: 0,
-    missingPublicSafeTrue: 0,
-    missingRequiredPublicFields: 0,
-    containingPrivateOrExtraFields: 0,
-    withPrivateSubcollection: 0,
-    visibleCurrentlyUnderPublicSafeFilter: 0,
-    wouldDisappearWithoutMigration: 0,
-    nonPublicFieldCounts: {}
-  };
-
-  const documentPlans = [];
-
-  for (const doc of productsBackup.documents) {
-    const privateDocs = doc.subcollections?.private?.documents || [];
-    if (privateDocs.length > 0) summary.withPrivateSubcollection += 1;
-
-    if (!doc.exists) {
-      summary.missingParentPlaceholders += 1;
-      documentPlans.push({
-        id: doc.id,
-        path: doc.path,
-        exists: false,
-        category: 'phantom_parent_with_subcollections',
-        subcollectionCounts: { private: privateDocs.length },
-        requiresMigration: false
-      });
-      continue;
-    }
-
-    summary.existingDocs += 1;
-    const data = doc.data || {};
-    const isActive = data.active === true;
-    if (isActive) summary.activeProducts += 1;
-    else summary.inactiveProducts += 1;
-
-    const keys = Object.keys(data);
-    const nonPublicFields = keys.filter((k) => !MINI_SHOP_PUBLIC_FIELDS.includes(k));
-    const missingRequired = MINI_SHOP_REQUIRED_FIELDS.filter((k) => !(k in data));
-    const hasContact =
-      (typeof data.whatsappNumber === 'string' && data.whatsappNumber.trim().length > 0) ||
-      (typeof data.phoneNumber === 'string' && data.phoneNumber.trim().length > 0);
-
-    if (data.publicSafe !== true) summary.missingPublicSafeTrue += 1;
-    if (missingRequired.length > 0) summary.missingRequiredPublicFields += 1;
-    if (nonPublicFields.length > 0) {
-      summary.containingPrivateOrExtraFields += 1;
-      for (const f of nonPublicFields) {
-        summary.nonPublicFieldCounts[f] = (summary.nonPublicFieldCounts[f] || 0) + 1;
-      }
-    }
-
-    const isCompliant = missingRequired.length === 0 && nonPublicFields.length === 0 && data.publicSafe === true && hasContact;
-    if (isCompliant) summary.compliantWithNewRules += 1;
-    if (isActive && data.publicSafe === true && nonPublicFields.length === 0 && missingRequired.length === 0) {
-      summary.visibleCurrentlyUnderPublicSafeFilter += 1;
-    } else if (isActive) {
-      summary.wouldDisappearWithoutMigration += 1;
-    }
-
-    const parentFieldsToSet = {};
-    if (!('id' in data) || !data.id) parentFieldsToSet.id = doc.id;
-    const fallbackTs = doc.createTime || doc.updateTime || new Date().toISOString();
-    if (!('createdAt' in data) || typeof data.createdAt !== 'string') parentFieldsToSet.createdAt = fallbackTs;
-    if (!('updatedAt' in data) || typeof data.updatedAt !== 'string') parentFieldsToSet.updatedAt = doc.updateTime || fallbackTs;
-    if (!('displayOrder' in data) || typeof data.displayOrder !== 'number') parentFieldsToSet.displayOrder = 0;
-    if (!('active' in data) || typeof data.active !== 'boolean') parentFieldsToSet.active = false;
-    if (data.publicSafe !== true) parentFieldsToSet.publicSafe = true;
-
-    const warnings = [];
-    if (!hasContact) warnings.push('Missing both whatsappNumber and phoneNumber; required by isValidMiniShopProductWrite.');
-    if (!('title' in data)) warnings.push('Missing required field: title.');
-    if (!('description' in data)) warnings.push('Missing required field: description.');
-    if (!('imageUrl' in data)) warnings.push('Missing required field: imageUrl.');
-
-    let category = 'compliant';
-    if (nonPublicFields.length > 0 && Object.keys(parentFieldsToSet).length > 0) {
-      category = 'needs_private_isolation_and_public_backfill';
-    } else if (nonPublicFields.length > 0) {
-      category = 'needs_private_isolation';
-    } else if (Object.keys(parentFieldsToSet).length > 0) {
-      category = 'needs_public_backfill';
-    }
-    if (warnings.length > 0) {
-      category = 'requires_manual_field_review';
-    }
-
-    documentPlans.push({
-      id: doc.id,
-      path: doc.path,
-      active: isActive,
-      exists: true,
-      category,
-      requiresMigration: category !== 'compliant',
-      willRemainVisibleBeforeMigration: isActive && isCompliant,
-      subcollectionCounts: { private: privateDocs.length },
-      missingRequiredPublicFields: missingRequired,
-      nonPublicFieldsFound: nonPublicFields,
-      knownPrivateFieldsFound: nonPublicFields.filter((f) => MINI_SHOP_KNOWN_PRIVATE_FIELDS.includes(f)),
-      migrationActions: {
-        moveFieldsToSubcollection:
-          nonPublicFields.length > 0
-            ? { destinationDocPath: `${doc.path}/private/legacy_meta`, fieldNames: nonPublicFields }
-            : null,
-        deleteFieldsFromParent: nonPublicFields,
-        setFieldsOnParent: parentFieldsToSet
-      },
-      warnings
-    });
-  }
-
-  return { summary, documents: documentPlans };
-}
-
-/**
  * Evaluates /appSettings and /siteSettings visibility changes (keys & doc paths only; zero secret values).
  */
 export function buildSettingsAuditPlan(appSettingsBackup, siteSettingsBackup) {
@@ -727,7 +566,7 @@ export function buildSettingsAuditPlan(appSettingsBackup, siteSettingsBackup) {
   };
 }
 
-export function renderDryRunMarkdownReport({ projectId, generatedAt, counts, commentsPlan, miniShopPlan, settingsPlan, postsBackup }) {
+export function renderDryRunMarkdownReport({ projectId, generatedAt, counts, commentsPlan, settingsPlan, postsBackup }) {
   const lines = [];
   lines.push(`# Firestore Dry-Run Migration & Backup Report (\`${projectId}\`)`);
   lines.push('');
@@ -774,36 +613,7 @@ export function renderDryRunMarkdownReport({ projectId, generatedAt, counts, com
   }
 
   lines.push('');
-  lines.push('## 3. `/mini_shop_products` Dry-Run Migration Analysis');
-  lines.push(`- Total \`/mini_shop_products\` documents inspected: **${miniShopPlan.summary.totalProductDocs}** (active: ${miniShopPlan.summary.activeProducts}, inactive: ${miniShopPlan.summary.inactiveProducts})`);
-  lines.push(`- Already compliant with proposed \`firestore.rules\`: **${miniShopPlan.summary.compliantWithNewRules}**`);
-  lines.push(`- Missing \`publicSafe: true\`: **${miniShopPlan.summary.missingPublicSafeTrue}**`);
-  lines.push(`- Missing required public keys: **${miniShopPlan.summary.missingRequiredPublicFields}**`);
-  lines.push(`- Containing non-public / extra fields (\`sellerEmail\`, \`updatedBy\`, etc.): **${miniShopPlan.summary.containingPrivateOrExtraFields}** \`${JSON.stringify(miniShopPlan.summary.nonPublicFieldCounts)}\``);
-  lines.push(`- Subcollections found: \`/private\` on **${miniShopPlan.summary.withPrivateSubcollection}** docs`);
-  lines.push(`- Active products that would disappear if new rules + filters deploy before migration: **${miniShopPlan.summary.wouldDisappearWithoutMigration}**`);
-  lines.push('');
-
-  const productsNeedingChanges = miniShopPlan.documents.filter((d) => d.requiresMigration);
-  if (productsNeedingChanges.length === 0) {
-    lines.push('_No `/mini_shop_products` documents require migration._');
-  } else {
-    lines.push('### Planned Per-Document Changes (`/mini_shop_products`)');
-    lines.push('| Document Path | Active | Action Category | Move Fields To Subcollection | Delete From Parent | Set On Parent | Warnings |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- |');
-    for (const d of productsNeedingChanges) {
-      const moveStr = d.migrationActions.moveFieldsToSubcollection
-        ? `\`${d.migrationActions.moveFieldsToSubcollection.destinationDocPath}\` (${d.migrationActions.moveFieldsToSubcollection.fieldNames.join(', ')})`
-        : 'None';
-      const delStr = d.migrationActions.deleteFieldsFromParent.length > 0 ? d.migrationActions.deleteFieldsFromParent.join(', ') : 'None';
-      const setStr = `\`${JSON.stringify(d.migrationActions.setFieldsOnParent)}\``;
-      const warnStr = d.warnings.length > 0 ? d.warnings.join('; ') : 'None';
-      lines.push(`| \`${d.path}\` | ${d.active} | \`${d.category}\` | ${moveStr} | ${delStr} | ${setStr} | ${warnStr} |`);
-    }
-  }
-
-  lines.push('');
-  lines.push('## 4. `/appSettings` & `/siteSettings` Access Audit');
+  lines.push('## 3. `/appSettings` & `/siteSettings` Access Audit');
   lines.push(`- Total settings documents: **${settingsPlan.totalDocs}** (Public \`get\` allowlisted: ${settingsPlan.publicAllowlistedDocs}, Admin-only: ${settingsPlan.adminOnlyDocs})`);
   lines.push('| Path | Access Under Proposed Rules | Field Keys |');
   lines.push('| --- | --- | --- |');
@@ -812,7 +622,7 @@ export function renderDryRunMarkdownReport({ projectId, generatedAt, counts, com
   }
 
   lines.push('');
-  lines.push('## 5. `/posts` Snapshot Count');
+  lines.push('## 4. `/posts` Snapshot Count');
   lines.push(`- Backed up **${postsBackup.documentCount}** post documents cleanly (no schema migration required for \`/posts\`).`);
   lines.push('');
 
@@ -894,7 +704,6 @@ export async function runBackupAndDryRun({
   );
 
   const commentsPlan = buildCommentsDryRunPlan(collections.comments || { documents: [] });
-  const miniShopPlan = buildMiniShopDryRunPlan(collections.mini_shop_products || { documents: [] });
   const settingsPlan = buildSettingsAuditPlan(collections.appSettings, collections.siteSettings);
 
   const dryRunJson = {
@@ -905,7 +714,6 @@ export async function runBackupAndDryRun({
       mode: 'DRY_RUN_ONLY_ZERO_WRITES'
     },
     comments: commentsPlan,
-    mini_shop_products: miniShopPlan,
     settings: settingsPlan
   };
 
@@ -920,7 +728,6 @@ export async function runBackupAndDryRun({
     generatedAt,
     counts: overallCounts,
     commentsPlan,
-    miniShopPlan,
     settingsPlan,
     postsBackup: collections.posts || { documentCount: 0 }
   });
@@ -953,7 +760,6 @@ export async function runBackupAndDryRun({
     counts: overallCounts,
     dryRunSummary: {
       comments: commentsPlan.summary,
-      mini_shop_products: miniShopPlan.summary,
       settings: {
         totalDocs: settingsPlan.totalDocs,
         publicAllowlistedDocs: settingsPlan.publicAllowlistedDocs,

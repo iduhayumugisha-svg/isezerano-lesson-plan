@@ -4,7 +4,7 @@ import {
   InArticleAdSlotKey
 } from '../types/platform';
 import {
-  hasRenderableAdCode,
+  isInArticleSlotRenderable,
   normalizeInArticleAdsSettings
 } from './inArticleAdUtils';
 
@@ -436,7 +436,7 @@ export function buildArticleRenderSegments(params: {
     orderIndex,
     config: inArticleAds[slotId]
   })).filter((item) => {
-    if (!item.config.enabled || !hasRenderableAdCode(item.config.code)) {
+    if (!isInArticleSlotRenderable(item.config)) {
       return false;
     }
     if (!isSlotAllowedOnDevice(item.config, deviceType)) {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles } from 'lucide-react';
 import {
   InArticleAdSlotConfig,
   InArticleAdSlotKey
@@ -7,10 +7,12 @@ import {
 import {
   analyzeAdCodeSnippet,
   getProviderDisplayName,
-  hasRenderableAdCode,
   installIntrusivePopunderDomGuard,
+  isInArticleSlotRenderable,
   isIntrusivePopunderElement,
+  isSafeAdAssetOrClickUrl,
   isSafeAdScriptUrl,
+  normalizeInArticleAdSlotConfig,
   sanitizeAdCodePayload,
   sanitizeAdConfigText,
   sanitizeStaticAdElement,
@@ -201,12 +203,20 @@ export const InArticleAdSlot: React.FC<InArticleAdSlotProps> = ({
   const appliedSignatureRef = useRef<string>('');
   const [adFillState, setAdFillState] = useState<'pending' | 'filled' | 'empty'>('pending');
 
-  const sanitizedCode = sanitizeAdCodePayload(slotConfig?.code);
+  const normalizedSlot = normalizeInArticleAdSlotConfig(slotId, slotConfig);
+  const isDirectLinkMode = normalizedSlot.adFormat === 'direct_link';
+  const directCard = normalizedSlot.directLinkCard;
+
+  const sanitizedCode = isDirectLinkMode ? '' : sanitizeAdCodePayload(normalizedSlot.code);
+  const isSlotReady = isInArticleSlotRenderable(normalizedSlot);
   const isEnabled = Boolean(
-    slotConfig?.enabled &&
-      hasRenderableAdCode(sanitizedCode) &&
-      (slotConfig.mobileEnabled || slotConfig.desktopEnabled)
+    isSlotReady && (normalizedSlot.mobileEnabled || normalizedSlot.desktopEnabled)
   );
+  const [thumbFailed, setThumbFailed] = useState(false);
+
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [directCard?.thumbnailUrl, articleId, slotId]);
 
   const syncResponsiveEmbedLayout = useCallback(() => {
     const outer = outerWrapperRef.current;
@@ -279,10 +289,13 @@ export const InArticleAdSlot: React.FC<InArticleAdSlotProps> = ({
     const container = codeContainerRef.current;
     const outer = outerWrapperRef.current;
 
-    if (!isEnabled || !container) {
+    if (!isEnabled || isDirectLinkMode || !container) {
       appliedSignatureRef.current = '';
       if (container) container.innerHTML = '';
       if (outer) outer.style.height = '';
+      if (isDirectLinkMode && isEnabled) {
+        setAdFillState('filled');
+      }
       return;
     }
 
@@ -494,9 +507,10 @@ export const InArticleAdSlot: React.FC<InArticleAdSlotProps> = ({
     articleId,
     slotId,
     isEnabled,
+    isDirectLinkMode,
     sanitizedCode,
-    slotConfig.mobileEnabled,
-    slotConfig.desktopEnabled,
+    normalizedSlot.mobileEnabled,
+    normalizedSlot.desktopEnabled,
     syncResponsiveEmbedLayout
   ]);
 
@@ -505,22 +519,121 @@ export const InArticleAdSlot: React.FC<InArticleAdSlotProps> = ({
   }
 
   const deviceVisibilityClass =
-    slotConfig.desktopEnabled && slotConfig.mobileEnabled
+    normalizedSlot.desktopEnabled && normalizedSlot.mobileEnabled
       ? 'block'
-      : slotConfig.desktopEnabled
+      : normalizedSlot.desktopEnabled
       ? 'hidden md:block'
       : 'block md:hidden';
 
-  const disclosureLabel = sanitizeAdConfigText(slotConfig.label, 'Advertisement', 40);
-  const providerName = getProviderDisplayName(slotConfig.provider, slotConfig.providerLabel);
+  const providerName = getProviderDisplayName(normalizedSlot.provider, normalizedSlot.providerLabel);
+
+  if (isDirectLinkMode && directCard) {
+    const cardDisclosure = sanitizeAdConfigText(
+      directCard.disclosureLabel || normalizedSlot.label,
+      'Sponsored',
+      40
+    );
+    const hasThumbnail =
+      Boolean(directCard.thumbnailUrl) &&
+      !thumbFailed &&
+      isSafeAdAssetOrClickUrl(directCard.thumbnailUrl);
+
+    return (
+      <aside
+        aria-label={`${cardDisclosure} (${slotId})`}
+        data-testid={`in-article-ad-${slotId}`}
+        data-ad-placement={`in_article_${slotId}`}
+        data-ad-format="direct_link"
+        data-ad-provider={normalizedSlot.provider}
+        data-after-paragraph={normalizedSlot.afterParagraph}
+        data-ad-fill="filled"
+        className={`no-print my-6 w-full max-w-full min-w-0 clear-both transition-all ${deviceVisibilityClass} ${className}`}
+      >
+        <div className="w-full max-w-full min-w-0 bg-slate-50/95 border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-2xs overflow-hidden">
+          <div className="flex items-center justify-between gap-2 pb-2 mb-3 border-b border-slate-200/70 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+            <span className="flex items-center gap-1.5 min-w-0">
+              <Sparkles className="w-3 h-3 text-amber-500 shrink-0" aria-hidden="true" />
+              <span className="truncate">{cardDisclosure}</span>
+            </span>
+            <span
+              className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono shrink-0"
+              title={providerName}
+            >
+              SPONSORED
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0 flex-1">
+              {hasThumbnail ? (
+                <a
+                  href={directCard.directLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer sponsored"
+                  className="block w-full sm:w-28 h-36 sm:h-20 rounded-xl overflow-hidden bg-slate-200/70 border border-slate-200 shrink-0"
+                >
+                  <img
+                    src={directCard.thumbnailUrl}
+                    alt={directCard.headline}
+                    loading="lazy"
+                    onError={() => setThumbFailed(true)}
+                    className="w-full h-full object-cover"
+                  />
+                </a>
+              ) : (
+                <div
+                  aria-hidden="true"
+                  className="hidden sm:flex w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 items-center justify-center shrink-0"
+                >
+                  <Sparkles className="w-5 h-5 text-teal-700" />
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1 space-y-1">
+                <a
+                  href={directCard.directLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer sponsored"
+                  className="block text-sm sm:text-[15px] font-bold text-slate-900 hover:text-teal-800 leading-snug break-words transition-colors"
+                >
+                  {directCard.headline}
+                </a>
+                {directCard.description && (
+                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-2 break-words m-0">
+                    {directCard.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 w-full sm:w-auto">
+              <a
+                href={directCard.directLinkUrl}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                data-testid={`in-article-ad-${slotId}-cta`}
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-extrabold whitespace-nowrap shadow-2xs transition-colors"
+              >
+                <span>{directCard.ctaText}</span>
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
+  const disclosureLabel = sanitizeAdConfigText(normalizedSlot.label, 'Advertisement', 40);
 
   return (
     <aside
       aria-label={`${disclosureLabel} (${slotId})`}
       data-testid={`in-article-ad-${slotId}`}
       data-ad-placement={`in_article_${slotId}`}
-      data-ad-provider={slotConfig.provider}
-      data-after-paragraph={slotConfig.afterParagraph}
+      data-ad-format="code"
+      data-ad-provider={normalizedSlot.provider}
+      data-after-paragraph={normalizedSlot.afterParagraph}
       data-ad-fill={adFillState}
       className={`no-print my-6 w-full max-w-full min-w-0 clear-both transition-all ${deviceVisibilityClass} ${className}`}
     >

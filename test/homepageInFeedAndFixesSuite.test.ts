@@ -31,6 +31,10 @@ import {
   GlobalAdScripts,
   __resetGlobalAdScriptsCacheForTests
 } from '../src/components/GlobalAdScripts';
+import {
+  MonetagVignetteBanner,
+  __resetMonetagVignetteCacheForTests
+} from '../src/components/MonetagVignetteBanner';
 import { AdSlot } from '../src/components/AdSlot';
 import { InArticleAdSlot } from '../src/components/InArticleAdSlot';
 import { HomepageInFeedAdSlot } from '../src/components/HomepageInFeedAdSlot';
@@ -158,6 +162,20 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
   const contaminatedSettings: AdsSettings = {
     ...DEFAULT_ADS_SETTINGS,
     masterEnabled: true,
+    vignetteAd: {
+      enabled: true,
+      zoneId: '12322670',
+      scriptUrl: 'https://n6wxm.com/vignette.min.js',
+      mobileEnabled: true,
+      desktopEnabled: true
+    },
+    inPagePushAd: {
+      enabled: true,
+      zoneId: '12321969',
+      scriptUrl: 'https://nap5k.com/tag.min.js',
+      mobileEnabled: true,
+      desktopEnabled: true
+    },
     belowHeaderAd: {
       enabled: true,
       type: 'code',
@@ -196,6 +214,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
   };
 
   __resetAdsSettingsCacheForTests();
+  __resetMonetagVignetteCacheForTests();
   (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
     dom.window.setTimeout(() => cb(Date.now()), 0);
   (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
@@ -225,8 +244,9 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
       React.createElement(
         React.Fragment,
         null,
+        React.createElement(MonetagVignetteBanner, { currentPage: 'home' }),
         React.createElement(GlobalAdScripts, { currentPage: 'home' }),
-        React.createElement(AdSlot, { placement: 'below_header' }),
+        React.createElement(AdSlot, { placement: 'below_header' as any }),
         React.createElement(AdSlot, { placement: 'above_footer' }),
         React.createElement(InArticleAdSlot, {
           slotId: 'slot1',
@@ -275,9 +295,13 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
     const metaTag = dom.window.document.head.querySelector('meta[name="monetag"]');
     assert.equal(metaTag?.getAttribute('content'), 'verify-keep-me');
 
-    // Pure popunder Below Header & In-Article Slot 1 collapse cleanly
+    // Removed below_header collapses cleanly & In-Article pure popunder collapses cleanly
     assert.equal(container.querySelector('[data-ad-placement="below_header"]'), null);
     assert.equal(container.querySelector('[data-testid="in-article-ad-slot1"]'), null);
+
+    // Vignette & In-Page Push mount cleanly without Popunders
+    assert.ok(dom.window.document.querySelector('script[data-isezerano-vignette="true"][data-zone="12322670"]'));
+    assert.ok(dom.window.document.querySelector('script[data-isezerano-global-ad="monetag-in-page-push"][data-zone="12321969"]'));
 
     // Mixed Above Footer & Homepage In-Feed Slot 1 keep safe native script only
     assert.ok(container.querySelector('[data-ad-placement="above_footer"] .safe-footer script[src="https://cdn.example.com/footer-native.js"]'));
@@ -512,16 +536,23 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   assert.match(adminFeedHtml, /Kwamamaza/);
   assert.match(adminFeedHtml, /Advertisement/);
 
-  // Verify AdsManager imports HomepageInFeedAdManagerSection and preserves all 8 positions + Top Video Ad + Global Scripts
+  // Verify AdsManager imports HomepageInFeedAdManagerSection, Vignette/In-Page Push controls & preserves Top Video Ad + Global Scripts without Below Website Header
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
-  assert.match(adsMgrSrc, /1\. Below Website Header/);
+  assert.doesNotMatch(adsMgrSrc, /1\. Below Website Header/);
+  assert.match(adsMgrSrc, /1\. Monetag Vignette Banner/);
   assert.match(adsMgrSrc, /2\. Above Website Footer/);
   assert.match(adsMgrSrc, /<InArticleAdManagerSection/);
   assert.match(adsMgrSrc, /<HomepageInFeedAdManagerSection/);
   assert.match(adsMgrSrc, /normalizeHomepageInFeedAdsSettings/);
+  assert.match(adsMgrSrc, /normalizeVignetteAdConfig/);
+  assert.match(adsMgrSrc, /normalizeInPagePushAdConfig/);
   assert.match(adsMgrSrc, /aboveHeaderVideoAd/);
 
-  // Verify Comment Orphan Reply target fix and Firestore Rules batch efficiency
+  const inArticleMgrSrc = fs.readFileSync(path.resolve('src/components/InArticleAdManagerSection.tsx'), 'utf8');
+  assert.match(inArticleMgrSrc, /ads-in-page-push-manager/);
+  assert.match(inArticleMgrSrc, /Direct Link Sponsored Ad Card/);
+
+  // Verify Comment Orphan Reply target fix and acyclic Firestore Rules
   const commentSectionSrc = fs.readFileSync(
     path.resolve('src/components/ArticleCommentsSection.tsx'),
     'utf8'
@@ -537,8 +568,14 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   assert.match(rulesSrc, /function hasValidOwnershipAfterForToken\(/);
   assert.match(rulesSrc, /function hasValidPeerDocsAfterForOwnership\(/);
   assert.doesNotMatch(rulesSrc, /\$\(getAfter\(/, 'Nested getAfter substitutions must stay eliminated');
+  const ownershipPeerFn = (rulesSrc.match(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0];
+  assert.doesNotMatch(ownershipPeerFn, /getAfter\(/, 'hasValidPeerDocsAfterForOwnership must remain acyclic without circular getAfter');
+  assert.match(
+    rulesSrc,
+    /isValidCommentId\(data\.parentId\)[\s\S]*?exists\([^)]*comments\/\$\(data\.parentId\)\)[\s\S]*?hasValidParentComment\(data\)/
+  );
 
-  console.log('✓ 4. Admin UI all 8 independent ad positions, orphan-reply fix & streamlined Firestore rules verified');
+  console.log('✓ 4. Admin UI restructured ad positions, Direct Link / Push controls, orphan-reply fix & acyclic Firestore rules verified');
 }
 
 async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promise<void> {
@@ -563,7 +600,7 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
   assert.equal(sanitizeAdCodePayload(`${inlineJsPopunder}\n${legitimateVignette}`), legitimateVignette);
 
   // 2. Runtime JSDOM test: MutationObserver DOM guard blocks dynamically injected quge5/313598 nodes,
-  // duplicate Vignette in below_header + above_footer executes ONLY ONCE, native banners between paragraphs work independently,
+  // duplicate Vignette in vignetteAd + globalScripts + above_footer executes ONLY ONCE, native banners between paragraphs work independently,
   // and clicking an ordinary article link does not invoke window.open.
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div><a id="article-link" href="/blog/test-story">Read Story</a></body></html>', {
     url: 'https://isezerano.online/blog/test-story'
@@ -579,14 +616,37 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
   const prevRAF = (globalThis as any).requestAnimationFrame;
   const prevCAF = (globalThis as any).cancelAnimationFrame;
 
+  __resetAdsSettingsCacheForTests();
+  __resetMonetagVignetteCacheForTests();
+  (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
+    dom.window.setTimeout(() => cb(Date.now()), 0);
+  (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
+  (globalThis as any).window = dom.window;
+  (globalThis as any).document = dom.window.document;
+  (globalThis as any).CSS = { escape: (v: string) => v };
+  (globalThis as any).MutationObserver = dom.window.MutationObserver;
+  (globalThis as any).ResizeObserver = undefined;
+  (globalThis as any).requestAnimationFrame = (dom.window as any).requestAnimationFrame;
+  (globalThis as any).cancelAnimationFrame = (dom.window as any).cancelAnimationFrame;
+
+  // Duplicate Vignette (zone 12322670) across vignetteAd + globalScripts + aboveFooterAd executes ONLY ONCE,
+  // removed below_header never renders, native banners between paragraphs work independently, and ordinary clicks trigger zero popups.
   const auditSettings: AdsSettings = {
     ...DEFAULT_ADS_SETTINGS,
     masterEnabled: true,
-    belowHeaderAd: {
+    vignetteAd: {
       enabled: true,
-      type: 'code',
-      label: 'Advertisement',
-      code: legitimateVignette
+      zoneId: '12322670',
+      scriptUrl: 'https://n6wxm.com/vignette.min.js',
+      mobileEnabled: true,
+      desktopEnabled: true
+    },
+    globalScripts: {
+      enabled: true,
+      provider: 'monetag',
+      code: legitimateVignette,
+      mobileEnabled: true,
+      desktopEnabled: true
     },
     aboveFooterAd: {
       enabled: true,
@@ -617,16 +677,6 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
     unexpectedOpenCount += 1;
     return null;
   };
-  (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
-    dom.window.setTimeout(() => cb(Date.now()), 0);
-  (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
-  (globalThis as any).window = dom.window;
-  (globalThis as any).document = dom.window.document;
-  (globalThis as any).CSS = { escape: (v: string) => v };
-  (globalThis as any).MutationObserver = dom.window.MutationObserver;
-  (globalThis as any).ResizeObserver = undefined;
-  (globalThis as any).requestAnimationFrame = (dom.window as any).requestAnimationFrame;
-  (globalThis as any).cancelAnimationFrame = (dom.window as any).cancelAnimationFrame;
   (globalThis as any).localStorage = {
     getItem: (key: string) =>
       key === 'isezerano_ads_settings' ? JSON.stringify(auditSettings) : null,
@@ -646,8 +696,9 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
       React.createElement(
         React.Fragment,
         null,
+        React.createElement(MonetagVignetteBanner, { currentPage: 'blog' }),
         React.createElement(GlobalAdScripts, { currentPage: 'blog' }),
-        React.createElement(AdSlot, { placement: 'below_header' }),
+        React.createElement(AdSlot, { placement: 'below_header' as any }),
         React.createElement(InArticleAdSlot, {
           slotId: 'slot1',
           articleId: 'audit-article-1',
@@ -681,15 +732,16 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
 
     await new Promise((r) => setTimeout(r, 140));
 
-    // A. Duplicate Vignette (zone 12322670) across below_header + above_footer executed ONLY ONCE
+    // A. Duplicate Vignette (zone 12322670) across MonetagVignetteBanner + globalScripts + above_footer executed ONLY ONCE
     const vignetteExecScripts = Array.from(
-      container.querySelectorAll('[data-ad-placement="below_header"] script, [data-ad-placement="above_footer"] script')
+      dom.window.document.querySelectorAll('script[src*="vignette.min.js"], script[data-zone="12322670"]')
     );
     assert.equal(
       vignetteExecScripts.length,
       1,
-      'Duplicate Vignette overlay script across below_header + above_footer must execute only once'
+      'Duplicate Vignette overlay script across MonetagVignetteBanner, globalScripts & above_footer must execute only once'
     );
+    assert.equal(container.querySelector('[data-ad-placement="below_header"]'), null);
 
     // B. Native Banners between paragraphs both rendered and mounted their scripts independently
     assert.ok(
@@ -781,13 +833,15 @@ function testLegitimateMonetagInPagePushAndAdminStateSaveCleanup(): void {
   assert.equal(detectIntrusivePopunderAdCode(confirmedPopunder), true);
   assert.equal(sanitizeAdCodePayload(confirmedPopunder), '');
 
-  // 4. AdsManager normalizes belowHeaderAd and aboveFooterAd when loading and saving state (preventing stale UI warnings)
+  // 4. AdsManager normalizes vignetteAd, inPagePushAd and aboveFooterAd cleanly when loading and saving state
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   assert.match(adsMgrSrc, /normalizeStandardAdSlotConfig\(/);
+  assert.match(adsMgrSrc, /normalizeVignetteAdConfig\(/);
+  assert.match(adsMgrSrc, /normalizeInPagePushAdConfig\(/);
   const stdNormalizeCalls = adsMgrSrc.match(/normalizeStandardAdSlotConfig\(/g) || [];
   assert.ok(
-    stdNormalizeCalls.length >= 6,
-    'AdsManager load & save paths must normalize belowHeaderAd & aboveFooterAd cleanly'
+    stdNormalizeCalls.length >= 2,
+    'AdsManager load & save paths must normalize aboveFooterAd, vignetteAd & inPagePushAd cleanly'
   );
 
   console.log('✓ 6. Monetag In-Page Push (nap5k.com) allowed, comment false-positives resolved & AdsManager save/reload normalization verified');

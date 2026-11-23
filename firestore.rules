@@ -159,7 +159,7 @@ service cloud.firestore {
       return id is string &&
              id.size() > 0 &&
              id.size() <= 128 &&
-             id.matches('^[a-zA-Z0-9_\\-]+$');
+             id.matches('^[a-zA-Z0-9_-]+$');
     }
 
     function hasNoPrivateCommentFields(data) {
@@ -204,10 +204,10 @@ service cloud.firestore {
              hasNoPrivateCommentFields(data);
     }
 
+    // Must ONLY be called after verifying isValidCommentId(data.parentId) && exists(.../comments/$(data.parentId))
     function hasValidParentComment(data) {
       let parent = get(/databases/$(database)/documents/comments/$(data.parentId));
-      return isValidCommentId(data.parentId) &&
-             parent != null &&
+      return parent != null &&
              parent.data.postId == data.postId &&
              parent.data.status in ['published', 'approved'] &&
              parent.data.publicSafe == true;
@@ -220,7 +220,11 @@ service cloud.firestore {
              data.postId.size() <= 120 &&
              (
                data.parentId == null ||
-               hasValidParentComment(data)
+               (
+                 isValidCommentId(data.parentId) &&
+                 exists(/databases/$(database)/documents/comments/$(data.parentId)) &&
+                 hasValidParentComment(data)
+               )
              ) &&
              (
                (data.parentId == null && data.replyToName == null) ||
@@ -247,6 +251,7 @@ service cloud.firestore {
              data.edited == false;
     }
 
+    // Must ONLY be called after verifying existsAfter(.../private/ownership)
     function hasValidOwnershipAfterForComment(commentId, data) {
       let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
       return ownershipAfter != null &&
@@ -256,6 +261,7 @@ service cloud.firestore {
              ownershipAfter.data.createdAt == data.createdAt;
     }
 
+    // Must ONLY be called after verifying existsAfter(.../private/ownership)
     function hasValidOwnershipAfterForToken(commentId, tokenId, data) {
       let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
       return ownershipAfter != null &&
@@ -264,47 +270,58 @@ service cloud.firestore {
              ownershipAfter.data.createdAt == data.createdAt;
     }
 
+    // Acyclic existence check: private/ownership verifies both peer documents exist in the atomic batch
+    // without triggering circular getAfter evaluations back onto /comments and /tokens.
     function hasValidPeerDocsAfterForOwnership(commentId, data) {
-      let commentAfter = getAfter(/databases/$(database)/documents/comments/$(commentId));
-      let tokenAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
-      return commentAfter != null &&
-             tokenAfter != null &&
-             commentAfter.data.postId == data.postId &&
-             commentAfter.data.createdAt == data.createdAt &&
-             tokenAfter.data.tokenHash == data.tokenHash &&
-             tokenAfter.data.postId == data.postId &&
-             tokenAfter.data.createdAt == data.createdAt;
+      return existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
+             existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
     }
 
     function sha256LowerHex(value) {
       return hashing.sha256(value.toUtf8()).toHexString().lower();
     }
 
-    function hasValidCommentVerifier(commentId, verifier, commentData, syncedAt) {
-      let tokenParts = verifier is string ? verifier.split(':') : [];
-      let rawToken = tokenParts.size() == 2 ? tokenParts[0] : '';
-      let expectedHash = sha256LowerHex(rawToken);
-      let ownershipDoc = get(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
-      let tokenDoc = get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(expectedHash));
+    function isValidVerifierFormat(verifier, syncedAt) {
       return verifier is string &&
              verifier.size() >= 97 &&
              verifier.size() <= 193 &&
              verifier.matches('^[a-fA-F0-9]{32,128}:[a-f0-9]{64}$') &&
-             tokenParts.size() == 2 &&
              syncedAt is string &&
-             syncedAt.size() >= 10 &&
-             ownershipDoc != null &&
-             ownershipDoc.data.tokenHash == expectedHash &&
-             tokenDoc != null &&
+             syncedAt.size() >= 10;
+    }
+
+    // Must ONLY be called after verifying exists(.../tokens/$(expectedHash))
+    function hasValidCommentTokenDoc(commentId, expectedHash, rawToken, actionProof, commentData, syncedAt) {
+      let tokenDoc = get(/databases/$(database)/documents/comments/$(commentId)/tokens/$(expectedHash));
+      return tokenDoc != null &&
              tokenDoc.data.tokenHash == expectedHash &&
              tokenDoc.data.postId == commentData.postId &&
              tokenDoc.data.createdAt == commentData.createdAt &&
-             tokenParts[1] ==
+             actionProof ==
                sha256LowerHex(
                  rawToken + ':' + commentData.postId + ':' + commentData.createdAt + ':' + syncedAt
                );
     }
 
+    // Must ONLY be called after verifying isValidVerifierFormat(verifier, syncedAt) && ownershipDoc != null
+    function hasValidCommentVerifierProof(commentId, verifier, commentData, syncedAt, ownershipDoc) {
+      let tokenParts = verifier.split(':');
+      let rawToken = tokenParts[0];
+      let expectedHash = sha256LowerHex(rawToken);
+      return tokenParts.size() == 2 &&
+             ownershipDoc.data.tokenHash == expectedHash &&
+             exists(/databases/$(database)/documents/comments/$(commentId)/tokens/$(expectedHash)) &&
+             hasValidCommentTokenDoc(
+               commentId,
+               expectedHash,
+               rawToken,
+               tokenParts[1],
+               commentData,
+               syncedAt
+             );
+    }
+
+    // Must ONLY be called after verifying exists(.../private/ownership) && existsAfter(.../private/ownership)
     function isValidPublicCommentOwnerEdit(data, existingData, commentId) {
       let ownershipBefore = get(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
       let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
@@ -324,13 +341,61 @@ service cloud.firestore {
              ownershipAfter != null &&
              ownershipBefore.data.postId == existingData.postId &&
              ownershipBefore.data.lastSyncedAt != ownershipAfter.data.lastSyncedAt &&
-             ownershipAfter.data.verifier != ownershipBefore.data.verifier &&
+             ownershipBefore.data.verifier != ownershipAfter.data.verifier &&
              ownershipAfter.data.lastSyncedAt == data.updatedAt &&
-             hasValidCommentVerifier(
+             isValidVerifierFormat(ownershipAfter.data.verifier, data.updatedAt) &&
+             hasValidCommentVerifierProof(
                commentId,
                ownershipAfter.data.verifier,
                existingData,
-               data.updatedAt
+               data.updatedAt,
+               ownershipBefore
+             );
+    }
+
+    // Must ONLY be called after verifying exists(.../private/ownership) && existsAfter(.../private/ownership)
+    function isValidPublicCommentOwnerDelete(existingData, commentId) {
+      let ownershipBefore = get(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
+      return existingData.status in ['published', 'approved'] &&
+             ownershipBefore != null &&
+             ownershipAfter != null &&
+             ownershipBefore.data.postId == existingData.postId &&
+             ownershipBefore.data.lastSyncedAt != ownershipAfter.data.lastSyncedAt &&
+             ownershipBefore.data.verifier != ownershipAfter.data.verifier &&
+             isValidVerifierFormat(ownershipAfter.data.verifier, ownershipAfter.data.lastSyncedAt) &&
+             hasValidCommentVerifierProof(
+               commentId,
+               ownershipAfter.data.verifier,
+               existingData,
+               ownershipAfter.data.lastSyncedAt,
+               ownershipBefore
+             );
+    }
+
+    // Must ONLY be called after verifying exists(/databases/$(database)/documents/comments/$(commentId))
+    function isValidPublicOwnershipUpdate(commentId, newData, existingData) {
+      let commentDoc = get(/databases/$(database)/documents/comments/$(commentId));
+      return commentDoc != null &&
+             existingData.postId == commentDoc.data.postId &&
+             existingData.createdAt == commentDoc.data.createdAt &&
+             newData.diff(existingData).affectedKeys().hasOnly(['verifier', 'lastSyncedAt']) &&
+             newData.verifier != existingData.verifier &&
+             newData.lastSyncedAt is string &&
+             newData.lastSyncedAt.size() >= 10 &&
+             newData.lastSyncedAt.size() <= 80 &&
+             newData.lastSyncedAt != existingData.lastSyncedAt &&
+             isValidVerifierFormat(newData.verifier, newData.lastSyncedAt) &&
+             hasValidCommentVerifierProof(
+               commentId,
+               newData.verifier,
+               commentDoc.data,
+               newData.lastSyncedAt,
+               resource
+             ) &&
+             (
+               !existsAfter(/databases/$(database)/documents/comments/$(commentId)) ||
+               getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt == newData.lastSyncedAt
              );
     }
 
@@ -358,6 +423,7 @@ service cloud.firestore {
         isValidCommentId(commentId) &&
         isValidPublicCommentCreate(request.resource.data) &&
         !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
         hasValidOwnershipAfterForComment(commentId, request.resource.data)
       );
 
@@ -366,25 +432,19 @@ service cloud.firestore {
       allow update: if (
         isAdmin() &&
         (!('publicSafe' in request.resource.data) || request.resource.data.publicSafe != true || hasRequiredPublicCommentFields(request.resource.data))
-      ) || isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId);
+      ) || (
+        resource != null &&
+        exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        isValidPublicCommentOwnerEdit(request.resource.data, resource.data, commentId)
+      );
 
       // Owners (proven via atomic batch against /private/ownership & /tokens) or Admin can delete comments.
       allow delete: if isAdmin() || (
         resource != null &&
-        resource.data.status in ['published', 'approved'] &&
         exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.postId ==
-          resource.data.postId &&
-        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt !=
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt &&
-        get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier &&
-        hasValidCommentVerifier(
-          commentId,
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier,
-          resource.data,
-          getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.lastSyncedAt
-        )
+        existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
+        isValidPublicCommentOwnerDelete(resource.data, commentId)
       );
 
       // Cryptographic ownership tokens (Admin-only read/list/update/delete; public create ONLY atomically with a new comment & ownership)
@@ -404,6 +464,7 @@ service cloud.firestore {
           request.resource.data.createdAt.size() >= 10 &&
           request.resource.data.createdAt.size() <= 60 &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
+          existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
           hasValidOwnershipAfterForToken(commentId, tokenId, request.resource.data)
         );
       }
@@ -434,26 +495,9 @@ service cloud.firestore {
         );
         allow update: if isAdmin() || (
           ownershipId == 'ownership' &&
+          resource != null &&
           exists(/databases/$(database)/documents/comments/$(commentId)) &&
-          resource.data.postId == get(/databases/$(database)/documents/comments/$(commentId)).data.postId &&
-          resource.data.createdAt == get(/databases/$(database)/documents/comments/$(commentId)).data.createdAt &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifier', 'lastSyncedAt']) &&
-          request.resource.data.verifier != resource.data.verifier &&
-          request.resource.data.lastSyncedAt is string &&
-          request.resource.data.lastSyncedAt.size() >= 10 &&
-          request.resource.data.lastSyncedAt.size() <= 80 &&
-          request.resource.data.lastSyncedAt != resource.data.lastSyncedAt &&
-          hasValidCommentVerifier(
-            commentId,
-            request.resource.data.verifier,
-            get(/databases/$(database)/documents/comments/$(commentId)).data,
-            request.resource.data.lastSyncedAt
-          ) &&
-          (
-            (!existsAfter(/databases/$(database)/documents/comments/$(commentId))) ||
-            getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt ==
-              request.resource.data.lastSyncedAt
-          )
+          isValidPublicOwnershipUpdate(commentId, request.resource.data, resource.data)
         );
       }
     }
@@ -485,101 +529,7 @@ service cloud.firestore {
     }
 
     // ==============================================================
-    // 9. Fixed Mini Shop / Product Showcase
-    //
-    // Security guarantees:
-    // - Public /mini_shop_products/{productId} documents are rule-enforced on every write
-    //   to contain ONLY explicitly approved public showcase fields (`publicSafe == true` + 12 public fields).
-    // - Private seller metadata / internal notes MUST live in /mini_shop_products/{productId}/private/{metaId}
-    //   which is strictly Admin-only.
-    // - Public visitors can ONLY read products where `active == true` AND `publicSafe == true`.
-    // - Inactive or un-migrated products with extra fields are blocked from public reads.
-    // ==============================================================
-    function hasOnlyMiniShopPublicFields(data) {
-      return data.keys().hasOnly([
-               'id',
-               'title',
-               'description',
-               'price',
-               'imageUrl',
-               'imageStorageMode',
-               'whatsappNumber',
-               'phoneNumber',
-               'active',
-               'displayOrder',
-               'createdAt',
-               'updatedAt',
-               'publicSafe'
-             ]) &&
-             data.publicSafe == true;
-    }
-
-    function hasRequiredMiniShopPublicFields(data) {
-      return hasOnlyMiniShopPublicFields(data) &&
-             data.keys().hasAll([
-               'id',
-               'title',
-               'description',
-               'imageUrl',
-               'active',
-               'displayOrder',
-               'createdAt',
-               'updatedAt',
-               'publicSafe'
-             ]);
-    }
-
-    function isValidMiniShopProductWrite(data) {
-      return hasRequiredMiniShopPublicFields(data) &&
-             data.id is string &&
-             data.id.size() > 0 &&
-             data.id.size() <= 128 &&
-             data.title is string &&
-             data.title.size() >= 2 &&
-             data.title.size() <= 90 &&
-             data.description is string &&
-             data.description.size() >= 2 &&
-             data.description.size() <= 200 &&
-             (!('price' in data) || (data.price is string && data.price.size() <= 40)) &&
-             data.imageUrl is string &&
-             data.imageUrl.size() >= 5 &&
-             data.imageUrl.size() <= 750000 &&
-             (!('imageStorageMode' in data) || data.imageStorageMode in ['firebase_storage', 'firestore_embedded']) &&
-             (!('whatsappNumber' in data) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 30)) &&
-             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 30)) &&
-             (('whatsappNumber' in data && data.whatsappNumber.size() > 0) || ('phoneNumber' in data && data.phoneNumber.size() > 0)) &&
-             data.active is bool &&
-             data.displayOrder is int &&
-             data.displayOrder >= 0 &&
-             data.createdAt is string &&
-             data.createdAt.size() >= 10 &&
-             data.createdAt.size() <= 60 &&
-             data.updatedAt is string &&
-             data.updatedAt.size() >= 10 &&
-             data.updatedAt.size() <= 60;
-    }
-
-    match /mini_shop_products/{productId} {
-      allow get: if isAdmin() || (
-        resource != null &&
-        resource.data.active == true &&
-        hasRequiredMiniShopPublicFields(resource.data)
-      );
-      allow list: if isAdmin() || (
-        resource.data.active == true &&
-        hasOnlyMiniShopPublicFields(resource.data)
-      );
-      allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);
-      allow delete: if isAdmin();
-
-      // Admin-only private seller metadata, costs, supplier contacts, or internal notes
-      match /private/{metaId} {
-        allow read, write: if isAdmin();
-      }
-    }
-
-    // ==============================================================
-    // 10. Default deny for all other paths and removed legacy collections
+    // 9. Default deny for all other paths and removed legacy collections
     // ==============================================================
     match /{document=**} {
       allow read, write: if false;

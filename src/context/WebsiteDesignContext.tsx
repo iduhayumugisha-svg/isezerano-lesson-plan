@@ -12,7 +12,6 @@ import {
   NavigationMenuItem,
   WebsiteDesignVersion,
   WhatsAppContactSettings,
-  MiniShopDisplaySettings,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
   DEFAULT_WEBSITE_TYPOGRAPHY,
@@ -21,21 +20,15 @@ import {
   DEFAULT_CATEGORY_NAV_APPEARANCE,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
-  DEFAULT_WHATSAPP_CONTACT,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
+  DEFAULT_WHATSAPP_CONTACT
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings } from '../utils/categoryStyleUtils';
-import { normalizeMiniShopDisplaySettings } from '../utils/displaySettingsUtils';
-import { normalizeShopVideoConfig } from '../services/shopVideoService';
-import { ShopVideoConfig } from '../types/platform';
 import { 
   getWebsiteDesignSettings, 
   getPublicWebsiteDesignSettings,
   getCachedWebsiteDesignSettingsSync,
   saveWebsiteDesignSettings,
-  saveMiniShopDisplayToFirestore,
-  saveShopVideoToFirestore,
   restoreWebsiteDesignVersion,
   applyDesignCssVariables,
   updateBrowserFavicon,
@@ -93,20 +86,8 @@ interface WebsiteDesignContextType {
     summaryNote?: string
   ) => Promise<{ success: boolean; error?: string }>;
 
-  // Mini Shop Display Settings Actions
-  updateDraftMiniShopDisplay: (miniShopDisplay: Partial<MiniShopDisplaySettings>) => void;
-  saveMiniShopDisplaySettings: (
-    nextSettings: MiniShopDisplaySettings,
-    summaryNote?: string
-  ) => Promise<{ success: boolean; error?: string }>;
-
-  // Shop Vimeo Video Actions
-  saveShopVideoConfig: (
-    nextVideo: ShopVideoConfig | null
-  ) => Promise<{ success: boolean; error?: string; normalized?: ShopVideoConfig | null }>;
-
   // Reset & Undo Actions
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'miniShopDisplay' | 'all') => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
   resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
@@ -123,8 +104,6 @@ interface WebsiteDesignContextType {
   homepageSections: HomepageSectionConfig[];
   navigationMenus: NavigationMenuItem[];
   whatsappContact: WhatsAppContactSettings;
-  miniShopDisplay: MiniShopDisplaySettings;
-  shopVideo: ShopVideoConfig | null;
   versionHistory: WebsiteDesignVersion[];
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
@@ -725,96 +704,7 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const updateDraftMiniShopDisplay = (partialDisplay: Partial<MiniShopDisplaySettings>) => {
-    setDraftSettings(prev => ({
-      ...prev,
-      miniShopDisplay: normalizeMiniShopDisplaySettings({
-        ...(prev.miniShopDisplay || DEFAULT_MINI_SHOP_DISPLAY_SETTINGS),
-        ...partialDisplay
-      })
-    }));
-    setIsDraftDirty(true);
-    isDraftDirtyRef.current = true;
-  };
-
-  const saveMiniShopDisplaySettings = async (
-    nextSettings: MiniShopDisplaySettings,
-    _summaryNote?: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    setIsPublishing(true);
-    try {
-      const adminUid = user?.uid || user?.email || 'admin';
-      const result = await saveMiniShopDisplayToFirestore(nextSettings, adminUid);
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error || 'Failed to save Mini Shop display settings to Cloud Firestore.'
-        };
-      }
-
-      loadSeqRef.current += 1;
-      setPublishedSettings(prev => ({
-        ...prev,
-        miniShopDisplay: result.normalized,
-        updatedAt: result.updatedAt,
-        updatedBy: adminUid
-      }));
-      setDraftSettings(prev => ({
-        ...prev,
-        miniShopDisplay: result.normalized,
-        updatedAt: result.updatedAt,
-        updatedBy: adminUid
-      }));
-
-      return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save error';
-      return { success: false, error: message };
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const saveShopVideoConfig = async (
-    nextVideo: ShopVideoConfig | null
-  ): Promise<{ success: boolean; error?: string; normalized?: ShopVideoConfig | null }> => {
-    setIsPublishing(true);
-    try {
-      const adminUid = user?.uid || user?.email || 'admin';
-      const result = await saveShopVideoToFirestore(nextVideo, adminUid);
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error || 'Failed to save Shop video configuration to Cloud Firestore.'
-        };
-      }
-
-      loadSeqRef.current += 1;
-      setPublishedSettings(prev => ({
-        ...prev,
-        shopVideo: result.normalized,
-        updatedAt: result.updatedAt,
-        updatedBy: adminUid
-      }));
-      setDraftSettings(prev => ({
-        ...prev,
-        shopVideo: result.normalized,
-        updatedAt: result.updatedAt,
-        updatedBy: adminUid
-      }));
-
-      return { success: true, normalized: result.normalized };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save error';
-      return { success: false, error: message };
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'miniShopDisplay' | 'all') => {
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
@@ -840,9 +730,6 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (section === 'whatsapp' || section === 'all') {
         updated.whatsappContact = { ...DEFAULT_WHATSAPP_CONTACT };
-      }
-      if (section === 'miniShopDisplay' || section === 'all') {
-        updated.miniShopDisplay = { ...DEFAULT_MINI_SHOP_DISPLAY_SETTINGS };
       }
       applyDesignCssVariables(updated);
       return updated;
@@ -1032,9 +919,6 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         resetNavigationMenusToDefault,
         updateDraftWhatsAppContact,
         saveWhatsAppContactSettings,
-        updateDraftMiniShopDisplay,
-        saveMiniShopDisplaySettings,
-        saveShopVideoConfig,
         resetSectionToDefault,
         resetSingleField,
         setPreviewingDraft: setIsPreviewingDraft,
@@ -1050,8 +934,6 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         homepageSections: activeSettings.homepageSections || DEFAULT_HOMEPAGE_SECTIONS,
         navigationMenus: activeSettings.navigationMenus || DEFAULT_NAVIGATION_MENUS,
         whatsappContact: normalizeWhatsAppSettings(publishedSettings.whatsappContact),
-        miniShopDisplay: normalizeMiniShopDisplaySettings(publishedSettings.miniShopDisplay),
-        shopVideo: normalizeShopVideoConfig(publishedSettings.shopVideo),
         versionHistory: activeSettings.versionHistory || [],
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,

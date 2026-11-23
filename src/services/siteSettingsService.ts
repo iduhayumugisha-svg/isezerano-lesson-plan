@@ -11,22 +11,30 @@ import {
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   DEFAULT_IN_ARTICLE_ADS_SETTINGS,
+  DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
+  DEFAULT_MONETAG_VIGNETTE_CONFIG,
   DEFAULT_TOP_VIDEO_AD_CONFIG
 } from '../types/platform';
 import { normalizeAdsDisplaySettings } from '../utils/displaySettingsUtils';
 import { normalizeTopVideoAdConfig } from './shopVideoService';
 import {
+  extractLegacyInPagePushFromSnippet,
+  extractLegacyVignetteFromSnippet,
   normalizeGlobalAdScriptConfig,
   normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdsSettings,
-  normalizeStandardAdSlotConfig
+  normalizeInPagePushAdConfig,
+  normalizeStandardAdSlotConfig,
+  normalizeVignetteAdConfig
 } from '../utils/inArticleAdUtils';
 import { isAuthorizedAdminEmail } from './authService';
 
 // ==================== ADS SETTINGS ====================
 const ADS_STORAGE_KEY = 'isezerano_ads_settings';
 
-const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): AdsSettings => {
+export const normalizeAdsSettingsPayload = (
+  remoteData?: Partial<AdsSettings> | null
+): AdsSettings => {
   if (!remoteData) {
     return {
       ...DEFAULT_ADS_SETTINGS,
@@ -40,6 +48,8 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
         DEFAULT_ADS_SETTINGS.aboveFooterAd,
         true
       ),
+      vignetteAd: { ...DEFAULT_MONETAG_VIGNETTE_CONFIG },
+      inPagePushAd: { ...DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG },
       inArticleAds: {
         slot1: { ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot1 },
         slot2: { ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot2 },
@@ -55,21 +65,69 @@ const normalizeAdsSettingsPayload = (remoteData?: Partial<AdsSettings> | null): 
       displaySettings: normalizeAdsDisplaySettings(DEFAULT_ADS_SETTINGS.displaySettings)
     };
   }
+
+  let globalScripts = normalizeGlobalAdScriptConfig(remoteData.globalScripts, true);
+  const legacyBelowHeader = normalizeStandardAdSlotConfig(
+    remoteData.belowHeaderAd,
+    DEFAULT_ADS_SETTINGS.belowHeaderAd,
+    true
+  );
+
+  let vignetteAd = normalizeVignetteAdConfig(remoteData.vignetteAd);
+  if (!remoteData.vignetteAd) {
+    const fromGlobal = extractLegacyVignetteFromSnippet(globalScripts.code);
+    const fromHeader = extractLegacyVignetteFromSnippet(legacyBelowHeader.code);
+    const extracted = fromGlobal || fromHeader;
+    if (extracted) {
+      vignetteAd = {
+        enabled: Boolean(fromGlobal ? globalScripts.enabled : legacyBelowHeader.enabled),
+        zoneId: extracted.zoneId,
+        scriptUrl: extracted.scriptUrl,
+        mobileEnabled: fromGlobal ? globalScripts.mobileEnabled : true,
+        desktopEnabled: fromGlobal ? globalScripts.desktopEnabled : true
+      };
+      if (fromGlobal) {
+        globalScripts = { ...globalScripts, code: fromGlobal.cleanedRemainder };
+      }
+    }
+  }
+
+  let inPagePushAd = normalizeInPagePushAdConfig(remoteData.inPagePushAd);
+  if (!remoteData.inPagePushAd) {
+    const fromHeader = extractLegacyInPagePushFromSnippet(legacyBelowHeader.code);
+    const fromGlobal = extractLegacyInPagePushFromSnippet(globalScripts.code);
+    const extracted = fromHeader || fromGlobal;
+    if (extracted) {
+      inPagePushAd = {
+        enabled: Boolean(fromHeader ? legacyBelowHeader.enabled : globalScripts.enabled),
+        zoneId: extracted.zoneId,
+        scriptUrl: extracted.scriptUrl,
+        mobileEnabled: fromGlobal && !fromHeader ? globalScripts.mobileEnabled : true,
+        desktopEnabled: fromGlobal && !fromHeader ? globalScripts.desktopEnabled : true
+      };
+      if (fromGlobal && !fromHeader) {
+        globalScripts = { ...globalScripts, code: fromGlobal.cleanedRemainder };
+      }
+    }
+  }
+
   return {
     masterEnabled: remoteData.masterEnabled ?? DEFAULT_ADS_SETTINGS.masterEnabled,
-    belowHeaderAd: normalizeStandardAdSlotConfig(
-      remoteData.belowHeaderAd,
-      DEFAULT_ADS_SETTINGS.belowHeaderAd,
-      true
-    ),
+    belowHeaderAd: {
+      ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
+      enabled: false,
+      code: ''
+    },
     aboveFooterAd: normalizeStandardAdSlotConfig(
       remoteData.aboveFooterAd,
       DEFAULT_ADS_SETTINGS.aboveFooterAd,
       true
     ),
+    vignetteAd,
+    inPagePushAd,
     inArticleAds: normalizeInArticleAdsSettings(remoteData.inArticleAds, true),
     homepageInFeedAds: normalizeHomepageInFeedAdsSettings(remoteData.homepageInFeedAds, true),
-    globalScripts: normalizeGlobalAdScriptConfig(remoteData.globalScripts, true),
+    globalScripts,
     aboveHeaderVideoAd: normalizeTopVideoAdConfig(remoteData.aboveHeaderVideoAd),
     displaySettings: normalizeAdsDisplaySettings(remoteData.displaySettings),
     updatedAt: remoteData.updatedAt || new Date().toISOString(),
@@ -246,16 +304,18 @@ export const saveAdsSettings = async (
 
   const payload: AdsSettings = stripUndefinedDeep({
     ...settings,
-    belowHeaderAd: normalizeStandardAdSlotConfig(
-      settings.belowHeaderAd,
-      DEFAULT_ADS_SETTINGS.belowHeaderAd,
-      true
-    ),
+    belowHeaderAd: {
+      ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
+      enabled: false,
+      code: ''
+    },
     aboveFooterAd: normalizeStandardAdSlotConfig(
       settings.aboveFooterAd,
       DEFAULT_ADS_SETTINGS.aboveFooterAd,
       true
     ),
+    vignetteAd: normalizeVignetteAdConfig(settings.vignetteAd),
+    inPagePushAd: normalizeInPagePushAdConfig(settings.inPagePushAd),
     inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds, true),
     homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds, true),
     globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts, true),

@@ -14,11 +14,6 @@ import {
   DEFAULT_ALL_NEWS_LABEL,
   DEFAULT_CATEGORY_NAV_APPEARANCE
 } from '../utils/categoryStyleUtils';
-import {
-  MiniShopDisplaySettings,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
-} from '../utils/displaySettingsUtils';
-import type { ShopVideoConfig } from './platform';
 
 export type {
   WhatsAppButtonPosition,
@@ -29,14 +24,12 @@ export type {
   CategoryFontWeight,
   CategoryStylingMode,
   CategoryItemStyle,
-  CategoryNavAppearanceSettings,
-  MiniShopDisplaySettings
+  CategoryNavAppearanceSettings
 };
 export {
   DEFAULT_WHATSAPP_CONTACT,
   DEFAULT_ALL_NEWS_LABEL,
-  DEFAULT_CATEGORY_NAV_APPEARANCE,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS
+  DEFAULT_CATEGORY_NAV_APPEARANCE
 };
 
 export interface WebsiteColorSettings {
@@ -223,8 +216,6 @@ export interface WebsiteDesignSettings {
   homepageSections?: HomepageSectionConfig[];
   navigationMenus?: NavigationMenuItem[];
   whatsappContact?: WhatsAppContactSettings;
-  miniShopDisplay?: MiniShopDisplaySettings;
-  shopVideo?: ShopVideoConfig | null;
   versionHistory?: WebsiteDesignVersion[];
   updatedAt: string;
   updatedBy: string;
@@ -448,7 +439,6 @@ export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
   navigationMenus: DEFAULT_NAVIGATION_MENUS,
   whatsappContact: DEFAULT_WHATSAPP_CONTACT,
-  miniShopDisplay: DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
   versionHistory: [],
   updatedAt: '2026-01-01T00:00:00.000Z',
   updatedBy: 'system'

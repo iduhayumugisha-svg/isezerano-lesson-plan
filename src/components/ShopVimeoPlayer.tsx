@@ -9,13 +9,12 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { ShopVideoConfig } from '../types/platform';
-import { buildVimeoPlayerEmbedUrl } from '../services/shopVideoService';
+import { buildVimeoPlayerEmbedUrl, VimeoEmbedSource } from '../services/shopVideoService';
 
 const PLAYBACK_RATES = [0.5, 1, 1.5, 2] as const;
 
 interface ShopVimeoPlayerProps {
-  video: Pick<ShopVideoConfig, 'videoId' | 'playerEmbedUrl' | 'title' | 'thumbnailUrl'>;
+  video: Pick<VimeoEmbedSource, 'videoId' | 'playerEmbedUrl' | 'title' | 'thumbnailUrl'>;
   autoPlay?: boolean;
   className?: string;
   playerLabel?: string;
@@ -27,8 +26,8 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
   video,
   autoPlay = true,
   className = '',
-  playerLabel = 'Shop',
-  fallbackNote = 'All featured products listed below remain ready for ordering via WhatsApp or Phone.',
+  playerLabel = 'Video Ad',
+  fallbackNote = 'Thank you for visiting ISEZERANO ONLINE.',
   compact = false
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -249,7 +248,7 @@ export const ShopVimeoPlayer: React.FC<ShopVimeoPlayerProps> = ({
             {video.thumbnailUrl && (
               <img
                 src={video.thumbnailUrl}
-                alt={video.title || 'Shop video preview'}
+                alt={video.title || `${playerLabel} video preview`}
                 className="absolute inset-0 w-full h-full object-cover opacity-35"
               />
             )}

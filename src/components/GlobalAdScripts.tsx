@@ -10,6 +10,7 @@ import {
   installIntrusivePopunderDomGuard,
   isIntrusivePopunderElement,
   isSafeAdScriptUrl,
+  normalizeInPagePushAdConfig,
   sanitizeAdCodePayload,
   shouldSkipDuplicateOverlayScript
 } from '../utils/inArticleAdUtils';
@@ -50,10 +51,61 @@ export const GlobalAdScripts: React.FC<GlobalAdScriptsProps> = ({ currentPage })
   }, []);
 
   const globalConfig = adsSettings.globalScripts ?? DEFAULT_ADS_SETTINGS.globalScripts;
+  const inPagePushConfig = normalizeInPagePushAdConfig(adsSettings.inPagePushAd);
 
+  // Dedicated Monetag In-Page Push injection (floating/corner push banner, never rendered inside a header card)
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    if (currentPage === 'admin') return;
+    const isAdminRoute =
+      currentPage === 'admin' || window.location.pathname.toLowerCase().startsWith('/admin');
+    if (isAdminRoute) return;
+
+    installIntrusivePopunderDomGuard();
+
+    if (!adsSettings.masterEnabled || !inPagePushConfig.enabled) return;
+    if (!inPagePushConfig.scriptUrl || !isSafeAdScriptUrl(inPagePushConfig.scriptUrl)) return;
+
+    const isMobileViewport = window.innerWidth < 768;
+    if (isMobileViewport && !inPagePushConfig.mobileEnabled) return;
+    if (!isMobileViewport && !inPagePushConfig.desktopEnabled) return;
+
+    const srcKey = `in-page-push::${inPagePushConfig.scriptUrl}::${inPagePushConfig.zoneId || 'default'}`;
+    if (executedGlobalScriptSources.has(srcKey)) return;
+
+    const scriptEl = document.createElement('script');
+    scriptEl.src = inPagePushConfig.scriptUrl;
+    scriptEl.async = true;
+    scriptEl.referrerPolicy = 'no-referrer-when-downgrade';
+    scriptEl.setAttribute('data-isezerano-global-ad', 'monetag-in-page-push');
+    if (inPagePushConfig.zoneId) {
+      scriptEl.dataset.zone = inPagePushConfig.zoneId;
+      scriptEl.setAttribute('data-zone', inPagePushConfig.zoneId);
+    }
+
+    if (shouldSkipDuplicateOverlayScript(scriptEl)) {
+      executedGlobalScriptSources.add(srcKey);
+      return;
+    }
+
+    executedGlobalScriptSources.add(srcKey);
+    const targetParent = document.head || document.documentElement || document.body;
+    targetParent?.appendChild(scriptEl);
+  }, [
+    currentPage,
+    adsSettings.masterEnabled,
+    inPagePushConfig.enabled,
+    inPagePushConfig.zoneId,
+    inPagePushConfig.scriptUrl,
+    inPagePushConfig.mobileEnabled,
+    inPagePushConfig.desktopEnabled
+  ]);
+
+  // Global <head> scripts & verification meta tags
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const isAdminRoute =
+      currentPage === 'admin' || window.location.pathname.toLowerCase().startsWith('/admin');
+    if (isAdminRoute) return;
 
     installIntrusivePopunderDomGuard();
 

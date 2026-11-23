@@ -31,7 +31,7 @@ async function run() {
   try {
     await testEnv.clearFirestore();
 
-    // Seed realistic legacy + modern production-like data across all 5 collections + nested subcollections
+    // Seed realistic legacy + modern production-like data across all 4 collections + nested subcollections
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore();
 
@@ -105,43 +105,7 @@ async function run() {
         verifier: 'tombstone'
       });
 
-      // 6. Legacy Mini Shop product with private/extra fields + missing publicSafe
-      await setDoc(doc(db, 'mini_shop_products/prod_legacy'), {
-        id: 'prod_legacy',
-        title: 'Solar Radio',
-        description: 'Portable FM/SW solar radio',
-        price: '25,000 RWF',
-        imageUrl: 'https://example.com/radio.jpg',
-        whatsappNumber: '+250788000222',
-        active: true,
-        displayOrder: 1,
-        createdAt: '2026-10-10T10:00:00.000Z',
-        updatedAt: '2026-10-10T10:00:00.000Z',
-        sellerEmail: 'seller@example.com',
-        supplierPhone: '+250788999000',
-        updatedBy: 'twizerefelix90@gmail.com',
-        costPrice: '15,000 RWF'
-      });
-
-      // 7. Compliant Mini Shop product + /private/seller_meta
-      await setDoc(doc(db, 'mini_shop_products/prod_modern'), {
-        id: 'prod_modern',
-        title: 'Studio Microphone',
-        description: 'USB condenser mic',
-        imageUrl: 'https://example.com/mic.jpg',
-        phoneNumber: '+250788000333',
-        active: true,
-        displayOrder: 2,
-        createdAt: '2026-11-18T10:00:00.000Z',
-        updatedAt: '2026-11-18T10:00:00.000Z',
-        publicSafe: true
-      });
-      await setDoc(doc(db, 'mini_shop_products/prod_modern/private/seller_meta'), {
-        costPrice: '45,000 RWF',
-        supplierPhone: '+250788111222'
-      });
-
-      // 8. appSettings & siteSettings & posts
+      // 6. appSettings & siteSettings & posts
       await setDoc(doc(db, 'appSettings/ads'), { masterEnabled: true });
       await setDoc(doc(db, 'appSettings/fcm_config'), { vapidKey: 'test-public-vapid' });
       await setDoc(doc(db, 'siteSettings/branding'), { siteName: 'ISEZERANO', logoData: 'https://example.com/logo.png' });
@@ -165,12 +129,10 @@ async function run() {
     assert.equal(byCol.comments.existingRootDocuments, 4);
     assert.equal(byCol.comments.missingParentPlaceholders, 1);
     assert.equal(byCol.comments.totalNestedSubcollectionDocuments, 3);
-    assert.equal(byCol.mini_shop_products.totalRootDocuments, 2);
-    assert.equal(byCol.mini_shop_products.totalNestedSubcollectionDocuments, 1);
     assert.equal(byCol.appSettings.totalRootDocuments, 2);
     assert.equal(byCol.siteSettings.totalRootDocuments, 1);
     assert.equal(byCol.posts.totalRootDocuments, 1);
-    assert.equal(result.manifest.counts.totalDocumentsBackedUp, 15);
+    assert.equal(result.manifest.counts.totalDocumentsBackedUp, 12);
 
     // Verify dry-run comment analysis counts
     const cSum = result.dryRunJson.comments.summary;
@@ -183,20 +145,6 @@ async function run() {
     assert.equal(cSum.wouldDisappearWithoutMigration, 2);
     assert.deepEqual(cSum.privateFieldCounts, { email: 1, ownerToken: 1, phone: 1 });
 
-    // Verify dry-run Mini Shop analysis counts
-    const mSum = result.dryRunJson.mini_shop_products.summary;
-    assert.equal(mSum.totalProductDocs, 2);
-    assert.equal(mSum.compliantWithNewRules, 1);
-    assert.equal(mSum.missingPublicSafeTrue, 1);
-    assert.equal(mSum.containingPrivateOrExtraFields, 1);
-    assert.equal(mSum.wouldDisappearWithoutMigration, 1);
-    assert.deepEqual(mSum.nonPublicFieldCounts, {
-      costPrice: 1,
-      sellerEmail: 1,
-      supplierPhone: 1,
-      updatedBy: 1
-    });
-
     // Verify settings classification
     assert.equal(result.dryRunJson.settings.totalDocs, 3);
     assert.equal(result.dryRunJson.settings.publicAllowlistedDocs, 2);
@@ -205,7 +153,6 @@ async function run() {
     // Verify PII never appears in markdown dry-run report
     assert.equal(result.dryRunMarkdown.includes('marie@example.com'), false);
     assert.equal(result.dryRunMarkdown.includes('deadbeef123456'), false);
-    assert.equal(result.dryRunMarkdown.includes('seller@example.com'), false);
 
     // Verify raw lossless fields preserved in full JSON backup
     const fullBackup = JSON.parse(fs.readFileSync(path.join(tmpOut, 'firestore-backup-complete.json'), 'utf8'));

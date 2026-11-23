@@ -5,9 +5,7 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 import {
   buildVimeoPlayerEmbedUrl,
-  createShopVideoConfigFromUrl,
   createTopVideoAdConfigFromUrl,
-  normalizeShopVideoConfig,
   normalizeTopVideoAdConfig,
   parseVimeoVideoUrl
 } from '../src/services/shopVideoService';
@@ -66,31 +64,6 @@ function testVimeoUrlValidationAndExtraction(): void {
   assert.equal(parseVimeoVideoUrl('https://vimeo.com/channels/staffpicks').valid, false);
   assert.equal(parseVimeoVideoUrl('javascript:alert(1)').valid, false);
   assert.equal(parseVimeoVideoUrl('not a url').valid, false);
-
-  // Config creation & update preservation
-  const built = createShopVideoConfigFromUrl({
-    url: 'https://vimeo.com/1248666228',
-    title: '  Weekend Shop Highlights  ',
-    published: true
-  });
-  assert.equal(built.success, true);
-  assert.ok(built.video);
-  assert.equal(built.video.videoId, '1248666228');
-  assert.equal(built.video.vimeoLink, 'https://vimeo.com/1248666228');
-  assert.equal(built.video.playerEmbedUrl, 'https://player.vimeo.com/video/1248666228');
-  assert.equal(built.video.title, 'Weekend Shop Highlights');
-  assert.equal(built.video.published, true);
-  assert.equal(built.video.status, 'ready');
-
-  const updated = createShopVideoConfigFromUrl({
-    url: 'https://vimeo.com/1248666228',
-    title: 'Updated Title',
-    published: false,
-    existing: built.video
-  });
-  assert.equal(updated.success, true);
-  assert.equal(updated.video?.uploadedAt, built.video.uploadedAt);
-  assert.equal(updated.video?.published, false);
 
   // Top-of-site video advertisement config creation & normalization
   const topAdBuilt = createTopVideoAdConfigFromUrl({
@@ -177,36 +150,26 @@ function testVimeoUrlValidationAndExtraction(): void {
   assert.equal(builtWithSizes.success, true);
   assert.deepEqual(builtWithSizes.videoAd?.displaySettings, unlockedCustom);
 
-  console.log('✓ 1. Vimeo URL validation, video ID extraction, Shop & Top-of-Site Ad config creation verified');
+  console.log('✓ 1. Vimeo URL validation, video ID extraction & Top-of-Site Ad config creation verified');
 }
 
 function testNormalizationAndPlayerRendering(): void {
-  assert.equal(normalizeShopVideoConfig(null), null);
-  assert.equal(normalizeShopVideoConfig({ videoId: '' }), null);
-  assert.equal(normalizeShopVideoConfig({ videoId: 'bad id with spaces' }), null);
-
-  const normalized = normalizeShopVideoConfig({
-    videoId: '1248666228',
-    vimeoUri: '/videos/1248666228',
-    playerEmbedUrl: 'https://player.vimeo.com/video/1248666228?h=abc123&autoplay=0',
-    vimeoLink: 'https://vimeo.com/1248666228',
-    thumbnailUrl: 'javascript:alert(1)',
-    title: '  Shop Featured Showcase  ',
-    published: true,
-    status: 'ready'
+  const normalizedAd = normalizeTopVideoAdConfig({
+    enabled: true,
+    vimeoUrl: 'https://vimeo.com/1248666228/abc123',
+    title: '  Top Video Ad Campaign  ',
+    label: 'Sponsored Video'
   });
-  assert.ok(normalized);
-  assert.equal(normalized.videoId, '1248666228');
-  assert.equal(normalized.playerEmbedUrl, 'https://player.vimeo.com/video/1248666228?h=abc123');
-  assert.equal(normalized.thumbnailUrl, undefined);
-  assert.equal(normalized.published, true);
+  assert.equal(normalizedAd.enabled, true);
+  assert.equal(normalizedAd.videoId, '1248666228');
+  assert.equal(normalizedAd.playerEmbedUrl, 'https://player.vimeo.com/video/1248666228?h=abc123');
   assert.equal(
-    buildVimeoPlayerEmbedUrl(normalized),
+    buildVimeoPlayerEmbedUrl(normalizedAd),
     'https://player.vimeo.com/video/1248666228?h=abc123'
   );
 
   // SSR render of ShopVimeoPlayer guarantees zero layout shift aspect-video stage & full SDK controls
-  const html = renderToString(React.createElement(ShopVimeoPlayer, { video: normalized }));
+  const html = renderToString(React.createElement(ShopVimeoPlayer, { video: normalizedAd }));
   assert.match(html, /data-testid="shop-vimeo-player"/);
   assert.match(html, /aspect-video/);
   assert.match(html, /data-testid="shop-vimeo-play-pause"/);
@@ -219,7 +182,7 @@ function testNormalizationAndPlayerRendering(): void {
 
   // SSR render of compact TopVideoAdBanner player omits min-h-[180px] so narrow 16:9 stays proportional while keeping all controls
   const compactHtml = renderToString(
-    React.createElement(ShopVimeoPlayer, { video: normalized, compact: true })
+    React.createElement(ShopVimeoPlayer, { video: normalizedAd, compact: true })
   );
   assert.match(compactHtml, /aspect-video/);
   assert.doesNotMatch(compactHtml, /min-h-\[180px\]/);
@@ -359,12 +322,10 @@ function testNormalizationAndPlayerRendering(): void {
   assert.match(playerSrc, /autoplay:\s*autoPlay/);
   assert.match(playerSrc, /player\.setPlaybackRate/);
 
-  assert.equal(
-    'shopVideo' in DEFAULT_WEBSITE_DESIGN || DEFAULT_WEBSITE_DESIGN.shopVideo === undefined,
-    true
-  );
+  assert.equal('shopVideo' in DEFAULT_WEBSITE_DESIGN, false);
+  assert.equal('miniShopDisplay' in DEFAULT_WEBSITE_DESIGN, false);
 
-  console.log('✓ 2. Shop & Top Video Ad normalization, SSR rendering, and @vimeo/player controls verified');
+  console.log('✓ 2. Top Video Ad normalization, SSR rendering, and @vimeo/player controls verified');
 }
 
 function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
@@ -380,11 +341,9 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
   // 2. Client files must not reference VIMEO_ACCESS_TOKEN, tus uploads, or /api/vimeo/*
   for (const file of [
     'src/services/shopVideoService.ts',
-    'src/components/AdminShopVideoManager.tsx',
     'src/components/ShopVimeoPlayer.tsx',
     'src/components/TopVideoAdBanner.tsx',
-    'src/components/AdsManager.tsx',
-    'src/views/ShopView.tsx'
+    'src/components/AdsManager.tsx'
   ]) {
     const content = fs.readFileSync(path.resolve(file), 'utf8');
     assert.doesNotMatch(
@@ -394,19 +353,7 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
     );
   }
 
-  // 3. AdminShopVideoManager & AdsManager use "Vimeo Video URL" input and update/enable/disable/remove controls
-  const adminVideoSrc = fs.readFileSync(
-    path.resolve('src/components/AdminShopVideoManager.tsx'),
-    'utf8'
-  );
-  assert.doesNotMatch(adminVideoSrc, /window\.(alert|confirm|open)/);
-  assert.doesNotMatch(adminVideoSrc, /type="file"/);
-  assert.match(adminVideoSrc, />\s*Vimeo Video URL\s*<\/label>/);
-  assert.match(adminVideoSrc, /https:\/\/vimeo\.com\/1248666228/);
-  assert.match(adminVideoSrc, /admin-shop-video-save-btn/);
-  assert.match(adminVideoSrc, /admin-shop-video-publish-toggle/);
-  assert.match(adminVideoSrc, /admin-shop-video-remove-btn/);
-
+  // 3. AdsManager uses "Vimeo Video URL" input and update/enable/disable/remove controls
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   assert.doesNotMatch(adsMgrSrc, /window\.(alert|confirm|open)/);
   assert.match(adsMgrSrc, /ads-top-video-manager/);
@@ -422,8 +369,8 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
   assert.match(adsMgrSrc, /ads-top-video-banner-height-px/);
   assert.match(adsMgrSrc, /ads-top-video-aspect-toggle/);
   assert.match(adsMgrSrc, /ads-top-video-reset-sizes/);
-  // Existing belowHeaderAd, aboveFooterAd, displaySettings remain intact
-  assert.match(adsMgrSrc, /1\. Below Website Header/);
+  // Dedicated Monetag Vignette Banner, Above Website Footer & displaySettings remain intact (below_header removed)
+  assert.match(adsMgrSrc, /1\. Monetag Vignette Banner/);
   assert.match(adsMgrSrc, /2\. Above Website Footer/);
   assert.match(adsMgrSrc, /Advertisement Display Settings/);
 
@@ -431,43 +378,26 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
   const adSlotSrc = fs.readFileSync(path.resolve('src/components/AdSlot.tsx'), 'utf8');
   assert.doesNotMatch(adSlotSrc, /vimeo|ShopVideo|ShopView|TopVideoAd/i);
 
-  // 5. Verify App.tsx places TopVideoAdBanner ABOVE WebsiteHeader and preserves MiniShopBar + AdSlot placements
+  // 5. Verify App.tsx places TopVideoAdBanner ABOVE WebsiteHeader, includes MonetagVignetteBanner, removes below_header & MinShop, and preserves above_footer
   const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
-  assert.match(appSrc, /const ShopView = lazy\(\(\) => import\('\.\/views\/ShopView'\)/);
+  assert.doesNotMatch(appSrc, /MiniShopBar|ShopView|mini_shop_products|mini-shop-spacer/);
+  assert.match(appSrc, /<MonetagVignetteBanner currentPage=\{currentPage\} \/>/);
   assert.match(appSrc, /<TopVideoAdBanner currentPage=\{currentPage\} \/>/);
-  assert.match(appSrc, /<AdSlot placement="below_header"/);
+  assert.doesNotMatch(appSrc, /<AdSlot placement="below_header"/);
   assert.match(appSrc, /<AdSlot placement="above_footer"/);
-  const miniShopPos = appSrc.indexOf('<MiniShopBar');
-  const spacerPos = appSrc.indexOf('data-testid="mini-shop-spacer"');
   const topVideoPos = appSrc.indexOf('<TopVideoAdBanner');
   const headerPos = appSrc.indexOf('<WebsiteHeader');
-  const belowAdPos = appSrc.indexOf('<AdSlot placement="below_header"');
   const mainPos = appSrc.indexOf('<main ');
-  const shopPos = appSrc.indexOf('<ShopView');
   const aboveFooterPos = appSrc.indexOf('<AdSlot placement="above_footer"');
   assert.ok(
-    miniShopPos > 0 &&
-      spacerPos > miniShopPos &&
-      topVideoPos > spacerPos &&
+    topVideoPos > 0 &&
       headerPos > topVideoPos &&
-      belowAdPos > headerPos &&
-      mainPos > belowAdPos &&
-      shopPos > mainPos &&
-      aboveFooterPos > shopPos,
-    'TopVideoAdBanner must sit above WebsiteHeader while preserving MiniShopBar, ShopView, and AdSlot placements'
+      mainPos > headerPos &&
+      aboveFooterPos > mainPos,
+    'TopVideoAdBanner must sit above WebsiteHeader without below_header or MinShop clutter while preserving above_footer AdSlot'
   );
 
-  // 6. Verify ShopView renders video ABOVE products and includes friendly empty states
-  const shopViewSrc = fs.readFileSync(path.resolve('src/views/ShopView.tsx'), 'utf8');
-  const videoSecPos = shopViewSrc.indexOf('data-testid="shop-video-section"');
-  const productsSecPos = shopViewSrc.indexOf('data-testid="shop-products-section"');
-  assert.ok(
-    videoSecPos > 0 && productsSecPos > videoSecPos,
-    'Featured Shop video must appear above products'
-  );
-  assert.match(shopViewSrc, /shop-video-empty-state/);
-
-  // 7. Ensure @vimeo/player is NOT statically imported in App, TopVideoAdBanner, AdsManager, HomeView, WebsiteHeader, or MiniShopBar
+  // 6. Ensure @vimeo/player is NOT statically imported in App, TopVideoAdBanner, AdsManager, HomeView, or WebsiteHeader
   const topBannerSrc = fs.readFileSync(path.resolve('src/components/TopVideoAdBanner.tsx'), 'utf8');
   assert.match(topBannerSrc, /lazy\(\(\) =>\s*import\('\.\/ShopVimeoPlayer'\)/);
   assert.match(adsMgrSrc, /lazy\(\(\) =>\s*import\('\.\/ShopVimeoPlayer'\)/);
@@ -477,8 +407,7 @@ function testNoVimeoApiTokensUploadsAndAdPreservation(): void {
     'src/components/TopVideoAdBanner.tsx',
     'src/components/AdsManager.tsx',
     'src/views/HomeView.tsx',
-    'src/components/WebsiteHeader.tsx',
-    'src/components/MiniShopBar.tsx'
+    'src/components/WebsiteHeader.tsx'
   ]) {
     const content = fs.readFileSync(path.resolve(eagerFile), 'utf8');
     assert.doesNotMatch(

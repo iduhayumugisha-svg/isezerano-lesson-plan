@@ -11,6 +11,7 @@ import {
   normalizeAdsDisplaySettings
 } from '../utils/displaySettingsUtils';
 import {
+  extractBareSafeDirectLinkUrl,
   hasRenderableAdCode,
   installIntrusivePopunderDomGuard,
   isIntrusivePopunderElement,
@@ -221,9 +222,8 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     return () => unsubscribe();
   }, []);
 
-  const slotConfig = placement === 'below_header'
-    ? adsSettings.belowHeaderAd
-    : adsSettings.aboveFooterAd;
+  const isAboveFooter = (placement as string) === 'above_footer';
+  const slotConfig = isAboveFooter ? adsSettings.aboveFooterAd : undefined;
 
   // Responsive mobile layout fit & proportional sizing for banner/code embeds (Monetag, AdSense, Adsterra, HTML)
   const syncResponsiveEmbedLayout = useCallback(() => {
@@ -323,10 +323,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     );
     const isCodeSlotActive = Boolean(
       !isAdminRoute &&
+        isAboveFooter &&
         adsSettings.masterEnabled &&
         slotConfig &&
         slotConfig.enabled &&
         slotConfig.type === 'code' &&
+        !extractBareSafeDirectLinkUrl(rawCode) &&
         hasRenderableAdCode(rawCode)
     );
 
@@ -579,8 +581,8 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
     syncResponsiveEmbedLayout
   ]);
 
-  // Resolve ads settings cleanly before rendering; collapse empty placeholders
-  if (!isAdsResolved) {
+  // Resolve ads settings cleanly before rendering; collapse empty placeholders or deprecated placements
+  if (!isAboveFooter || !isAdsResolved) {
     return null;
   }
 
@@ -592,9 +594,11 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   const hasCustomBanner =
     slotConfig.type === 'banner' && isSafeAdAssetOrClickUrl(slotConfig.imageUrl);
   const hasCustomCode =
-    slotConfig.type === 'code' && hasRenderableAdCode(slotConfig.code);
+    slotConfig.type === 'code' &&
+    !extractBareSafeDirectLinkUrl(slotConfig.code) &&
+    hasRenderableAdCode(slotConfig.code);
 
-  // Never render an empty bordered ad container if neither custom banner nor code is populated
+  // Never render an empty bordered ad container if neither custom banner nor valid code is populated
   if (!hasCustomBanner && !hasCustomCode) {
     return null;
   }
@@ -602,7 +606,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   const safeBannerLink = isSafeAdAssetOrClickUrl(slotConfig.linkUrl)
     ? slotConfig.linkUrl!.trim()
     : '';
-  const placementLabel = placement === 'below_header' ? 'Partner Announcement' : 'Sponsored Content';
+  const placementLabel = 'Sponsored Content';
   const display = normalizeAdsDisplaySettings(adsSettings.displaySettings);
   const hasExplicitDisplay = Boolean(adsSettings.displaySettings);
   const hasCustomHeight =

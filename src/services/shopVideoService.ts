@@ -1,10 +1,16 @@
 import {
   DEFAULT_TOP_VIDEO_AD_CONFIG,
-  ShopVideoConfig,
   TopVideoAdConfig,
   TopVideoAdDisplaySettings
 } from '../types/platform';
 import { normalizeTopVideoAdDisplaySettings } from '../utils/displaySettingsUtils';
+
+export interface VimeoEmbedSource {
+  videoId: string;
+  playerEmbedUrl?: string;
+  title?: string;
+  thumbnailUrl?: string;
+}
 
 export interface ParsedVimeoUrl {
   valid: boolean;
@@ -152,7 +158,7 @@ export function parseVimeoVideoUrl(rawInput: string): ParsedVimeoUrl {
 }
 
 export function buildVimeoPlayerEmbedUrl(
-  video: Pick<ShopVideoConfig, 'videoId' | 'playerEmbedUrl'>
+  video: Pick<VimeoEmbedSource, 'videoId' | 'playerEmbedUrl'>
 ): string {
   const cleanId = String(video.videoId || '').trim();
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(cleanId)) {
@@ -172,105 +178,6 @@ export function buildVimeoPlayerEmbedUrl(
   }
 
   return `https://player.vimeo.com/video/${cleanId}`;
-}
-
-export function createShopVideoConfigFromUrl(options: {
-  url: string;
-  title?: string;
-  published?: boolean;
-  existing?: ShopVideoConfig | null;
-}): { success: boolean; video?: ShopVideoConfig; error?: string } {
-  const parsed = parseVimeoVideoUrl(options.url);
-  if (!parsed.valid || !parsed.videoId || !parsed.playerEmbedUrl || !parsed.canonicalUrl) {
-    return {
-      success: false,
-      error: parsed.error || 'Please enter a valid Vimeo video URL.'
-    };
-  }
-
-  const nowIso = new Date().toISOString();
-  const cleanTitle = (options.title || '').trim().slice(0, 128) || 'Featured Shop Video';
-  const sameVideo = options.existing?.videoId === parsed.videoId;
-
-  const video = normalizeShopVideoConfig({
-    videoId: parsed.videoId,
-    vimeoUri: `/videos/${parsed.videoId}`,
-    playerEmbedUrl: parsed.playerEmbedUrl,
-    vimeoLink: parsed.canonicalUrl,
-    title: cleanTitle,
-    thumbnailUrl: sameVideo ? options.existing?.thumbnailUrl : undefined,
-    durationSeconds: sameVideo ? options.existing?.durationSeconds : undefined,
-    published: options.published !== undefined ? options.published : true,
-    status: 'ready',
-    uploadedAt: sameVideo && options.existing?.uploadedAt ? options.existing.uploadedAt : nowIso,
-    updatedAt: nowIso
-  });
-
-  if (!video) {
-    return { success: false, error: 'Could not construct valid Vimeo video settings.' };
-  }
-
-  return { success: true, video };
-}
-
-export function normalizeShopVideoConfig(raw: unknown): ShopVideoConfig | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-
-  const videoId = typeof record.videoId === 'string' ? record.videoId.trim() : '';
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(videoId)) {
-    return null;
-  }
-
-  const playerEmbedUrl = buildVimeoPlayerEmbedUrl({
-    videoId,
-    playerEmbedUrl: typeof record.playerEmbedUrl === 'string' ? record.playerEmbedUrl : ''
-  });
-  if (!playerEmbedUrl) return null;
-
-  const vimeoUri =
-    typeof record.vimeoUri === 'string' && record.vimeoUri.trim().startsWith('/videos/')
-      ? record.vimeoUri.trim()
-      : `/videos/${videoId}`;
-
-  const rawTitle = typeof record.title === 'string' ? record.title.trim() : '';
-  const title = (rawTitle || 'Featured Shop Video').slice(0, 128);
-
-  const rawStatus = record.status;
-  const status: ShopVideoConfig['status'] =
-    rawStatus === 'processing' || rawStatus === 'error' ? rawStatus : 'ready';
-
-  const durationRaw = Number(record.durationSeconds);
-  const durationSeconds =
-    Number.isFinite(durationRaw) && durationRaw >= 0 ? Math.round(durationRaw) : undefined;
-
-  const vimeoLink =
-    sanitizeSafeHttpsUrl(record.vimeoLink, ['vimeo.com']) || `https://vimeo.com/${videoId}`;
-  const thumbnailUrl = sanitizeSafeHttpsUrl(record.thumbnailUrl);
-
-  const nowIso = new Date().toISOString();
-  const uploadedAt =
-    typeof record.uploadedAt === 'string' && record.uploadedAt.trim()
-      ? record.uploadedAt.trim()
-      : nowIso;
-  const updatedAt =
-    typeof record.updatedAt === 'string' && record.updatedAt.trim()
-      ? record.updatedAt.trim()
-      : uploadedAt;
-
-  return {
-    videoId,
-    vimeoUri,
-    playerEmbedUrl,
-    vimeoLink,
-    title,
-    ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
-    published: Boolean(record.published),
-    status,
-    uploadedAt,
-    updatedAt
-  };
 }
 
 export function normalizeTopVideoAdConfig(raw: unknown): TopVideoAdConfig {

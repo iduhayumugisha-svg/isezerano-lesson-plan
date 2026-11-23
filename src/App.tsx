@@ -6,13 +6,12 @@ import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
-import { MiniShopBar } from './components/MiniShopBar';
 import { TopVideoAdBanner } from './components/TopVideoAdBanner';
 import { GlobalAdScripts } from './components/GlobalAdScripts';
+import { MonetagVignetteBanner } from './components/MonetagVignetteBanner';
 
 // Code-split Secondary Public Views & Modals
 const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
-const ShopView = lazy(() => import('./views/ShopView').then((m) => ({ default: m.ShopView })));
 const AboutView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.AboutView })));
 const PrivacyPolicyView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.PrivacyPolicyView })));
 const TermsConditionsView = lazy(() => import('./views/InfoPagesView').then((m) => ({ default: m.TermsConditionsView })));
@@ -23,7 +22,7 @@ const AdminPortalGateway = lazy(() => import('./views/AdminPortalGateway').then(
 const AdminDashboardView = lazy(() => import('./views/AdminDashboardView').then((m) => ({ default: m.AdminDashboardView })));
 const AnnouncementDetailModal = lazy(() => import('./components/AnnouncementDetailModal').then((m) => ({ default: m.AnnouncementDetailModal })));
 
-import { PushAnnouncement, MiniShopProduct } from './types/platform';
+import { PushAnnouncement } from './types/platform';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
@@ -36,7 +35,6 @@ import {
   mergeCategoriesForDisplay
 } from './services/blogService';
 import { subscribeToApprovedCommentCounts } from './services/commentService';
-import { subscribeToActiveMiniShopProducts } from './services/miniShopService';
 import { scrollMainContentToTop } from './utils/scrollUtils';
 
 export type AppPage = WebsitePage;
@@ -60,7 +58,6 @@ const getPageFromUrl = (): AppPage => {
     return 'admin';
   }
   if (pathname === '/blog' || pathname.startsWith('/blog/') || hash === '#blog' || hash.startsWith('#blog/') || search.get('page') === 'blog') return 'blog';
-  if (pathname === '/shop' || pathname.startsWith('/shop/') || hash === '#shop' || search.get('page') === 'shop') return 'shop';
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
@@ -87,7 +84,7 @@ const getBlogSlugFromUrl = (): string | null => {
 
 function AppContent() {
   const { user, isAdmin, signOutUser } = useAuth();
-  const { colors, branding, miniShopDisplay } = useWebsiteDesign();
+  const { colors, branding } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -104,10 +101,8 @@ function AppContent() {
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [focusArticleComments, setFocusArticleComments] = useState<boolean>(false);
   const [selectedNotice, setSelectedNotice] = useState<PushAnnouncement | null>(null);
-  const [activeMiniShopProducts, setActiveMiniShopProducts] = useState<MiniShopProduct[]>([]);
-  const [miniShopHeight, setMiniShopHeight] = useState<number>(0);
 
-  // Live newspaper articles, Firestore categories, comments, and Mini Shop subscription
+  // Live newspaper articles, Firestore categories, and comments subscription
   useEffect(() => {
     setIsNewsLoading(true);
     const unsubPosts = subscribeToBlogPosts((posts) => {
@@ -124,15 +119,10 @@ function AppContent() {
       setCommentCounts(counts);
     });
 
-    const unsubMiniShop = subscribeToActiveMiniShopProducts((products) => {
-      setActiveMiniShopProducts(products);
-    });
-
     return () => {
       unsubPosts();
       unsubCategories();
       unsubComments();
-      unsubMiniShop();
     };
   }, []);
 
@@ -289,9 +279,6 @@ function AppContent() {
     }
   };
 
-  const showMiniShop = currentPage !== 'admin' && activeMiniShopProducts.length > 0;
-  const effectiveMiniShopOffset = showMiniShop ? miniShopHeight : 0;
-
   return (
     <div
       className="min-h-screen flex flex-col w-full antialiased overflow-x-clip selection:bg-teal-700 selection:text-white transition-colors"
@@ -300,33 +287,14 @@ function AppContent() {
         color: colors.bodyText
       }}
     >
-      {/* Site-Wide Global Head Scripts (Monetag Multitag/OnClick/Vignette/In-Page Push/Verification, skipped on /admin) */}
+      {/* Site-Wide Monetag Vignette & Global Head Scripts (skipped on /admin) */}
+      <MonetagVignetteBanner currentPage={currentPage} />
       <GlobalAdScripts currentPage={currentPage} />
 
-      {/* 0. Fixed Mini Shop / Product Showcase (Always pinned above WebsiteHeader on public pages) */}
-      <MiniShopBar
-        products={activeMiniShopProducts}
-        visible={showMiniShop}
-        onHeightChange={setMiniShopHeight}
-        displaySettings={miniShopDisplay}
-        onOpenShop={() => handleNavigate('shop')}
-      />
-      {effectiveMiniShopOffset > 0 && (
-        <div
-          aria-hidden="true"
-          data-testid="mini-shop-spacer"
-          className="no-print w-full shrink-0"
-          style={{ height: `${effectiveMiniShopOffset}px` }}
-        />
-      )}
-
-      {/* 0B & 1. Unified Sticky Top Area: Site-Wide Video Ad Banner + Global Newspaper Header */}
+      {/* 1. Unified Sticky Top Area: Site-Wide Video Ad Banner + Global Newspaper Header */}
       <div
         data-testid="top-header-sticky-group"
         className="sticky top-0 z-40 w-full"
-        style={{
-          top: effectiveMiniShopOffset > 0 ? `${effectiveMiniShopOffset}px` : undefined
-        }}
       >
         <TopVideoAdBanner currentPage={currentPage} />
 
@@ -337,14 +305,10 @@ function AppContent() {
           newsCategories={newsCategories}
           selectedCategory={selectedNewsCategory}
           onSelectCategory={setSelectedNewsCategory}
-          topOffsetPx={effectiveMiniShopOffset}
         />
       </div>
 
-      {/* 2. Below-Header Advertisement (Scrolls naturally with page content) */}
-      <AdSlot placement="below_header" className="no-print" />
-
-      {/* 3. Natural Document Flow Main Body */}
+      {/* 2. Natural Document Flow Main Body */}
       <main className="flex-1 w-full min-w-0 relative z-0">
         {/* PUBLIC PAGE 1: Online Newspaper Homepage (Default opening page at /) */}
         {currentPage === 'home' && (
@@ -379,14 +343,6 @@ function AppContent() {
               commentCounts={commentCounts}
               focusComments={focusArticleComments}
               onConsumeFocusComments={() => setFocusArticleComments(false)}
-            />
-          )}
-
-          {/* PUBLIC PAGE 1C: Dedicated Shop Page with Vimeo Video & Products */}
-          {currentPage === 'shop' && (
-            <ShopView
-              products={activeMiniShopProducts}
-              onNavigate={handleNavigate}
             />
           )}
 

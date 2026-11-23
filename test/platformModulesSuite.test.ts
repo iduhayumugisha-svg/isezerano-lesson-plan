@@ -750,19 +750,20 @@ async function testHeaderOnlyFixedAndNaturalAdScrolling() {
   assert.match(appSrc, /min-h-screen flex flex-col w-full antialiased overflow-x-clip/);
   assert.doesNotMatch(appSrc, /app-viewport-shell|app-main-scroll|MAIN_SCROLL_CONTAINER_ID/);
 
+  assert.match(appSrc, /<MonetagVignetteBanner currentPage=\{currentPage\} \/>/);
+  assert.doesNotMatch(appSrc, /<AdSlot placement="below_header"/);
+
   const headerPos = appSrc.indexOf('<WebsiteHeader');
-  const belowAdPos = appSrc.indexOf('<AdSlot placement="below_header"');
   const mainPos = appSrc.indexOf('<main ');
   const aboveFooterAdPos = appSrc.indexOf('<AdSlot placement="above_footer"');
   const footerPos = appSrc.indexOf('<WebsiteFooter');
 
   assert.ok(
     headerPos > 0 &&
-      belowAdPos > headerPos &&
-      mainPos > belowAdPos &&
+      mainPos > headerPos &&
       aboveFooterAdPos > mainPos &&
       footerPos > aboveFooterAdPos,
-    'Layout order must place sticky header first, then natural-scrolling below_header ad, main, above_footer ad, and footer'
+    'Layout order must place sticky header first without below_header ad, then main, natural-scrolling above_footer ad, and footer'
   );
 
   // Programmatic scroll-to-top delegates cleanly to natural window scrolling

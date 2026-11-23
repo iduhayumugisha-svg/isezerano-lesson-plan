@@ -19,7 +19,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { sha256Hex, buildCommentOwnershipVerifier } from '../src/services/commentService';
+import {
+  formatFirestoreCommentError,
+  sha256Hex,
+  buildCommentOwnershipVerifier
+} from '../src/services/commentService';
 
 interface AuthContext {
   uid?: string;
@@ -379,82 +383,6 @@ class FirestoreRulesEngine {
     );
   }
 
-  // 8. Mini Shop products (public reads active + publicSafe items; Admin-only read-all, write, delete)
-  private isValidMiniShopProductWrite(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    const required = [
-      'id',
-      'title',
-      'description',
-      'imageUrl',
-      'active',
-      'displayOrder',
-      'createdAt',
-      'updatedAt',
-      'publicSafe'
-    ];
-    const allowed = [
-      ...required,
-      'price',
-      'imageStorageMode',
-      'whatsappNumber',
-      'phoneNumber'
-    ];
-    const keys = Object.keys(data);
-    if (!required.every((k) => k in data)) return false;
-    if (!keys.every((k) => allowed.includes(k))) return false;
-    if (data.publicSafe !== true) return false;
-    if (typeof data.id !== 'string' || data.id.length === 0 || data.id.length > 128) return false;
-    if (typeof data.title !== 'string' || data.title.length < 2 || data.title.length > 90) return false;
-    if (typeof data.description !== 'string' || data.description.length < 2 || data.description.length > 200) return false;
-    if ('price' in data && (typeof data.price !== 'string' || data.price.length > 40)) return false;
-    if (typeof data.imageUrl !== 'string' || data.imageUrl.length < 5 || data.imageUrl.length > 750000) return false;
-    if (
-      'imageStorageMode' in data &&
-      data.imageStorageMode !== 'firebase_storage' &&
-      data.imageStorageMode !== 'firestore_embedded'
-    ) {
-      return false;
-    }
-    if ('whatsappNumber' in data && (typeof data.whatsappNumber !== 'string' || data.whatsappNumber.length > 30)) {
-      return false;
-    }
-    if ('phoneNumber' in data && (typeof data.phoneNumber !== 'string' || data.phoneNumber.length > 30)) {
-      return false;
-    }
-    const hasWa = typeof data.whatsappNumber === 'string' && data.whatsappNumber.length > 0;
-    const hasTel = typeof data.phoneNumber === 'string' && data.phoneNumber.length > 0;
-    if (!hasWa && !hasTel) return false;
-    if (typeof data.active !== 'boolean') return false;
-    if (typeof data.displayOrder !== 'number' || !Number.isInteger(data.displayOrder) || data.displayOrder < 0) {
-      return false;
-    }
-    if (typeof data.createdAt !== 'string' || data.createdAt.length < 10 || data.createdAt.length > 60) return false;
-    if (typeof data.updatedAt !== 'string' || data.updatedAt.length < 10 || data.updatedAt.length > 60) return false;
-    return true;
-  }
-
-  public canReadMiniShopProduct(auth: AuthContext | null, product: Record<string, any> | null): boolean {
-    if (this.isAdmin(auth)) return true;
-    return Boolean(product && product.active === true && this.isValidMiniShopProductWrite(product));
-  }
-
-  public canListMiniShopProducts(auth: AuthContext | null, queryWhereActiveAndSafe: boolean): boolean {
-    if (this.isAdmin(auth)) return true;
-    return queryWhereActiveAndSafe;
-  }
-
-  public canWriteMiniShopProduct(auth: AuthContext | null, data: any): boolean {
-    return this.isAdmin(auth) && this.isValidMiniShopProductWrite(data);
-  }
-
-  public canDeleteMiniShopProduct(auth: AuthContext | null): boolean {
-    return this.isAdmin(auth);
-  }
-
-  public canAccessMiniShopPrivateSubdoc(auth: AuthContext | null): boolean {
-    return this.isAdmin(auth);
-  }
 }
 
 export function runSecurityAuditTests() {
@@ -857,17 +785,33 @@ export function runSecurityAuditTests() {
   );
 
   assert(
-    'firestore.rules defines cryptographic hashing.sha256 verifier without get().id, hasOnly list guards, and /private isolation',
+    'firestore.rules defines cryptographic hashing.sha256 verifier without get().id, acyclic getAfter guards, hasOnly list guards, and /private isolation',
     firestoreRulesSrc.includes('match /tokens/{tokenId}') &&
       firestoreRulesSrc.includes('match /private/{ownershipId}') &&
       firestoreRulesSrc.includes('hashing.sha256') &&
       !firestoreRulesSrc.includes('.id ==') &&
       firestoreRulesSrc.includes('hasOnlyPublicCommentFields(resource.data)') &&
-      firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
       firestoreRulesSrc.includes("resource.data.status in ['published', 'approved']") &&
-      firestoreRulesSrc.includes("get(/databases/$(database)/documents/comments/$(commentId)/private/ownership).data.verifier !=") &&
+      firestoreRulesSrc.includes('ownershipBefore.data.verifier != ownershipAfter.data.verifier') &&
+      firestoreRulesSrc.includes('existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership)') &&
       firestoreRulesSrc.includes('exists(/databases/$(database)/documents/comments/$(commentId))') &&
-      firestoreRulesSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)')
+      firestoreRulesSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)') &&
+      !(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}[\s\S]*?getAfter\(/.test(
+        (firestoreRulesSrc.match(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0]
+      )) &&
+      /isValidCommentId\(data\.parentId\)[\s\S]*?exists\([^)]*comments\/\$\(data\.parentId\)\)[\s\S]*?hasValidParentComment\(data\)/.test(
+        firestoreRulesSrc
+      )
+  );
+  assert(
+    'formatFirestoreCommentError translates permission-denied cleanly for readers without losing fallback messages',
+    /server permissions/i.test(
+      formatFirestoreCommentError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' }, 'Fallback')
+    ) &&
+      /Network connection/i.test(
+        formatFirestoreCommentError({ code: 'unavailable', message: 'client is offline' }, 'Fallback')
+      ) &&
+      formatFirestoreCommentError(new Error('Custom validation failure'), 'Fallback') === 'Custom validation failure'
   );
 
   // 4. Post View Counter Increment (+1 only)
@@ -907,71 +851,14 @@ export function runSecurityAuditTests() {
   assert('Random authenticated Google user CANNOT upload to Storage', !engine.canUploadStorageMedia(randomGoogleUser, 'image/jpeg', 500_000, 15 * 1024 * 1024));
   assert('Attacker with spoofed token.admin claim CANNOT upload to Storage', !engine.canUploadStorageMedia(maliciousAdminClaim, 'image/jpeg', 500_000, 15 * 1024 * 1024));
 
-  // 6. Mini Shop Security Rules
-  console.log('\n--- 6. MINI SHOP PRODUCT SHOWCASE SECURITY TESTS ---');
-  const validProductPayload = {
-    id: 'prod_1',
-    title: 'Solar Radio Pro',
-    description: 'Rechargeable FM/AM radio with solar charging.',
-    price: '18,000 RWF',
-    imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
-    imageStorageMode: 'firestore_embedded',
-    whatsappNumber: '+250780000111',
-    phoneNumber: '0780000111',
-    active: true,
-    displayOrder: 0,
-    createdAt: '2026-11-18T08:00:00.000Z',
-    updatedAt: '2026-11-18T08:00:00.000Z',
-    publicSafe: true
-  };
+  // 6. Removed Mini Shop / Top Showcase Collection Default-Deny & AppSettings Isolation
+  console.log('\n--- 6. REMOVED MINI SHOP SHOWCASE DEFAULT-DENY & SETTINGS ISOLATION ---');
   assert(
-    'Unauthenticated public visitor CAN get & list active + publicSafe Mini Shop products',
-    engine.canReadMiniShopProduct(null, validProductPayload) && engine.canListMiniShopProducts(null, true)
-  );
-  assert(
-    'Unauthenticated & non-admin visitor CANNOT read inactive Mini Shop drafts, un-migrated docs, or list unfiltered products',
-    !engine.canReadMiniShopProduct(null, { ...validProductPayload, active: false }) &&
-      !engine.canReadMiniShopProduct(null, { ...validProductPayload, publicSafe: false }) &&
-      !engine.canReadMiniShopProduct(randomGoogleUser, { ...validProductPayload, active: false }) &&
-      !engine.canListMiniShopProducts(null, false)
-  );
-  assert(
-    'Public & non-admin visitor CANNOT read Mini Shop private subcollection',
-    !engine.canAccessMiniShopPrivateSubdoc(null) && !engine.canAccessMiniShopPrivateSubdoc(randomGoogleUser)
-  );
-  assert(
-    'Admin CAN read inactive Mini Shop drafts & list all products',
-    engine.canReadMiniShopProduct(admin, { ...validProductPayload, active: false }) && engine.canListMiniShopProducts(admin, false)
-  );
-  assert(
-    'Public/non-admin/spoofed-claim/unverified users CANNOT create, edit, or delete Mini Shop products',
-    !engine.canWriteMiniShopProduct(null, validProductPayload) &&
-      !engine.canWriteMiniShopProduct(randomGoogleUser, validProductPayload) &&
-      !engine.canWriteMiniShopProduct(maliciousAdminClaim, validProductPayload) &&
-      !engine.canWriteMiniShopProduct(unverifiedAdminEmail, validProductPayload) &&
-      !engine.canDeleteMiniShopProduct(null) &&
-      !engine.canDeleteMiniShopProduct(randomGoogleUser)
-  );
-  assert(
-    'Verified Google Admin twizerefelix90@gmail.com CAN create, update, toggle & delete valid Mini Shop products',
-    engine.canWriteMiniShopProduct(admin, validProductPayload) &&
-      engine.canWriteMiniShopProduct(admin, { ...validProductPayload, active: false }) &&
-      engine.canDeleteMiniShopProduct(admin)
-  );
-  assert(
-    'Mini Shop write rules reject extra admin/private fields (such as updatedBy or sellerEmail) on public docs',
-    !engine.canWriteMiniShopProduct(admin, {
-      ...validProductPayload,
-      updatedBy: 'twizerefelix90@gmail.com'
-    })
-  );
-  assert(
-    'firestore.rules defines hardened mini_shop_products publicSafe active-only read, Admin-only write/delete, and strict appSettings/fcm_config isolation',
-    firestoreRulesSrc.includes('match /mini_shop_products/{productId}') &&
-      firestoreRulesSrc.includes('function isValidMiniShopProductWrite(data)') &&
-      firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields(resource.data)') &&
-      firestoreRulesSrc.includes('allow create, update: if isAdmin() && isValidMiniShopProductWrite(request.resource.data);') &&
-      firestoreRulesSrc.includes('allow delete: if isAdmin();') &&
+    'firestore.rules permanently removes mini_shop_products & showcase helpers so collection falls under default-deny, while preserving appSettings/fcm_config isolation',
+    !firestoreRulesSrc.includes('mini_shop_products') &&
+      !firestoreRulesSrc.includes('hasOnlyMiniShopPublicFields') &&
+      !firestoreRulesSrc.includes('hasRequiredMiniShopPublicFields') &&
+      !firestoreRulesSrc.includes('isValidMiniShopProductWrite') &&
       firestoreRulesSrc.includes('match /appSettings/fcm_config')
   );
 

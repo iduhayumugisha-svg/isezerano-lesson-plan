@@ -20,8 +20,7 @@ import {
   Bell,
   Key,
   RefreshCw,
-  Newspaper,
-  ShoppingBag
+  Newspaper
 } from 'lucide-react';
 import { SaasNavPage } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
@@ -31,7 +30,6 @@ import { AdsManager } from '../components/AdsManager';
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
 import { AdminBlogManager } from '../components/AdminBlogManager';
 import { AdminWhatsAppSettings } from '../components/AdminWhatsAppSettings';
-import { AdminMiniShopManager } from '../components/AdminMiniShopManager';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { formatWhatsAppDisplayNumber } from '../utils/whatsappUtils';
 import {
@@ -49,7 +47,6 @@ interface AdminDashboardViewProps {
 type AdminTab =
   | 'pages'
   | 'blog'
-  | 'minishop'
   | 'design'
   | 'whatsapp'
   | 'ads'
@@ -222,26 +219,6 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           type="button"
-          onClick={() => setActiveTab('minishop')}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'minishop'
-              ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400/30'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <ShoppingBag className={`w-4 h-4 ${activeTab === 'minishop' ? 'text-white' : 'text-amber-600'}`} />
-          <span>Mini Shop</span>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-              activeTab === 'minishop' ? 'bg-amber-700 text-amber-100' : 'bg-amber-100 text-amber-800'
-            }`}
-          >
-            Top Showcase
-          </span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => setActiveTab('pages')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'pages'
@@ -379,9 +356,6 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
       {/* ================= TAB: NEWS ARTICLES, CATEGORIES & COMMENTS ================= */}
       {activeTab === 'blog' && <AdminBlogManager />}
-
-      {/* ================= TAB: FIXED MINI SHOP / PRODUCT SHOWCASE ================= */}
-      {activeTab === 'minishop' && <AdminMiniShopManager />}
 
       {/* ================= TAB: WEBSITE PAGES MANAGEMENT (About, Contact, Privacy, Terms) ================= */}
       {activeTab === 'pages' && <WebsitePagesManager />}

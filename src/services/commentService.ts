@@ -141,6 +141,33 @@ function logFirestoreCommentError(
   console.warn('[Comments Firestore]', JSON.stringify(errInfo));
 }
 
+export const formatFirestoreCommentError = (
+  err: unknown,
+  fallbackMessage: string
+): string => {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code?: unknown }).code || '')
+      : '';
+  const rawMessage =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message?: unknown }).message || '')
+      : String(err || '');
+
+  if (
+    code === 'permission-denied' ||
+    /missing or insufficient permissions|permission-denied|permission_denied/i.test(rawMessage)
+  ) {
+    return 'Unable to save comment right now due to server permissions. Please refresh the page and try again.';
+  }
+  if (code === 'unavailable' || /network|offline|unavailable/i.test(rawMessage)) {
+    return 'Network connection interrupted. Please check your internet connection and try again.';
+  }
+  return rawMessage || fallbackMessage;
+};
+
 const verifyCurrentAdminAuth = (): boolean => {
   const auth = getFirebaseAuth();
   const currentUser = auth?.currentUser;
@@ -1013,7 +1040,7 @@ export const submitArticleComment = async (
     logFirestoreCommentError(err, OperationType.CREATE, `comments/${commentRef.id}`);
     return {
       success: false,
-      error: err?.message || 'Could not publish your comment. Please try again.'
+      error: formatFirestoreCommentError(err, 'Could not publish your comment. Please try again.')
     };
   }
 };
@@ -1159,7 +1186,7 @@ export const editArticleComment = async (params: {
     logFirestoreCommentError(err, OperationType.UPDATE, `comments/${commentId}`);
     return {
       success: false,
-      error: err?.message || 'Could not save your changes. Please try again.'
+      error: formatFirestoreCommentError(err, 'Could not save your changes. Please try again.')
     };
   }
 };
@@ -1256,7 +1283,7 @@ export const deleteArticleCommentByOwner = async (
     logFirestoreCommentError(err, OperationType.DELETE, `comments/${commentId}`);
     return {
       success: false,
-      error: err?.message || 'Could not delete this comment. Please try again.'
+      error: formatFirestoreCommentError(err, 'Could not delete this comment. Please try again.')
     };
   }
 };
@@ -1420,6 +1447,9 @@ export const subscribeToPublishedCommentsForPost = (
         logFirestoreCommentError(err, OperationType.LIST, `comments(postId=${postId},approved)`);
         gotApproved = true;
         emitMerged();
+        if (backendApiActive === false && publishedMap.size === 0) {
+          onError?.(err);
+        }
       }
     );
   }
@@ -1651,7 +1681,7 @@ export const moderateArticleComment = async (
     logFirestoreCommentError(err, OperationType.UPDATE, `comments/${commentId}`);
     return {
       success: false,
-      error: err?.message || 'Failed to update comment moderation status.'
+      error: formatFirestoreCommentError(err, 'Failed to update comment moderation status.')
     };
   }
 };
@@ -1712,7 +1742,7 @@ export const deleteArticleComment = async (
     logFirestoreCommentError(err, OperationType.DELETE, `comments/${commentId}`);
     return {
       success: false,
-      error: err?.message || 'Failed to delete comment.'
+      error: formatFirestoreCommentError(err, 'Failed to delete comment.')
     };
   }
 };

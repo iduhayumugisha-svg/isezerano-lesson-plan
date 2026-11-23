@@ -1,24 +1,22 @@
 import {
   AdsDisplaySettings,
   DEFAULT_ADS_DISPLAY_SETTINGS,
-  MiniShopDisplaySettings,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
   TopVideoAdDisplaySettings,
   DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
 } from '../utils/displaySettingsUtils';
 
-export type { AdsDisplaySettings, MiniShopDisplaySettings, TopVideoAdDisplaySettings };
+export type { AdsDisplaySettings, TopVideoAdDisplaySettings };
 export {
   DEFAULT_ADS_DISPLAY_SETTINGS,
-  DEFAULT_MINI_SHOP_DISPLAY_SETTINGS,
   DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
 };
 
 // ==================== ADS TYPES ====================
-export type AdPlacement = 'below_header' | 'above_footer';
+export type AdPlacement = 'above_footer';
 export type AdType = 'code' | 'banner';
 export type AdProviderId = 'monetag' | 'adscod' | 'other';
 export type InArticleAdSlotKey = 'slot1' | 'slot2' | 'slot3';
+export type InArticleAdFormat = 'code' | 'direct_link';
 export type HomepageInFeedAdSlotKey = 'slot1' | 'slot2' | 'slot3';
 
 export interface AdSlotConfig {
@@ -31,15 +29,26 @@ export interface AdSlotConfig {
   label?: string; // e.g. "Advertisement" or "Sponsored"
 }
 
+export interface InArticleDirectLinkCardConfig {
+  directLinkUrl: string;
+  headline: string;
+  description?: string;
+  thumbnailUrl?: string;
+  ctaText: string;
+  disclosureLabel?: 'Advertisement' | 'Sponsored' | 'Kwamamaza';
+}
+
 export interface InArticleAdSlotConfig {
   enabled: boolean;
   provider: AdProviderId;
   providerLabel?: string; // Optional custom network label when provider === 'other'
+  adFormat?: InArticleAdFormat; // 'code' (HTML/JS embed) or 'direct_link' (responsive sponsored card)
   code: string;
+  directLinkCard?: InArticleDirectLinkCardConfig;
   afterParagraph: number; // Clamped integer 1..50 (defaults: 3, 7, 11)
   mobileEnabled: boolean;
   desktopEnabled: boolean;
-  label?: string; // e.g. "Advertisement" or "Kwamamaza"
+  label?: string; // e.g. "Advertisement", "Sponsored", or "Kwamamaza"
   updatedAt?: string;
 }
 
@@ -99,13 +108,42 @@ export const DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS: Record<HomepageInFeedAdSlo
   slot3: 12
 };
 
+export interface MonetagVignetteConfig {
+  enabled: boolean;
+  zoneId: string;
+  scriptUrl: string;
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  updatedAt?: string;
+}
+
+export interface MonetagInPagePushConfig {
+  enabled: boolean;
+  zoneId: string;
+  scriptUrl: string;
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  updatedAt?: string;
+}
+
+export const createDefaultInArticleDirectLinkCardConfig = (): InArticleDirectLinkCardConfig => ({
+  directLinkUrl: '',
+  headline: '',
+  description: '',
+  thumbnailUrl: '',
+  ctaText: '',
+  disclosureLabel: 'Sponsored'
+});
+
 export const createDefaultInArticleSlotConfig = (
   slotKey: InArticleAdSlotKey
 ): InArticleAdSlotConfig => ({
   enabled: false,
   provider: 'monetag',
   providerLabel: '',
+  adFormat: 'code',
   code: '',
+  directLinkCard: createDefaultInArticleDirectLinkCardConfig(),
   afterParagraph: DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS[slotKey],
   mobileEnabled: true,
   desktopEnabled: true,
@@ -146,6 +184,22 @@ export const DEFAULT_GLOBAL_AD_SCRIPT_CONFIG: GlobalAdScriptConfig = {
   desktopEnabled: true
 };
 
+export const DEFAULT_MONETAG_VIGNETTE_CONFIG: MonetagVignetteConfig = {
+  enabled: false,
+  zoneId: '',
+  scriptUrl: '',
+  mobileEnabled: true,
+  desktopEnabled: true
+};
+
+export const DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG: MonetagInPagePushConfig = {
+  enabled: false,
+  zoneId: '',
+  scriptUrl: '',
+  mobileEnabled: true,
+  desktopEnabled: true
+};
+
 export interface TopVideoAdConfig {
   enabled: boolean;
   vimeoUrl: string;
@@ -169,8 +223,11 @@ export const DEFAULT_TOP_VIDEO_AD_CONFIG: TopVideoAdConfig = {
 
 export interface AdsSettings {
   masterEnabled: boolean; // Master toggle: false by default
-  belowHeaderAd: AdSlotConfig;
+  /** @deprecated Removed from UI & layout; kept optional only for legacy Firestore migration */
+  belowHeaderAd?: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
+  vignetteAd?: MonetagVignetteConfig;
+  inPagePushAd?: MonetagInPagePushConfig;
   inArticleAds?: InArticleAdsSettings;
   homepageInFeedAds?: HomepageInFeedAdsSettings;
   globalScripts?: GlobalAdScriptConfig;
@@ -200,6 +257,8 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     altText: 'Advertisement',
     label: 'Advertisement'
   },
+  vignetteAd: DEFAULT_MONETAG_VIGNETTE_CONFIG,
+  inPagePushAd: DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
   inArticleAds: DEFAULT_IN_ARTICLE_ADS_SETTINGS,
   homepageInFeedAds: DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   globalScripts: DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
@@ -209,7 +268,7 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
 
 
 // ==================== AUTH & FIREBASE CONNECTION TYPES ====================
-export type NavPage = 'home' | 'blog' | 'shop' | 'about' | 'contact' | 'privacy' | 'terms';
+export type NavPage = 'home' | 'blog' | 'about' | 'contact' | 'privacy' | 'terms';
 export type SaasNavPage = NavPage | 'admin';
 
 export type UserRole = 'admin';
@@ -340,35 +399,4 @@ export interface WebsitePageContent {
   isPublished: boolean;
   lastUpdated: string;
   updatedBy: string;
-}
-
-// ==================== MINI SHOP / PRODUCT SHOWCASE TYPES ====================
-export interface MiniShopProduct {
-  id: string;
-  title: string;
-  description: string;
-  price?: string;
-  imageUrl: string;
-  imageStorageMode?: 'firebase_storage' | 'firestore_embedded';
-  whatsappNumber?: string;
-  phoneNumber?: string;
-  active: boolean;
-  displayOrder: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ==================== SHOP VIMEO VIDEO TYPES ====================
-export interface ShopVideoConfig {
-  videoId: string;
-  vimeoUri: string;
-  playerEmbedUrl: string;
-  vimeoLink?: string;
-  title: string;
-  thumbnailUrl?: string;
-  durationSeconds?: number;
-  published: boolean;
-  status: 'ready' | 'processing' | 'error';
-  uploadedAt: string;
-  updatedAt: string;
 }

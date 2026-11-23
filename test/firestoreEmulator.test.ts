@@ -205,19 +205,6 @@ async function runFirestoreEmulatorTests(): Promise<void> {
         publicSafe: true
       });
 
-      // Un-migrated Mini Shop product with private field (no publicSafe: true) -> must NOT be publicly readable
-      await setDoc(doc(db, 'mini_shop_products', 'prod_unmigrated_pii'), {
-        id: 'prod_unmigrated_pii',
-        title: 'Legacy Product',
-        description: 'Contains un-migrated sellerEmail',
-        imageUrl: 'https://example.com/item.jpg',
-        whatsappNumber: '+250780000111',
-        sellerEmail: 'secret.seller@example.com',
-        active: true,
-        displayOrder: 9,
-        createdAt: '2026-11-18T01:00:00.000Z',
-        updatedAt: '2026-11-18T01:00:00.000Z'
-      });
     });
 
     // =========================================================================
@@ -934,112 +921,20 @@ async function runFirestoreEmulatorTests(): Promise<void> {
     });
 
     // =========================================================================
-    // 3. MINI SHOP PRODUCTS: PUBLIC-ONLY FIELDS, INACTIVE ISOLATION & ADMIN
+    // 3. COMMENTS CORRUPTED EXTRA-FIELD DOC AUDIT & REMOVED MINI SHOP DENY
     // =========================================================================
-    const validProduct = {
-      id: 'prod_solar_1',
-      title: 'Solar Radio Pro',
-      description: 'Rechargeable FM/AM radio with solar panel.',
-      price: '18,000 RWF',
-      imageUrl: 'https://example.com/radio.jpg',
-      imageStorageMode: 'firebase_storage',
-      whatsappNumber: '+250780000111',
-      phoneNumber: '0780000111',
-      active: true,
-      displayOrder: 0,
-      createdAt: '2026-11-19T06:00:00.000Z',
-      updatedAt: '2026-11-19T06:00:00.000Z',
-      publicSafe: true
-    };
-
-    const inactiveProduct = {
-      ...validProduct,
-      id: 'prod_draft_2',
-      title: 'Draft Product',
-      active: false,
-      displayOrder: 1
-    };
-
-    await check('Verified Admin CAN manage Mini Shop products & private metadata; non-admins CANNOT write', async () => {
-      await assertSucceeds(setDoc(doc(adminDb, 'mini_shop_products', 'prod_solar_1'), validProduct));
-      await assertSucceeds(setDoc(doc(adminDb, 'mini_shop_products', 'prod_draft_2'), inactiveProduct));
-      await assertSucceeds(
-        setDoc(doc(adminDb, 'mini_shop_products', 'prod_solar_1', 'private', 'seller_meta'), {
-          sellerEmail: 'supplier@example.com',
-          costPrice: '12,000 RWF'
-        })
-      );
-
-      // Rules REJECT adding private fields directly on public product document even for Admin
-      await assertFails(
-        setDoc(doc(adminDb, 'mini_shop_products', 'prod_bad_pii'), {
-          ...validProduct,
-          id: 'prod_bad_pii',
-          sellerEmail: 'supplier@example.com'
-        })
-      );
-
-      await assertFails(setDoc(doc(guestDb, 'mini_shop_products', 'prod_hack'), validProduct));
-      await assertFails(setDoc(doc(otherUserDb, 'mini_shop_products', 'prod_hack'), validProduct));
-      await assertFails(setDoc(doc(spoofedClaimDb, 'mini_shop_products', 'prod_hack'), validProduct));
-      await assertFails(deleteDoc(doc(otherUserDb, 'mini_shop_products', 'prod_solar_1')));
-    });
-
-    await check('Public visitors CAN read/list active clean Mini Shop products WITHOUT accessing inactive, un-migrated, or private docs', async () => {
-      const snap = await assertSucceeds(getDoc(doc(guestDb, 'mini_shop_products', 'prod_solar_1')));
-      assert.equal(snap.exists(), true);
-      assert.equal(snap.data()?.sellerEmail, undefined);
-
-      const listSnap = await assertSucceeds(
-        getDocs(
-          query(
-            collection(guestDb, 'mini_shop_products'),
-            where('active', '==', true),
-            where('publicSafe', '==', true)
-          )
-        )
-      );
-      assert.equal(listSnap.docs.some((d) => d.id === 'prod_solar_1'), true);
-      assert.equal(listSnap.docs.some((d) => d.id === 'prod_draft_2'), false);
-      assert.equal(listSnap.docs.some((d) => d.id === 'prod_unmigrated_pii'), false);
-
-      // Inactive product denied on direct get
-      await assertFails(getDoc(doc(guestDb, 'mini_shop_products', 'prod_draft_2')));
-      await assertFails(getDoc(doc(otherUserDb, 'mini_shop_products', 'prod_draft_2')));
-
-      // Un-migrated doc with extra private fields denied on direct get
-      await assertFails(getDoc(doc(guestDb, 'mini_shop_products', 'prod_unmigrated_pii')));
-
-      // Unfiltered list or list without publicSafe == true denied
-      await assertFails(getDocs(collection(guestDb, 'mini_shop_products')));
-      await assertFails(
-        getDocs(query(collection(guestDb, 'mini_shop_products'), where('active', '==', true)))
-      );
-
-      // Private subcollection strictly Admin-only
-      await assertFails(getDoc(doc(guestDb, 'mini_shop_products', 'prod_solar_1', 'private', 'seller_meta')));
-      await assertFails(getDoc(doc(otherUserDb, 'mini_shop_products', 'prod_solar_1', 'private', 'seller_meta')));
-      await assertSucceeds(getDoc(doc(adminDb, 'mini_shop_products', 'prod_solar_1', 'private', 'seller_meta')));
-    });
-
-    await check('Static query analyzer vs corrupted extra-field docs audit (comments & mini_shop_products)', async () => {
-      // Seed Admin-bypass corrupted docs having BOTH publicSafe: true AND extra private fields
+    await check('Static query analyzer vs corrupted extra-field docs audit (comments) & mini_shop_products default-deny', async () => {
+      // Seed Admin-bypass corrupted comment doc having BOTH publicSafe: true AND extra private fields
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         const db = ctx.firestore();
         await setDoc(doc(db, 'comments', 'comment_corrupt_extra_field'), {
           ...commentBPayload,
           email: 'bypassed@example.com'
         });
-        await setDoc(doc(db, 'mini_shop_products', 'prod_corrupt_extra_field'), {
-          ...validProduct,
-          id: 'prod_corrupt_extra_field',
-          sellerEmail: 'bypassed@example.com'
-        });
       });
 
-      // getDoc MUST reject corrupted extra-field docs via hasRequiredPublic*
+      // getDoc MUST reject corrupted extra-field docs via hasRequiredPublicCommentFields
       await assertFails(getDoc(doc(guestDb, 'comments', 'comment_corrupt_extra_field')));
-      await assertFails(getDoc(doc(guestDb, 'mini_shop_products', 'prod_corrupt_extra_field')));
 
       // Observe list query behavior cleanly (unauthenticated guestDb ONLY)
       let commentListOutcome = 'allowed';
@@ -1057,36 +952,19 @@ async function runFirestoreEmulatorTests(): Promise<void> {
         commentListOutcome = `rejected (${e?.code || e?.message})`;
       }
 
-      let shopListOutcome = 'allowed';
-      try {
-        const res = await getDocs(
-          query(
-            collection(guestDb, 'mini_shop_products'),
-            where('active', '==', true),
-            where('publicSafe', '==', true)
-          )
-        );
-        const hasCorrupt = res.docs.some((d) => d.id === 'prod_corrupt_extra_field');
-        shopListOutcome = `succeeded (${res.size} docs, corrupt_included=${hasCorrupt})`;
-      } catch (e: any) {
-        shopListOutcome = `rejected (${e?.code || e?.message})`;
-      }
-
       console.log(`[AUDIT-PROBE] Comments list with corrupted extra-field doc: ${commentListOutcome}`);
-      console.log(`[AUDIT-PROBE] Mini Shop list with corrupted extra-field doc: ${shopListOutcome}`);
 
-      // Clean up temporary audit probe docs via rules-disabled context
+      // Clean up temporary audit probe doc via rules-disabled context
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         const db = ctx.firestore();
         await deleteDoc(doc(db, 'comments', 'comment_corrupt_extra_field'));
-        await deleteDoc(doc(db, 'mini_shop_products', 'prod_corrupt_extra_field'));
       });
-    });
 
-    await check('Admin CAN list all Mini Shop products (active + inactive) and delete products', async () => {
-      const allSnap = await assertSucceeds(getDocs(collection(adminDb, 'mini_shop_products')));
-      assert.equal(allSnap.docs.some((d) => d.id === 'prod_draft_2'), true);
-      await assertSucceeds(deleteDoc(doc(adminDb, 'mini_shop_products', 'prod_draft_2')));
+      // Removed mini_shop_products collection MUST be completely denied for both public visitors and Admin via client rules
+      await assertFails(getDoc(doc(guestDb, 'mini_shop_products', 'prod_any')));
+      await assertFails(getDocs(collection(guestDb, 'mini_shop_products')));
+      await assertFails(getDoc(doc(adminDb, 'mini_shop_products', 'prod_any')));
+      await assertFails(setDoc(doc(adminDb, 'mini_shop_products', 'prod_any'), { title: 'Blocked' }));
     });
 
     // =========================================================================
