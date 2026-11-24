@@ -525,14 +525,22 @@ export const HomepageInFeedAdSlot: React.FC<HomepageInFeedAdSlotProps> = ({
       data-ad-fill={adFillState}
       className={`no-print w-full max-w-full min-w-0 clear-both transition-all ${deviceVisibilityClass} ${className}`}
     >
-      <div className="w-full max-w-full bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-2xs overflow-hidden">
-        <div className="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-slate-200/70 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+      <div className="theme-card w-full max-w-full border p-3 sm:p-4 shadow-2xs overflow-hidden">
+        <div
+          className="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b text-[10px] font-semibold uppercase tracking-wider"
+          style={{ borderColor: 'var(--app-border-color)', color: 'var(--app-muted-text)' }}
+        >
           <span className="flex items-center gap-1.5 min-w-0">
             <Sparkles className="w-3 h-3 text-amber-500 shrink-0" aria-hidden="true" />
             <span className="truncate">{disclosureLabel}</span>
           </span>
           <span
-            className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono shrink-0"
+            className="text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 border"
+            style={{
+              backgroundColor: 'var(--app-body-bg)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-muted-text)'
+            }}
             title={providerName}
           >
             AD
@@ -546,7 +554,8 @@ export const HomepageInFeedAdSlot: React.FC<HomepageInFeedAdSlotProps> = ({
           >
             <div
               ref={codeContainerRef}
-              className="ad-slot-content block w-full min-w-0 min-h-[50px] text-xs text-slate-700 text-center"
+              className="ad-slot-content block w-full min-w-0 min-h-[50px] text-xs text-center"
+              style={{ color: 'var(--app-muted-text)' }}
             />
           </div>
         </div>

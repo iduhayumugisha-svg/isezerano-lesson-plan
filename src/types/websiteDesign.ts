@@ -32,7 +32,29 @@ export {
   DEFAULT_CATEGORY_NAV_APPEARANCE
 };
 
+export type AppearanceMode = 'light' | 'dark' | 'system';
+export type BorderRadiusPreset = 'none' | 'small' | 'medium' | 'large' | 'rounded';
+export type LayoutSpacingDensity = 'compact' | 'comfortable';
+
+export interface WebsiteAppearanceSettings {
+  mode: AppearanceMode;
+  presetId: string;
+  borderRadius: BorderRadiusPreset;
+  spacing: LayoutSpacingDensity;
+}
+
 export interface WebsiteColorSettings {
+  // Core Brand & System Tokens
+  primaryColor: string;       // Global Primary Color
+  secondaryColor: string;     // Global Secondary Color
+  accentColor: string;        // Global Accent Color
+  borderColor: string;        // Global Border Color
+  successBg: string;          // Success Notification Background Color (and Saved & Published status)
+  successText: string;        // Success Notification Text Color
+  errorBg: string;            // Error Notification Background Color
+  warningBg: string;          // Warning Notification Background Color
+  modalOverlayBg: string;     // Modal / Overlay Background Color
+
   // Header and Navigation Bar
   headerBg: string;           // Header background color
   headerText: string;         // Header title and text
@@ -210,6 +232,7 @@ export interface WebsiteDesignVersion {
 export interface WebsiteDesignSettings {
   branding: WebsiteBrandingSettings;
   colors: WebsiteColorSettings;
+  appearance?: WebsiteAppearanceSettings;
   typography: WebsiteTypographySettings;
   logo: WebsiteLogoSettings;
   categoryNav?: CategoryNavAppearanceSettings;
@@ -234,7 +257,24 @@ export const DEFAULT_WEBSITE_BRANDING: WebsiteBrandingSettings = {
   homepageCustomNote: ''
 };
 
+export const DEFAULT_APPEARANCE_STATE: WebsiteAppearanceSettings = {
+  mode: 'light',
+  presetId: 'official-teal-light',
+  borderRadius: 'medium',
+  spacing: 'comfortable'
+};
+
 export const DEFAULT_WEBSITE_COLORS: WebsiteColorSettings = {
+  primaryColor: '#0f766e',
+  secondaryColor: '#0f172a',
+  accentColor: '#14b8a6',
+  borderColor: '#e2e8f0',
+  successBg: '#0d9488',
+  successText: '#ffffff',
+  errorBg: '#dc2626',
+  warningBg: '#d97706',
+  modalOverlayBg: '#090e1a',
+
   headerBg: '#ffffff',
   headerText: '#0f172a',
   headerBorder: '#e2e8f0',
@@ -433,6 +473,7 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
 export const DEFAULT_WEBSITE_DESIGN: WebsiteDesignSettings = {
   branding: DEFAULT_WEBSITE_BRANDING,
   colors: DEFAULT_WEBSITE_COLORS,
+  appearance: DEFAULT_APPEARANCE_STATE,
   typography: DEFAULT_WEBSITE_TYPOGRAPHY,
   logo: DEFAULT_WEBSITE_LOGO,
   categoryNav: DEFAULT_CATEGORY_NAV_APPEARANCE,

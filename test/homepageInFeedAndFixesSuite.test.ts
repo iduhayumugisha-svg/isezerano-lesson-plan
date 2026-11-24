@@ -565,11 +565,19 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   const rulesSrc = fs.readFileSync(path.resolve('firestore.rules'), 'utf8');
   assert.match(rulesSrc, /function hasValidParentComment\(/);
   assert.match(rulesSrc, /function hasValidOwnershipAfterForComment\(/);
-  assert.match(rulesSrc, /function hasValidOwnershipAfterForToken\(/);
+  assert.doesNotMatch(rulesSrc, /function hasValidOwnershipAfterForToken\(/, 'tokens/{tokenId} must remain a pure leaf node with zero cycles');
   assert.match(rulesSrc, /function hasValidPeerDocsAfterForOwnership\(/);
+  assert.match(rulesSrc, /function hasValidTokenAfterForOwnership\(/);
   assert.doesNotMatch(rulesSrc, /\$\(getAfter\(/, 'Nested getAfter substitutions must stay eliminated');
   const ownershipPeerFn = (rulesSrc.match(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0];
   assert.doesNotMatch(ownershipPeerFn, /getAfter\(/, 'hasValidPeerDocsAfterForOwnership must remain acyclic without circular getAfter');
+  assert.doesNotMatch(ownershipPeerFn, /comments\/\$\(commentId\)\)/, 'private/ownership create must not reference /comments/$(commentId) via existsAfter');
+  const ownershipTokenAfterFn = (rulesSrc.match(/function hasValidTokenAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0];
+  assert.doesNotMatch(ownershipTokenAfterFn, /comments\/\$\(commentId\)\)/, 'hasValidTokenAfterForOwnership must only inspect leaf /tokens/$(data.tokenHash)');
+  const ownershipUpdateFn = (rulesSrc.match(/function isValidPublicOwnershipUpdate[\s\S]*?\n\s*\}/) || [''])[0];
+  assert.doesNotMatch(ownershipUpdateFn, /(?:existsAfter|getAfter)\(/, 'isValidPublicOwnershipUpdate must remain 1-way acyclic without existsAfter/getAfter back to comments');
+  const tokensMatchBlock = (rulesSrc.match(/match \/tokens\/\{tokenId\}[\s\S]*?\n\s*\}/) || [''])[0];
+  assert.doesNotMatch(tokensMatchBlock, /(?:existsAfter|getAfter)\(/, 'tokens/{tokenId} leaf rule must have zero existsAfter/getAfter dependencies');
   assert.match(
     rulesSrc,
     /isValidCommentId\(data\.parentId\)[\s\S]*?exists\([^)]*comments\/\$\(data\.parentId\)\)[\s\S]*?hasValidParentComment\(data\)/

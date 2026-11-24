@@ -1,10 +1,71 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --app-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
   --app-heading-font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;
+
+  /* Core 18 Global Theme Color Defaults */
+  --app-primary: #0f766e;
+  --app-secondary: #0f172a;
+  --app-accent: #14b8a6;
   --app-body-bg: #f8fafc;
+  --app-card-bg: #ffffff;
+  --app-header-bg: #ffffff;
+  --app-footer-bg: #090e1a;
   --app-body-text: #1e293b;
+  --app-muted-text: #64748b;
+  --app-link-color: #0f766e;
+  --app-primary-btn-bg: #0f766e;
+  --app-primary-btn-text: #ffffff;
+  --app-border-color: #e2e8f0;
+  --app-success-bg: #0d9488;
+  --app-success-text: #ffffff;
+  --app-error-bg: #dc2626;
+  --app-error-text: #ffffff;
+  --app-warning-bg: #d97706;
+  --app-warning-text: #ffffff;
+  --app-modal-overlay-bg: #090e1a;
+  --app-modal-overlay-rgba: rgba(9, 14, 26, 0.68);
+
+  /* Soft Contextual Surface Defaults */
+  --app-primary-soft: rgba(15, 118, 110, 0.1);
+  --app-accent-soft: rgba(20, 184, 166, 0.12);
+  --app-error-soft: rgba(220, 38, 38, 0.1);
+  --app-warning-soft: rgba(217, 119, 6, 0.12);
+
+  /* Structural Color Defaults */
+  --app-header-text: #0f172a;
+  --app-header-border: #e2e8f0;
+  --app-nav-link-hover: #0d9488;
+  --app-nav-link-active: #0f766e;
+  --app-card-border: #e2e8f0;
+  --app-accent-bg: #f0fdfa;
+  --app-secondary-btn-bg: #0f172a;
+  --app-secondary-btn-text: #ffffff;
+  --app-form-input-border: #cbd5e1;
+  --app-form-focus-ring: #14b8a6;
+  --app-footer-heading-text: #ffffff;
+  --app-footer-body-text: #94a3b8;
+  --app-footer-link-color: #2dd4bf;
+  --app-heading-primary: #0f172a;
+  --app-heading-secondary: #334155;
+  --app-sidebar-bg: #0f172a;
+  --app-sidebar-text: #ffffff;
+  --app-accent-badge-bg: #ccfbf1;
+  --app-accent-badge-text: #115e59;
+
+  /* Border Radius & Spacing Defaults */
+  --app-radius-card: 12px;
+  --app-radius-btn: 8px;
+  --app-radius-input: 8px;
+  --app-radius-modal: 16px;
+  --app-radius-pill: 9999px;
+
+  --app-space-card: 1.5rem;
+  --app-space-section: 2rem;
+  --app-space-gap: 1.25rem;
+  --app-space-header-y: 0.875rem;
 }
 
 @layer base {
@@ -23,6 +84,123 @@
   input, button, select, textarea {
     font-family: inherit;
   }
+}
+
+/* Global Semantic Theme Classes powered by CSS Custom Properties */
+.theme-surface {
+  background-color: var(--app-body-bg);
+  color: var(--app-body-text);
+}
+
+.theme-card {
+  background-color: var(--app-card-bg);
+  color: var(--app-body-text);
+  border-color: var(--app-border-color);
+  border-radius: var(--app-radius-card);
+}
+
+.theme-card-pad {
+  padding: var(--app-space-card);
+}
+
+.theme-section-stack {
+  gap: var(--app-space-section);
+}
+
+.theme-grid-gap {
+  gap: var(--app-space-gap);
+}
+
+.theme-header {
+  background-color: var(--app-header-bg);
+  color: var(--app-header-text);
+  border-color: var(--app-header-border);
+}
+
+.theme-footer {
+  background-color: var(--app-footer-bg);
+  color: var(--app-footer-body-text);
+}
+
+.theme-btn-primary {
+  background-color: var(--app-primary-btn-bg);
+  color: var(--app-primary-btn-text);
+  border-radius: var(--app-radius-btn);
+}
+
+.theme-btn-secondary {
+  background-color: var(--app-secondary-btn-bg);
+  color: var(--app-secondary-btn-text);
+  border-radius: var(--app-radius-btn);
+}
+
+.theme-input {
+  background-color: var(--app-card-bg);
+  color: var(--app-body-text);
+  border-color: var(--app-form-input-border, var(--app-border-color));
+  border-radius: var(--app-radius-input);
+}
+
+.theme-input:focus {
+  outline: none;
+  border-color: var(--app-form-focus-ring);
+  box-shadow: 0 0 0 2px var(--app-accent-soft);
+}
+
+.theme-link {
+  color: var(--app-link-color);
+}
+
+.theme-success-banner {
+  background-color: var(--app-success-bg);
+  color: var(--app-success-text);
+  border-radius: var(--app-radius-btn);
+}
+
+.theme-error-banner {
+  background-color: var(--app-error-bg);
+  color: var(--app-error-text);
+  border-radius: var(--app-radius-btn);
+}
+
+.theme-warning-banner {
+  background-color: var(--app-warning-bg);
+  color: var(--app-warning-text);
+  border-radius: var(--app-radius-btn);
+}
+
+.theme-modal-overlay {
+  background-color: var(--app-modal-overlay-rgba, rgba(9, 14, 26, 0.68));
+}
+
+.theme-modal-card {
+  background-color: var(--app-card-bg);
+  color: var(--app-body-text);
+  border-color: var(--app-border-color);
+  border-radius: var(--app-radius-modal);
+}
+
+/* Rich article typography adapts automatically to active body, heading & link tokens */
+.blog-article-body {
+  color: var(--app-body-text);
+}
+.blog-article-body h1,
+.blog-article-body h2,
+.blog-article-body h3,
+.blog-article-body h4 {
+  color: var(--app-heading-primary);
+}
+.blog-article-body p,
+.blog-article-body li {
+  color: var(--app-body-text);
+}
+.blog-article-body a {
+  color: var(--app-link-color);
+}
+.blog-article-body blockquote {
+  border-left-color: var(--app-primary);
+  background-color: var(--app-accent-bg);
+  color: var(--app-body-text);
 }
 
 /* Responsive Blog Article Image Display (preserves admin widths/heights while never overflowing) */

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { 
   WebsiteDesignSettings, 
   WebsiteColorSettings, 
+  WebsiteAppearanceSettings,
+  AppearanceMode,
   WebsiteTypographySettings, 
   WebsiteLogoSettings,
   WebsiteBrandingSettings,
@@ -14,6 +16,7 @@ import {
   WhatsAppContactSettings,
   DEFAULT_WEBSITE_DESIGN,
   DEFAULT_WEBSITE_COLORS,
+  DEFAULT_APPEARANCE_STATE,
   DEFAULT_WEBSITE_TYPOGRAPHY,
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_WEBSITE_BRANDING,
@@ -24,6 +27,15 @@ import {
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, validateAndNormalizeWhatsAppNumber } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings } from '../utils/categoryStyleUtils';
+import {
+  APPEARANCE_THEME_PRESETS,
+  DEFAULT_DARK_COLORS,
+  DEFAULT_LIGHT_COLORS,
+  getRelativeLuminance,
+  normalizeAppearanceSettings,
+  normalizeColorSettings,
+  resolveEffectiveAppearanceMode
+} from '../utils/appearanceUtils';
 import { 
   getWebsiteDesignSettings, 
   getPublicWebsiteDesignSettings,
@@ -52,6 +64,9 @@ interface WebsiteDesignContextType {
   // Actions
   updateDraftBranding: (branding: Partial<WebsiteBrandingSettings>) => void;
   updateDraftColors: (colors: Partial<WebsiteColorSettings>) => void;
+  updateDraftAppearance: (appearance: Partial<WebsiteAppearanceSettings>) => void;
+  applyAppearancePreset: (presetId: string) => void;
+  setAppearanceMode: (mode: AppearanceMode) => void;
   updateDraftTypography: (typography: Partial<WebsiteTypographySettings>) => void;
   updateDraftLogo: (logo: Partial<WebsiteLogoSettings>) => void;
   updateDraftCategoryNav: (categoryNav: Partial<CategoryNavAppearanceSettings>) => void;
@@ -87,8 +102,8 @@ interface WebsiteDesignContextType {
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Reset & Undo Actions
-  resetSectionToDefault: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
-  resetSingleField: (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => void;
+  resetSectionToDefault: (section: 'branding' | 'colors' | 'appearance' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => void;
+  resetSingleField: (section: 'branding' | 'colors' | 'appearance' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => void;
   setPreviewingDraft: (preview: boolean) => void;
   cancelDraft: () => void;
   undoDraftChanges: () => void;
@@ -108,6 +123,8 @@ interface WebsiteDesignContextType {
   logoUrl: string;
   logoSettings: WebsiteLogoSettings;
   colors: WebsiteColorSettings;
+  appearance: WebsiteAppearanceSettings;
+  effectiveMode: 'light' | 'dark';
   typography: WebsiteTypographySettings;
 }
 
@@ -206,13 +223,37 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
   // Active settings: Immediately reflects draft changes while editing so the UI updates live
   const activeSettings = (isDraftDirty || isPreviewingDraft) ? draftSettings : publishedSettings;
+  const activeAppearance = normalizeAppearanceSettings(activeSettings.appearance);
+  const effectiveMode = resolveEffectiveAppearanceMode(activeAppearance.mode, systemPrefersDark);
 
-  // Real-time CSS variable update whenever active settings change
+  // Listen to OS Light/Dark preference changes for System Default mode
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches);
+    };
+    setSystemPrefersDark(mediaQuery.matches);
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+    return undefined;
+  }, []);
+
+  // Real-time CSS variable update whenever active settings or OS theme preference change
   useEffect(() => {
     applyDesignCssVariables(activeSettings);
-  }, [activeSettings]);
+  }, [activeSettings, systemPrefersDark]);
 
   const updateDraftBranding = (partialBranding: Partial<WebsiteBrandingSettings>) => {
     setDraftSettings(prev => {
@@ -229,9 +270,115 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateDraftColors = (partialColors: Partial<WebsiteColorSettings>) => {
     setDraftSettings(prev => {
+      const mergedColors: WebsiteColorSettings = {
+        ...normalizeColorSettings(prev.colors),
+        ...partialColors
+      };
+      if (partialColors.borderColor !== undefined) {
+        if (partialColors.cardBorder === undefined) mergedColors.cardBorder = partialColors.borderColor;
+        if (partialColors.headerBorder === undefined) mergedColors.headerBorder = partialColors.borderColor;
+        if (partialColors.formInputBorder === undefined) mergedColors.formInputBorder = partialColors.borderColor;
+      }
+      if (partialColors.primaryColor !== undefined && partialColors.navLinkActive === undefined) {
+        mergedColors.navLinkActive = partialColors.primaryColor;
+      }
+      if (partialColors.accentColor !== undefined) {
+        if (partialColors.navLinkHover === undefined) mergedColors.navLinkHover = partialColors.accentColor;
+        if (partialColors.formFocusRing === undefined) mergedColors.formFocusRing = partialColors.accentColor;
+      }
       const next = {
         ...prev,
-        colors: { ...prev.colors, ...partialColors }
+        colors: mergedColors
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const updateDraftAppearance = (partialAppearance: Partial<WebsiteAppearanceSettings>) => {
+    setDraftSettings(prev => {
+      const nextAppearance = normalizeAppearanceSettings({
+        ...(prev.appearance || DEFAULT_APPEARANCE_STATE),
+        ...partialAppearance
+      });
+      const next = {
+        ...prev,
+        appearance: nextAppearance
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const setAppearanceMode = (mode: AppearanceMode) => {
+    setDraftSettings(prev => {
+      const currentColors = normalizeColorSettings(prev.colors);
+      const currentAppearance = normalizeAppearanceSettings(prev.appearance);
+      const bodyLum = getRelativeLuminance(currentColors.bodyBg);
+
+      let nextColors = currentColors;
+      let nextPresetId = currentAppearance.presetId;
+
+      if (mode === 'dark' && bodyLum > 0.35) {
+        nextColors = {
+          ...DEFAULT_DARK_COLORS,
+          successBg: currentColors.successBg,
+          successText: currentColors.successText,
+          errorBg: currentColors.errorBg,
+          warningBg: currentColors.warningBg
+        };
+        nextPresetId = 'midnight-slate-dark';
+      } else if (mode === 'light' && bodyLum < 0.2) {
+        nextColors = {
+          ...DEFAULT_LIGHT_COLORS,
+          successBg: currentColors.successBg,
+          successText: currentColors.successText,
+          errorBg: currentColors.errorBg,
+          warningBg: currentColors.warningBg
+        };
+        nextPresetId = 'official-teal-light';
+      }
+
+      const next: WebsiteDesignSettings = {
+        ...prev,
+        colors: nextColors,
+        appearance: {
+          ...currentAppearance,
+          mode,
+          presetId: nextPresetId
+        }
+      };
+      applyDesignCssVariables(next);
+      return next;
+    });
+    setIsDraftDirty(true);
+    isDraftDirtyRef.current = true;
+  };
+
+  const applyAppearancePreset = (presetId: string) => {
+    const preset = APPEARANCE_THEME_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+    setDraftSettings(prev => {
+      const currentAppearance = normalizeAppearanceSettings(prev.appearance);
+      const basePalette = preset.mode === 'dark' ? DEFAULT_DARK_COLORS : DEFAULT_LIGHT_COLORS;
+      const mergedColors = normalizeColorSettings({
+        ...basePalette,
+        ...preset.colors
+      });
+      const next: WebsiteDesignSettings = {
+        ...prev,
+        colors: mergedColors,
+        appearance: {
+          ...currentAppearance,
+          mode: preset.mode,
+          presetId: preset.id,
+          borderRadius: preset.borderRadius || currentAppearance.borderRadius,
+          spacing: preset.spacing || currentAppearance.spacing
+        }
       };
       applyDesignCssVariables(next);
       return next;
@@ -704,14 +851,17 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const resetSectionToDefault = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
+  const resetSectionToDefault = (section: 'branding' | 'colors' | 'appearance' | 'typography' | 'logo' | 'categoryNav' | 'layout' | 'menus' | 'whatsapp' | 'all') => {
     setDraftSettings(prev => {
       let updated = { ...prev };
       if (section === 'branding' || section === 'all') {
         updated.branding = { ...DEFAULT_WEBSITE_BRANDING };
       }
-      if (section === 'colors' || section === 'all') {
+      if (section === 'colors' || section === 'appearance' || section === 'all') {
         updated.colors = { ...DEFAULT_WEBSITE_COLORS };
+      }
+      if (section === 'appearance' || section === 'all') {
+        updated.appearance = { ...DEFAULT_APPEARANCE_STATE };
       }
       if (section === 'typography' || section === 'all') {
         updated.typography = { ...DEFAULT_WEBSITE_TYPOGRAPHY };
@@ -738,13 +888,24 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
     isDraftDirtyRef.current = true;
   };
 
-  const resetSingleField = (section: 'branding' | 'colors' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => {
+  const resetSingleField = (section: 'branding' | 'colors' | 'appearance' | 'typography' | 'logo' | 'categoryNav' | 'layout', fieldKey: string) => {
     setDraftSettings(prev => {
       const updated = { ...prev };
       if (section === 'branding') {
         (updated.branding as any)[fieldKey] = (DEFAULT_WEBSITE_BRANDING as any)[fieldKey];
       } else if (section === 'colors') {
-        (updated.colors as any)[fieldKey] = (DEFAULT_WEBSITE_COLORS as any)[fieldKey];
+        const nextVal = (DEFAULT_WEBSITE_COLORS as any)[fieldKey];
+        const nextColors = { ...normalizeColorSettings(updated.colors), [fieldKey]: nextVal };
+        if (fieldKey === 'borderColor') {
+          nextColors.cardBorder = nextVal;
+          nextColors.headerBorder = nextVal;
+          nextColors.formInputBorder = nextVal;
+        }
+        updated.colors = nextColors;
+      } else if (section === 'appearance') {
+        const currentApp = normalizeAppearanceSettings(updated.appearance);
+        (currentApp as any)[fieldKey] = (DEFAULT_APPEARANCE_STATE as any)[fieldKey];
+        updated.appearance = currentApp;
       } else if (section === 'typography') {
         (updated.typography as any)[fieldKey] = (DEFAULT_WEBSITE_TYPOGRAPHY as any)[fieldKey];
       } else if (section === 'logo') {
@@ -895,6 +1056,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         isPublishing,
         updateDraftBranding,
         updateDraftColors,
+        updateDraftAppearance,
+        applyAppearancePreset,
+        setAppearanceMode,
         updateDraftTypography,
         updateDraftLogo,
         updateDraftCategoryNav,
@@ -937,7 +1101,9 @@ export const WebsiteDesignProvider: React.FC<{ children: React.ReactNode }> = ({
         versionHistory: activeSettings.versionHistory || [],
         logoUrl: activeSettings.logo.logoUrl || DEFAULT_WEBSITE_LOGO.logoUrl,
         logoSettings: activeSettings.logo,
-        colors: activeSettings.colors,
+        colors: normalizeColorSettings(activeSettings.colors),
+        appearance: activeAppearance,
+        effectiveMode,
         typography: activeSettings.typography
       }}
     >

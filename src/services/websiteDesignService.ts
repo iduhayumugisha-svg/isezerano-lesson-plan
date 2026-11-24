@@ -10,6 +10,15 @@ import {
 } from '../types/websiteDesign';
 import { normalizeWhatsAppSettings, sanitizeHexColor } from '../utils/whatsappUtils';
 import { normalizeCategoryNavSettings, resolveAllNewsLabel } from '../utils/categoryStyleUtils';
+import {
+  BORDER_RADIUS_MAP,
+  SPACING_DENSITY_MAP,
+  getReadableContrastText,
+  hexToRgba,
+  normalizeAppearanceSettings,
+  normalizeColorSettings,
+  resolveEffectiveColors
+} from '../utils/appearanceUtils';
 import { initFirestoreIfConfigured, getFirebaseApp, CANONICAL_FIREBASE_CONFIG } from '../config/firebase';
 import { isAuthorizedAdminEmail } from './authService';
 
@@ -167,7 +176,8 @@ export const getCachedWebsiteDesignSettingsSync = (): WebsiteDesignSettings => {
       };
       return {
         branding: mergedBranding,
-        colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(parsed.colors || {}) },
+        colors: normalizeColorSettings(parsed.colors),
+        appearance: normalizeAppearanceSettings(parsed.appearance),
         typography: mergeTypographyWithDefaults(parsed.typography, parsed.colors),
         logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(parsed.logo || {}) },
         categoryNav: normalizeCategoryNavSettings(parsed.categoryNav),
@@ -206,14 +216,14 @@ const parseDesignRestValue = (val: any): any => {
   return undefined;
 };
 
-const DESIGN_PUBLIC_REST_URL =
+export const DESIGN_PUBLIC_REST_URL =
   'https://firestore.googleapis.com/v1/projects/isezerano-news/databases/(default)/documents/appSettings/website_design' +
-  '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=typography' +
+  '?mask.fieldPaths=branding&mask.fieldPaths=colors&mask.fieldPaths=appearance&mask.fieldPaths=typography' +
   '&mask.fieldPaths=logo&mask.fieldPaths=categoryNav&mask.fieldPaths=homepageSections' +
   '&mask.fieldPaths=navigationMenus&mask.fieldPaths=whatsappContact' +
   '&mask.fieldPaths=updatedAt&mask.fieldPaths=updatedBy';
 
-const normalizeWebsiteDesignPayload = (
+export const normalizeWebsiteDesignPayload = (
   data: Partial<WebsiteDesignSettings>,
   fallbackHistory: WebsiteDesignVersion[] = []
 ): WebsiteDesignSettings => ({
@@ -222,7 +232,8 @@ const normalizeWebsiteDesignPayload = (
     ...(data.branding || {}),
     allNewsLabel: resolveAllNewsLabel(data.branding)
   },
-  colors: { ...DEFAULT_WEBSITE_DESIGN.colors, ...(data.colors || {}) },
+  colors: normalizeColorSettings(data.colors),
+  appearance: normalizeAppearanceSettings(data.appearance),
   typography: mergeTypographyWithDefaults(data.typography, data.colors),
   logo: { ...DEFAULT_WEBSITE_DESIGN.logo, ...(data.logo || {}) },
   categoryNav: normalizeCategoryNavSettings(data.categoryNav),
@@ -370,7 +381,8 @@ export const saveWebsiteDesignSettings = async (
       ...settings.branding,
       allNewsLabel: resolveAllNewsLabel(settings.branding)
     },
-    colors: { ...settings.colors },
+    colors: normalizeColorSettings(settings.colors),
+    appearance: normalizeAppearanceSettings(settings.appearance),
     typography: { ...settings.typography },
     logo: { ...settings.logo },
     categoryNav: normalizeCategoryNavSettings(settings.categoryNav),
@@ -400,6 +412,8 @@ export const saveWebsiteDesignSettings = async (
     stripUndefinedDeep({
       ...settings,
       branding: rawSnapshot.branding,
+      colors: rawSnapshot.colors,
+      appearance: rawSnapshot.appearance,
       categoryNav: rawSnapshot.categoryNav,
       versionHistory: historySlice,
       updatedAt: new Date().toISOString(),
@@ -941,14 +955,45 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
     document.head.appendChild(styleTag);
   }
 
-  const { colors, typography, logo } = settings;
+  const { typography, logo } = settings;
+  const appearance = normalizeAppearanceSettings(settings.appearance);
+  const systemPrefersDark =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false;
+  const { effectiveMode, colors } = resolveEffectiveColors(
+    settings.colors,
+    appearance,
+    systemPrefersDark
+  );
+
+  const radiusTokens = BORDER_RADIUS_MAP[appearance.borderRadius] || BORDER_RADIUS_MAP.medium;
+  const spacingTokens = SPACING_DENSITY_MAP[appearance.spacing] || SPACING_DENSITY_MAP.comfortable;
+
+  const errorText = getReadableContrastText(colors.errorBg);
+  const warningText = getReadableContrastText(colors.warningBg);
+  const modalOverlayRgba = hexToRgba(colors.modalOverlayBg, 0.68);
+  const primarySoftBg = hexToRgba(colors.primaryColor, effectiveMode === 'dark' ? 0.18 : 0.1);
+  const accentSoftBg = hexToRgba(colors.accentColor, effectiveMode === 'dark' ? 0.18 : 0.12);
+  const errorSoftBg = hexToRgba(colors.errorBg, effectiveMode === 'dark' ? 0.22 : 0.1);
+  const warningSoftBg = hexToRgba(colors.warningBg, effectiveMode === 'dark' ? 0.22 : 0.12);
+
+  // Sync HTML attributes & dark class for Tailwind v4 custom dark variant
+  const rootEl = document.documentElement;
+  rootEl.classList.toggle('dark', effectiveMode === 'dark');
+  rootEl.setAttribute('data-theme', effectiveMode);
+  rootEl.setAttribute('data-appearance-mode', appearance.mode);
+  rootEl.setAttribute('data-radius', appearance.borderRadius);
+  rootEl.setAttribute('data-spacing', appearance.spacing);
+  rootEl.style.colorScheme = effectiveMode;
+
   const fontScale = typography.fontScale && typography.fontScale >= 0.7 && typography.fontScale <= 1.8 
     ? typography.fontScale 
     : 1.0;
   const rootPx = Math.round(16 * fontScale * 100) / 100;
 
   // Apply root font-size directly to documentElement for instant effect
-  document.documentElement.style.fontSize = `${rootPx}px`;
+  rootEl.style.fontSize = `${rootPx}px`;
 
   const fontLineHeight = typography.lineHeight === 'tight' 
     ? '1.25' 
@@ -969,52 +1014,80 @@ export const applyDesignCssVariables = (settings: WebsiteDesignSettings): void =
   styleTag.textContent = `
     html {
       font-size: ${rootPx}px !important;
+      color-scheme: ${effectiveMode};
     }
 
     :root {
       --app-font-scale: ${fontScale};
-      /* Colors */
-      --app-header-bg: ${colors.headerBg};
-      --app-header-text: ${colors.headerText};
-      --app-header-border: ${colors.headerBorder};
-      --app-nav-link-hover: ${colors.navLinkHover};
-      --app-nav-link-active: ${colors.navLinkActive};
 
+      /* Core 18 Global Theme Color Tokens */
+      --app-primary: ${colors.primaryColor};
+      --app-secondary: ${colors.secondaryColor};
+      --app-accent: ${colors.accentColor};
       --app-body-bg: ${colors.bodyBg};
+      --app-card-bg: ${colors.cardBg};
+      --app-header-bg: ${colors.headerBg};
+      --app-footer-bg: ${colors.footerBg};
       --app-body-text: ${colors.bodyText};
       --app-muted-text: ${colors.mutedText};
-
-      --app-card-bg: ${colors.cardBg};
-      --app-card-border: ${colors.cardBorder};
-      --app-accent-bg: ${colors.accentBg};
-
+      --app-link-color: ${colors.linkColor};
       --app-primary-btn-bg: ${colors.primaryButtonBg};
       --app-primary-btn-text: ${colors.primaryButtonText};
+      --app-border-color: ${colors.borderColor};
+      --app-success-bg: ${colors.successBg};
+      --app-success-text: ${colors.successText};
+      --app-error-bg: ${colors.errorBg};
+      --app-error-text: ${errorText};
+      --app-warning-bg: ${colors.warningBg};
+      --app-warning-text: ${warningText};
+      --app-modal-overlay-bg: ${colors.modalOverlayBg};
+      --app-modal-overlay-rgba: ${modalOverlayRgba};
+
+      /* Soft Contextual Surface Derivations */
+      --app-primary-soft: ${primarySoftBg};
+      --app-accent-soft: ${accentSoftBg};
+      --app-error-soft: ${errorSoftBg};
+      --app-warning-soft: ${warningSoftBg};
+
+      /* Granular Legacy & Structural Tokens */
+      --app-header-text: ${colors.headerText};
+      --app-header-border: ${colors.headerBorder || colors.borderColor};
+      --app-nav-link-hover: ${colors.navLinkHover};
+      --app-nav-link-active: ${colors.navLinkActive};
+      --app-card-border: ${colors.cardBorder || colors.borderColor};
+      --app-accent-bg: ${colors.accentBg};
       --app-secondary-btn-bg: ${colors.secondaryButtonBg};
       --app-secondary-btn-text: ${colors.secondaryButtonText};
-      --app-link-color: ${colors.linkColor};
-      --app-form-input-border: ${colors.formInputBorder};
+      --app-form-input-border: ${colors.formInputBorder || colors.borderColor};
       --app-form-focus-ring: ${colors.formFocusRing};
-
-      --app-footer-bg: ${colors.footerBg};
       --app-footer-heading-text: ${colors.footerHeadingText};
       --app-footer-body-text: ${colors.footerBodyText};
       --app-footer-link-color: ${colors.footerLinkColor};
-
       --app-heading-primary: ${colors.headingPrimary};
       --app-heading-secondary: ${colors.headingSecondary};
-
       --app-sidebar-bg: ${colors.sidebarBg};
       --app-sidebar-text: ${colors.sidebarText};
       --app-accent-badge-bg: ${colors.accentBadgeBg};
       --app-accent-badge-text: ${colors.accentBadgeText};
+
+      /* Border Radius & Layout Spacing Tokens */
+      --app-radius-card: ${radiusTokens.card};
+      --app-radius-btn: ${radiusTokens.button};
+      --app-radius-input: ${radiusTokens.input};
+      --app-radius-modal: ${radiusTokens.modal};
+      --app-radius-pill: ${radiusTokens.pill};
+
+      --app-space-card: ${spacingTokens.cardPadding};
+      --app-space-section: ${spacingTokens.sectionGap};
+      --app-space-gap: ${spacingTokens.gridGap};
+      --app-space-header-y: ${spacingTokens.headerPaddingY};
 
       /* Typography */
       --app-font-family: ${typography.fontFamily};
       --app-heading-font-family: ${typography.headingFontFamily};
       --app-website-name-font: ${typography.websiteNameFontFamily || DEFAULT_WEBSITE_DESIGN.typography.websiteNameFontFamily};
       --app-website-name-size: ${typography.websiteNameSize || DEFAULT_WEBSITE_DESIGN.typography.websiteNameSize}px;
-      --app-website-name-color: ${sanitizeHexColor(typography.websiteNameColor, colors.headerText || '#0f172a')};
+      --app-website-name-color: ${effectiveMode === 'dark' && sanitizeHexColor(typography.websiteNameColor, '#0f172a') === '#0f172a' ? colors.headerText : sanitizeHexColor(typography.websiteNameColor, colors.headerText || '#0f172a')};
 
       --app-font-size-title: ${typography.websiteTitleSize}px;
       --app-font-size-subtitle: ${typography.websiteSubtitleSize}px;

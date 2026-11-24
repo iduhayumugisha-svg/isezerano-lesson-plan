@@ -784,8 +784,13 @@ export function runSecurityAuditTests() {
       engine.canListComments(admin, undefined, undefined)
   );
 
+  const ownershipPeerFnSrc = (firestoreRulesSrc.match(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0];
+  const ownershipTokenFnSrc = (firestoreRulesSrc.match(/function hasValidTokenAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0];
+  const ownershipUpdateFnSrc = (firestoreRulesSrc.match(/function isValidPublicOwnershipUpdate[\s\S]*?\n\s*\}/) || [''])[0];
+  const tokensMatchSrc = (firestoreRulesSrc.match(/match \/tokens\/\{tokenId\}[\s\S]*?\n\s*\}/) || [''])[0];
+
   assert(
-    'firestore.rules defines cryptographic hashing.sha256 verifier without get().id, acyclic getAfter guards, hasOnly list guards, and /private isolation',
+    'firestore.rules defines cryptographic hashing.sha256 verifier without get().id, strictly acyclic 1-way DAG across create/edit/delete, hasOnly list guards, and /private isolation',
     firestoreRulesSrc.includes('match /tokens/{tokenId}') &&
       firestoreRulesSrc.includes('match /private/{ownershipId}') &&
       firestoreRulesSrc.includes('hashing.sha256') &&
@@ -796,18 +801,32 @@ export function runSecurityAuditTests() {
       firestoreRulesSrc.includes('existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership)') &&
       firestoreRulesSrc.includes('exists(/databases/$(database)/documents/comments/$(commentId))') &&
       firestoreRulesSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)') &&
-      !(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}[\s\S]*?getAfter\(/.test(
-        (firestoreRulesSrc.match(/function hasValidPeerDocsAfterForOwnership[\s\S]*?\n\s*\}/) || [''])[0]
-      )) &&
+      !firestoreRulesSrc.includes('function hasValidOwnershipAfterForToken(') &&
+      !/getAfter\(/.test(ownershipPeerFnSrc) &&
+      !/comments\/\$\(commentId\)\)/.test(ownershipPeerFnSrc) &&
+      !/comments\/\$\(commentId\)\)/.test(ownershipTokenFnSrc) &&
+      !/(?:existsAfter|getAfter)\(/.test(ownershipUpdateFnSrc) &&
+      !/(?:existsAfter|getAfter)\(/.test(tokensMatchSrc) &&
+      tokensMatchSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId))') &&
+      tokensMatchSrc.includes('!exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)') &&
       /isValidCommentId\(data\.parentId\)[\s\S]*?exists\([^)]*comments\/\$\(data\.parentId\)\)[\s\S]*?hasValidParentComment\(data\)/.test(
         firestoreRulesSrc
       )
   );
   assert(
-    'formatFirestoreCommentError translates permission-denied cleanly for readers without losing fallback messages',
+    'formatFirestoreCommentError translates permission-denied, unauthenticated, failed-precondition, invalid-argument, and unavailable cleanly without losing fallback messages',
     /server permissions/i.test(
       formatFirestoreCommentError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' }, 'Fallback')
     ) &&
+      /session expired/i.test(
+        formatFirestoreCommentError({ code: 'unauthenticated', message: 'Unauthenticated' }, 'Fallback')
+      ) &&
+      /thread state changed/i.test(
+        formatFirestoreCommentError({ code: 'failed-precondition', message: 'Precondition failed' }, 'Fallback')
+      ) &&
+      /could not be validated/i.test(
+        formatFirestoreCommentError({ code: 'invalid-argument', message: 'Invalid argument' }, 'Fallback')
+      ) &&
       /Network connection/i.test(
         formatFirestoreCommentError({ code: 'unavailable', message: 'client is offline' }, 'Fallback')
       ) &&

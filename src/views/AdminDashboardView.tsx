@@ -20,11 +20,13 @@ import {
   Bell,
   Key,
   RefreshCw,
-  Newspaper
+  Newspaper,
+  SlidersHorizontal
 } from 'lucide-react';
 import { SaasNavPage } from '../types/platform';
 import { useAuth } from '../context/AuthContext';
 import { WebsiteDesignManager } from '../components/WebsiteDesignManager';
+import { ColorAppearanceManager } from '../components/ColorAppearanceManager';
 import { WebsitePagesManager } from '../components/WebsitePagesManager';
 import { AdsManager } from '../components/AdsManager';
 import { AdminNotificationManager } from '../components/AdminNotificationManager';
@@ -48,6 +50,7 @@ type AdminTab =
   | 'pages'
   | 'blog'
   | 'design'
+  | 'appearance'
   | 'whatsapp'
   | 'ads'
   | 'analytics'
@@ -259,6 +262,26 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
         <button
           type="button"
+          onClick={() => setActiveTab('appearance')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'appearance'
+              ? 'bg-teal-700 text-white shadow-sm ring-2 ring-teal-400/30'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4 text-teal-400" />
+          <span>Color &amp; Appearance</span>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+              activeTab === 'appearance' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-800'
+            }`}
+          >
+            Theme &amp; Colors
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('whatsapp')}
           className={`flex items-center space-x-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'whatsapp'
@@ -362,6 +385,9 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
 
       {/* ================= TAB: WEBSITE DESIGN, TYPOGRAPHY & LOGO MANAGER ================= */}
       {activeTab === 'design' && <WebsiteDesignManager />}
+
+      {/* ================= TAB: COLOR & APPEARANCE CUSTOMIZATION ================= */}
+      {activeTab === 'appearance' && <ColorAppearanceManager />}
 
       {/* ================= TAB: WHATSAPP CONTACT SETTINGS ================= */}
       {activeTab === 'whatsapp' && <AdminWhatsAppSettings />}

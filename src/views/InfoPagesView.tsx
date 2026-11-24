@@ -30,7 +30,8 @@ export const StaticPageRichBody: React.FC<{ html?: string }> = ({ html }) => {
 
   return (
     <div
-      className="blog-article-body bg-white rounded-2xl p-6 sm:p-10 border border-slate-200 shadow-2xs text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-4 [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-5 [&_a]:text-teal-700 [&_a]:underline hover:[&_a]:text-teal-900 [&_hr]:my-6 [&_hr]:border-slate-200"
+      className="blog-article-body theme-card border shadow-2xs text-base sm:text-[17px] leading-[1.75] space-y-4 [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-5 [&_a]:underline [&_hr]:my-6"
+      style={{ padding: 'var(--app-space-card)' }}
       dangerouslySetInnerHTML={{ __html: cleanHtml }}
     />
   );
@@ -76,13 +77,13 @@ function useCmsPageContent(pageId: Extract<EditablePageId, 'about' | 'privacy' |
 
 const EmptyInfoPageState: React.FC<{ title: string }> = ({ title }) => (
   <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-6">
-    <div className="border-b border-slate-200 pb-6 text-center sm:text-left">
-      <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+    <div className="border-b pb-6 text-center sm:text-left" style={{ borderColor: 'var(--app-border-color)' }}>
+      <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
         {title}
       </h1>
     </div>
-    <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-2xs text-center">
-      <p className="text-sm text-slate-600">
+    <div className="theme-card border shadow-2xs text-center" style={{ padding: 'var(--app-space-card)' }}>
+      <p className="text-sm" style={{ color: 'var(--app-muted-text)' }}>
         No content has been published for this page yet.
       </p>
     </div>
@@ -107,16 +108,23 @@ export const AboutView: React.FC<InfoPageProps> = () => {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10">
       <div className="text-center space-y-4 max-w-3xl mx-auto">
         {content.badge?.trim() && (
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
-            <BookOpen className="w-3.5 h-3.5 text-teal-700" />
+          <div
+            className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full border text-xs font-semibold"
+            style={{
+              backgroundColor: 'var(--app-primary-soft)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-primary)'
+            }}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
             <span>{content.badge}</span>
           </div>
         )}
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
           {content.title?.trim() || 'About Us'}
         </h1>
         {content.subtitle?.trim() && (
-          <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-normal">
+          <p className="text-base sm:text-lg leading-relaxed font-normal" style={{ color: 'var(--app-body-text)' }}>
             {content.subtitle}
           </p>
         )}
@@ -128,10 +136,18 @@ export const AboutView: React.FC<InfoPageProps> = () => {
         (content.highlightBox.badge?.trim() ||
           content.highlightBox.title?.trim() ||
           content.highlightBox.content?.trim()) && (
-          <div className="bg-slate-900 rounded-2xl p-6 sm:p-10 border border-slate-800 text-white shadow-sm space-y-4">
+          <div
+            className="border text-white shadow-sm space-y-4"
+            style={{
+              backgroundColor: 'var(--app-secondary)',
+              borderColor: 'var(--app-border-color)',
+              borderRadius: 'var(--app-radius-card)',
+              padding: 'var(--app-space-card)'
+            }}
+          >
             {content.highlightBox.badge?.trim() && (
-              <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-teal-400" />
+              <div className="flex items-center space-x-2 font-bold text-xs uppercase tracking-wider" style={{ color: 'var(--app-accent)' }}>
+                <Sparkles className="w-4 h-4" />
                 <span>{content.highlightBox.badge}</span>
               </div>
             )}
@@ -141,7 +157,7 @@ export const AboutView: React.FC<InfoPageProps> = () => {
               </h2>
             )}
             {content.highlightBox.content?.trim() && (
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal whitespace-pre-line">
+              <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-normal whitespace-pre-line">
                 {content.highlightBox.content}
               </p>
             )}
@@ -155,11 +171,20 @@ export const AboutView: React.FC<InfoPageProps> = () => {
             return (
               <div
                 key={section.id || idx}
-                className="bg-white rounded-2xl p-6 sm:p-10 border border-slate-200 shadow-2xs space-y-5"
+                className="theme-card border shadow-2xs space-y-5"
+                style={{ padding: 'var(--app-space-card)' }}
               >
                 {section.title?.trim() && (
-                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center space-x-2.5">
-                    <span className="w-7 h-7 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center text-xs font-bold shrink-0">
+                  <h2 className="text-xl sm:text-2xl font-bold flex items-center space-x-2.5" style={{ color: 'var(--app-heading-primary)' }}>
+                    <span
+                      className="w-7 h-7 border flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{
+                        backgroundColor: 'var(--app-primary-soft)',
+                        borderColor: 'var(--app-border-color)',
+                        color: 'var(--app-primary)',
+                        borderRadius: 'var(--app-radius-btn)'
+                      }}
+                    >
                       {idx + 1}
                     </span>
                     <span>{section.title}</span>
@@ -167,7 +192,7 @@ export const AboutView: React.FC<InfoPageProps> = () => {
                 )}
 
                 {section.content?.trim() && (
-                  <p className="text-sm sm:text-base text-slate-600 leading-relaxed whitespace-pre-line">
+                  <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line" style={{ color: 'var(--app-body-text)' }}>
                     {section.content}
                   </p>
                 )}
@@ -175,8 +200,17 @@ export const AboutView: React.FC<InfoPageProps> = () => {
                 {validBullets.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
                     {validBullets.map((bullet, bIdx) => (
-                      <div key={bIdx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start space-x-2.5 text-xs sm:text-sm text-slate-700">
-                        <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                      <div
+                        key={bIdx}
+                        className="p-3.5 border flex items-start space-x-2.5 text-xs sm:text-sm"
+                        style={{
+                          backgroundColor: 'var(--app-body-bg)',
+                          borderColor: 'var(--app-border-color)',
+                          color: 'var(--app-body-text)',
+                          borderRadius: 'var(--app-radius-btn)'
+                        }}
+                      >
+                        <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--app-primary)' }} />
                         <span className="leading-relaxed">{bullet}</span>
                       </div>
                     ))}
@@ -207,18 +241,25 @@ export const PrivacyPolicyView: React.FC<InfoPageProps> = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10">
-      <div className="space-y-4 border-b border-slate-200 pb-8 text-center sm:text-left">
+      <div className="space-y-4 border-b pb-8 text-center sm:text-left" style={{ borderColor: 'var(--app-border-color)' }}>
         {content.badge?.trim() && (
-          <div className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
+          <div
+            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full border text-xs font-semibold"
+            style={{
+              backgroundColor: 'var(--app-primary-soft)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-primary)'
+            }}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>{content.badge}</span>
           </div>
         )}
-        <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
           {content.title?.trim() || 'Privacy Policy'}
         </h1>
         {content.subtitle?.trim() && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm" style={{ color: 'var(--app-muted-text)' }}>
             {content.subtitle}
           </p>
         )}
@@ -228,15 +269,23 @@ export const PrivacyPolicyView: React.FC<InfoPageProps> = () => {
 
       {content.highlightBox?.enabled &&
         (content.highlightBox.title?.trim() || content.highlightBox.content?.trim()) && (
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-2">
+          <div
+            className="p-5 border text-xs space-y-2"
+            style={{
+              backgroundColor: 'var(--app-card-bg)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-body-text)',
+              borderRadius: 'var(--app-radius-card)'
+            }}
+          >
             {content.highlightBox.title?.trim() && (
-              <div className="flex items-center space-x-2 font-bold text-slate-900">
-                <AlertTriangle className="w-4 h-4 text-teal-700 shrink-0" />
+              <div className="flex items-center space-x-2 font-bold" style={{ color: 'var(--app-heading-primary)' }}>
+                <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: 'var(--app-primary)' }} />
                 <span>{content.highlightBox.title}</span>
               </div>
             )}
             {content.highlightBox.content?.trim() && (
-              <p className="leading-relaxed whitespace-pre-line">
+              <p className="leading-relaxed whitespace-pre-line" style={{ color: 'var(--app-body-text)' }}>
                 {content.highlightBox.content}
               </p>
             )}
@@ -244,27 +293,39 @@ export const PrivacyPolicyView: React.FC<InfoPageProps> = () => {
         )}
 
       {validSections.length > 0 && (
-        <div className="space-y-8 text-xs sm:text-sm text-slate-700 leading-relaxed">
+        <div className="space-y-8 text-xs sm:text-sm leading-relaxed" style={{ color: 'var(--app-body-text)' }}>
           {validSections.map((section, idx) => {
             const validBullets = (section.bullets || []).filter((b) => Boolean(b?.trim()));
             return (
-              <section key={section.id || idx} className="space-y-3 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-2xs">
+              <section
+                key={section.id || idx}
+                className="space-y-3 theme-card border shadow-2xs"
+                style={{ padding: 'var(--app-space-card)' }}
+              >
                 {section.title?.trim() && (
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center space-x-2">
-                    <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center text-xs font-bold shrink-0">
+                  <h2 className="text-base sm:text-lg font-bold flex items-center space-x-2" style={{ color: 'var(--app-heading-primary)' }}>
+                    <span
+                      className="w-6 h-6 border flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{
+                        backgroundColor: 'var(--app-primary-soft)',
+                        borderColor: 'var(--app-border-color)',
+                        color: 'var(--app-primary)',
+                        borderRadius: 'var(--app-radius-btn)'
+                      }}
+                    >
                       {idx + 1}
                     </span>
                     <span>{section.title}</span>
                   </h2>
                 )}
                 {section.content?.trim() && (
-                  <p className="whitespace-pre-line leading-relaxed text-slate-600">
+                  <p className="whitespace-pre-line leading-relaxed" style={{ color: 'var(--app-body-text)' }}>
                     {section.content}
                   </p>
                 )}
 
                 {validBullets.length > 0 && (
-                  <ul className="list-disc pl-5 space-y-1.5 text-slate-600 pt-2">
+                  <ul className="list-disc pl-5 space-y-1.5 pt-2" style={{ color: 'var(--app-muted-text)' }}>
                     {validBullets.map((b, bIdx) => (
                       <li key={bIdx} className="leading-relaxed">{b}</li>
                     ))}
@@ -297,16 +358,23 @@ export const TermsConditionsView: React.FC<InfoPageProps> = () => {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10">
       <div className="text-center space-y-4 max-w-3xl mx-auto">
         {content.badge?.trim() && (
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold">
-            <FileText className="w-3.5 h-3.5 text-teal-700" />
+          <div
+            className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full border text-xs font-semibold"
+            style={{
+              backgroundColor: 'var(--app-primary-soft)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-primary)'
+            }}
+          >
+            <FileText className="w-3.5 h-3.5" />
             <span>{content.badge}</span>
           </div>
         )}
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
           {content.title?.trim() || 'Terms & Conditions'}
         </h1>
         {content.subtitle?.trim() && (
-          <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-normal">
+          <p className="text-base sm:text-lg leading-relaxed font-normal" style={{ color: 'var(--app-body-text)' }}>
             {content.subtitle}
           </p>
         )}
@@ -318,10 +386,18 @@ export const TermsConditionsView: React.FC<InfoPageProps> = () => {
         (content.highlightBox.badge?.trim() ||
           content.highlightBox.title?.trim() ||
           content.highlightBox.content?.trim()) && (
-          <div className="bg-slate-900 rounded-2xl p-6 sm:p-10 border border-slate-800 text-white shadow-sm space-y-4">
+          <div
+            className="border text-white shadow-sm space-y-4"
+            style={{
+              backgroundColor: 'var(--app-secondary)',
+              borderColor: 'var(--app-border-color)',
+              borderRadius: 'var(--app-radius-card)',
+              padding: 'var(--app-space-card)'
+            }}
+          >
             {content.highlightBox.badge?.trim() && (
-              <div className="flex items-center space-x-2 text-teal-400 font-bold text-xs uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-teal-400" />
+              <div className="flex items-center space-x-2 font-bold text-xs uppercase tracking-wider" style={{ color: 'var(--app-accent)' }}>
+                <Sparkles className="w-4 h-4" />
                 <span>{content.highlightBox.badge}</span>
               </div>
             )}
@@ -331,7 +407,7 @@ export const TermsConditionsView: React.FC<InfoPageProps> = () => {
               </h2>
             )}
             {content.highlightBox.content?.trim() && (
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal whitespace-pre-line">
+              <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-normal whitespace-pre-line">
                 {content.highlightBox.content}
               </p>
             )}
@@ -343,10 +419,22 @@ export const TermsConditionsView: React.FC<InfoPageProps> = () => {
           {validSections.map((section, idx) => {
             const validBullets = (section.bullets || []).filter((b) => Boolean(b?.trim()));
             return (
-              <div key={section.id || idx} className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-2xs space-y-4">
+              <div
+                key={section.id || idx}
+                className="theme-card border shadow-2xs space-y-4"
+                style={{ padding: 'var(--app-space-card)' }}
+              >
                 {section.title?.trim() && (
-                  <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2.5">
-                    <span className="w-7 h-7 rounded-lg bg-teal-50 text-teal-900 border border-teal-200 flex items-center justify-center text-xs font-bold shrink-0">
+                  <h2 className="text-xl font-bold flex items-center space-x-2.5" style={{ color: 'var(--app-heading-primary)' }}>
+                    <span
+                      className="w-7 h-7 border flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{
+                        backgroundColor: 'var(--app-primary-soft)',
+                        borderColor: 'var(--app-border-color)',
+                        color: 'var(--app-primary)',
+                        borderRadius: 'var(--app-radius-btn)'
+                      }}
+                    >
                       {idx + 1}
                     </span>
                     <span>{section.title}</span>
@@ -354,13 +442,13 @@ export const TermsConditionsView: React.FC<InfoPageProps> = () => {
                 )}
 
                 {section.content?.trim() && (
-                  <p className="text-sm sm:text-base text-slate-600 leading-relaxed whitespace-pre-line">
+                  <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line" style={{ color: 'var(--app-body-text)' }}>
                     {section.content}
                   </p>
                 )}
 
                 {validBullets.length > 0 && (
-                  <ul className="list-disc pl-5 space-y-2 text-xs sm:text-sm text-slate-600 pt-1">
+                  <ul className="list-disc pl-5 space-y-2 text-xs sm:text-sm pt-1" style={{ color: 'var(--app-muted-text)' }}>
                     {validBullets.map((bullet, bIdx) => (
                       <li key={bIdx} className="leading-relaxed">{bullet}</li>
                     ))}

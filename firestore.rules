@@ -13,7 +13,10 @@ service cloud.firestore {
     // Must be authenticated via Google provider with email_verified == true
     function isGoogleAuth() {
       return isAuthenticated() &&
+             'firebase' in request.auth.token &&
+             'sign_in_provider' in request.auth.token.firebase &&
              request.auth.token.firebase.sign_in_provider == 'google.com' &&
+             'email_verified' in request.auth.token &&
              request.auth.token.email_verified == true;
     }
 
@@ -21,7 +24,8 @@ service cloud.firestore {
     // Custom claims (e.g. token.admin == true) are deliberately NOT accepted without the verified email.
     function isAdmin() {
       return isGoogleAuth() &&
-             request.auth.token.email != null &&
+             'email' in request.auth.token &&
+             request.auth.token.email is string &&
              (
                request.auth.token.email == 'twizerefelix90@gmail.com' ||
                request.auth.token.email.matches('(?i)^twizerefelix90@gmail\\.com$')
@@ -210,6 +214,7 @@ service cloud.firestore {
       return parent != null &&
              parent.data.postId == data.postId &&
              parent.data.status in ['published', 'approved'] &&
+             'publicSafe' in parent.data &&
              parent.data.publicSafe == true;
     }
 
@@ -261,20 +266,21 @@ service cloud.firestore {
              ownershipAfter.data.createdAt == data.createdAt;
     }
 
-    // Must ONLY be called after verifying existsAfter(.../private/ownership)
-    function hasValidOwnershipAfterForToken(commentId, tokenId, data) {
-      let ownershipAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership);
-      return ownershipAfter != null &&
-             ownershipAfter.data.tokenHash == tokenId &&
-             ownershipAfter.data.postId == data.postId &&
-             ownershipAfter.data.createdAt == data.createdAt;
+    // Strictly acyclic DAG check (comments -> private/ownership -> tokens):
+    // private/ownership verifies only the leaf /tokens/{tokenHash} document exists in the same atomic batch,
+    // without referencing /comments/$(commentId) via existsAfter/getAfter (preventing mutual rule cycles).
+    function hasValidPeerDocsAfterForOwnership(commentId, data) {
+      return existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
     }
 
-    // Acyclic existence check: private/ownership verifies both peer documents exist in the atomic batch
-    // without triggering circular getAfter evaluations back onto /comments and /tokens.
-    function hasValidPeerDocsAfterForOwnership(commentId, data) {
-      return existsAfter(/databases/$(database)/documents/comments/$(commentId)) &&
-             existsAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
+    // Must ONLY be called after verifying hasValidPeerDocsAfterForOwnership(commentId, data).
+    // Strictly downward leaf check (private/ownership -> tokens) with zero upward /comments reference.
+    function hasValidTokenAfterForOwnership(commentId, data) {
+      let tokenAfter = getAfter(/databases/$(database)/documents/comments/$(commentId)/tokens/$(data.tokenHash));
+      return tokenAfter != null &&
+             tokenAfter.data.tokenHash == data.tokenHash &&
+             tokenAfter.data.postId == data.postId &&
+             tokenAfter.data.createdAt == data.createdAt;
     }
 
     function sha256LowerHex(value) {
@@ -392,10 +398,6 @@ service cloud.firestore {
                commentDoc.data,
                newData.lastSyncedAt,
                resource
-             ) &&
-             (
-               !existsAfter(/databases/$(database)/documents/comments/$(commentId)) ||
-               getAfter(/databases/$(database)/documents/comments/$(commentId)).data.updatedAt == newData.lastSyncedAt
              );
     }
 
@@ -447,10 +449,11 @@ service cloud.firestore {
         isValidPublicCommentOwnerDelete(resource.data, commentId)
       );
 
-      // Cryptographic ownership tokens (Admin-only read/list/update/delete; public create ONLY atomically with a new comment & ownership)
+      // Cryptographic ownership tokens (Admin-only read/list/update/delete; leaf node in acyclic create DAG)
       match /tokens/{tokenId} {
         allow read, update, delete: if isAdmin();
         allow create: if isAdmin() || (
+          isValidCommentId(commentId) &&
           isValidCommentId(tokenId) &&
           tokenId.size() == 64 &&
           tokenId.matches('^[a-f0-9]{64}$') &&
@@ -464,8 +467,7 @@ service cloud.firestore {
           request.resource.data.createdAt.size() >= 10 &&
           request.resource.data.createdAt.size() <= 60 &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
-          existsAfter(/databases/$(database)/documents/comments/$(commentId)/private/ownership) &&
-          hasValidOwnershipAfterForToken(commentId, tokenId, request.resource.data)
+          !exists(/databases/$(database)/documents/comments/$(commentId)/private/ownership)
         );
       }
 
@@ -491,7 +493,8 @@ service cloud.firestore {
             request.resource.data.email.size() <= 160
           )) &&
           !exists(/databases/$(database)/documents/comments/$(commentId)) &&
-          hasValidPeerDocsAfterForOwnership(commentId, request.resource.data)
+          hasValidPeerDocsAfterForOwnership(commentId, request.resource.data) &&
+          hasValidTokenAfterForOwnership(commentId, request.resource.data)
         );
         allow update: if isAdmin() || (
           ownershipId == 'ownership' &&

@@ -419,20 +419,26 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       <form
         onSubmit={handleSubmitReply}
         noValidate
-        className="mt-3 rounded-xl border border-teal-200 bg-teal-50/40 p-3.5 sm:p-4 space-y-3"
+        className="mt-3 border p-3.5 sm:p-4 space-y-3"
+        style={{
+          backgroundColor: 'var(--app-primary-soft)',
+          borderColor: 'var(--app-border-color)',
+          borderRadius: 'var(--app-radius-card)'
+        }}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center space-x-1.5 text-xs font-bold text-teal-900 min-w-0">
-            <CornerDownRight className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+          <div className="flex items-center space-x-1.5 text-xs font-bold min-w-0" style={{ color: 'var(--app-heading-primary)' }}>
+            <CornerDownRight className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--app-primary)' }} />
             <span className="truncate">
-              Replying to <span className="text-teal-700">{replyTarget.replyToName}</span>
+              Replying to <span style={{ color: 'var(--app-primary)' }}>{replyTarget.replyToName}</span>
             </span>
           </div>
           <button
             type="button"
             onClick={() => setReplyTarget(null)}
             aria-label="Cancel reply"
-            className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+            className="p-1 hover:opacity-80 cursor-pointer"
+            style={{ color: 'var(--app-muted-text)' }}
           >
             <X className="w-4 h-4" />
           </button>
@@ -454,9 +460,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
         {replyErrorMsg && (
           <div
             role="alert"
-            className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-medium text-rose-800 flex items-start space-x-2"
+            className="theme-error-banner p-2.5 border text-xs font-medium flex items-start space-x-2"
+            style={{ borderColor: 'var(--app-error-bg)' }}
           >
-            <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>{replyErrorMsg}</span>
           </div>
         )}
@@ -465,9 +472,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <div>
             <label
               htmlFor={`reply-name-${targetComment.id}`}
-              className="block text-[11px] font-bold text-slate-800 mb-1"
+              className="block text-[11px] font-bold mb-1"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Your Name <span className="text-rose-600">*</span>
+              Your Name <span style={{ color: 'var(--app-error-bg)' }}>*</span>
             </label>
             <input
               id={`reply-name-${targetComment.id}`}
@@ -477,16 +485,17 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               value={replyName}
               onChange={(e) => setReplyName(e.target.value)}
               placeholder="Your display name"
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="theme-input w-full px-3 py-2 text-xs sm:text-sm border"
             />
           </div>
 
           <div>
             <label
               htmlFor={`reply-email-${targetComment.id}`}
-              className="block text-[11px] font-bold text-slate-800 mb-1"
+              className="block text-[11px] font-bold mb-1"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Email <span className="font-normal text-slate-500">(optional, never public)</span>
+              Email <span className="font-normal" style={{ color: 'var(--app-muted-text)' }}>(optional, never public)</span>
             </label>
             <input
               id={`reply-email-${targetComment.id}`}
@@ -495,7 +504,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               value={replyEmail}
               onChange={(e) => setReplyEmail(e.target.value)}
               placeholder="name@example.com (private)"
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="theme-input w-full px-3 py-2 text-xs sm:text-sm border"
             />
           </div>
         </div>
@@ -504,11 +513,12 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <div className="flex items-center justify-between mb-1">
             <label
               htmlFor={`reply-body-${targetComment.id}`}
-              className="block text-[11px] font-bold text-slate-800"
+              className="block text-[11px] font-bold"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Reply <span className="text-rose-600">*</span>
+              Reply <span style={{ color: 'var(--app-error-bg)' }}>*</span>
             </label>
-            <span className="text-[10px] text-slate-400 tabular-nums">
+            <span className="text-[10px] tabular-nums" style={{ color: 'var(--app-muted-text)' }}>
               {replyContent.length}/{COMMENT_CONTENT_MAX_LENGTH}
             </span>
           </div>
@@ -520,7 +530,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             value={replyContent}
             onChange={(e) => setReplyContent(e.target.value)}
             placeholder={`Write a reply to ${replyTarget.replyToName}...`}
-            className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-y"
+            className="theme-input w-full px-3 py-2 text-xs sm:text-sm border resize-y"
           />
         </div>
 
@@ -529,14 +539,20 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             type="button"
             disabled={isSubmittingReply}
             onClick={() => setReplyTarget(null)}
-            className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className="px-3 py-1.5 border text-xs font-semibold hover:opacity-90 cursor-pointer"
+            style={{
+              backgroundColor: 'var(--app-card-bg)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-body-text)',
+              borderRadius: 'var(--app-radius-btn)'
+            }}
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmittingReply}
-            className="inline-flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold shadow-2xs transition-colors disabled:opacity-60 cursor-pointer"
+            className="theme-btn-primary inline-flex items-center space-x-1.5 px-4 py-1.5 text-xs font-bold shadow-2xs transition-opacity hover:opacity-90 disabled:opacity-60 cursor-pointer"
           >
             {isSubmittingReply ? (
               <>
@@ -577,46 +593,62 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       <div
         key={comment.id}
         data-comment-id={comment.id}
-        className={`rounded-xl border transition-colors ${
-          options.isReply
-            ? 'bg-slate-50/75 border-slate-200/90 p-3.5 sm:p-4 space-y-2'
-            : 'bg-white border-slate-200 p-4 sm:p-5 space-y-2.5'
+        className={`border transition-colors ${
+          options.isReply ? 'p-3.5 sm:p-4 space-y-2' : 'p-4 sm:p-5 space-y-2.5'
         }`}
+        style={{
+          backgroundColor: options.isReply ? 'var(--app-body-bg)' : 'var(--app-card-bg)',
+          borderColor: 'var(--app-border-color)',
+          color: 'var(--app-body-text)',
+          borderRadius: 'var(--app-radius-card)'
+        }}
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-start space-x-2.5 min-w-0">
             <div
               className={`${
-                options.isReply ? 'w-7 h-7 text-[11px] bg-slate-700' : 'w-8 h-8 text-xs bg-teal-800'
-              } rounded-full text-white font-bold flex items-center justify-center shrink-0 mt-0.5`}
+                options.isReply ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'
+              } rounded-full font-bold flex items-center justify-center shrink-0 mt-0.5`}
+              style={
+                options.isReply
+                  ? { backgroundColor: 'var(--app-secondary)', color: '#ffffff' }
+                  : { backgroundColor: 'var(--app-primary)', color: 'var(--app-primary-btn-text)' }
+              }
             >
               {initial}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs sm:text-sm font-bold text-slate-900 break-words">
+                <span className="text-xs sm:text-sm font-bold break-words" style={{ color: 'var(--app-heading-primary)' }}>
                   {comment.name}
                 </span>
                 {isOwner && (
-                  <span className="px-1.5 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-bold">
+                  <span
+                    className="px-1.5 py-0.5 rounded border text-[10px] font-bold"
+                    style={{
+                      backgroundColor: 'var(--app-primary-soft)',
+                      borderColor: 'var(--app-border-color)',
+                      color: 'var(--app-primary)'
+                    }}
+                  >
                     You
                   </span>
                 )}
                 {options.isReply && comment.replyToName && (
-                  <span className="inline-flex items-center space-x-1 text-[11px] text-teal-700 font-semibold">
+                  <span className="inline-flex items-center space-x-1 text-[11px] font-semibold" style={{ color: 'var(--app-primary)' }}>
                     <CornerDownRight className="w-3 h-3 shrink-0" />
                     <span>Replying to {comment.replyToName}</span>
                   </span>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-0.5" style={{ color: 'var(--app-muted-text)' }}>
                 {dateInfo && (
                   <time
                     dateTime={comment.createdAt}
                     className="inline-flex items-center space-x-1"
                   >
-                    <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                    <Clock className="w-3 h-3 opacity-75 shrink-0" />
                     <span>
                       {dateInfo.formattedDate} · {dateInfo.formattedTime}
                     </span>
@@ -624,7 +656,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                 )}
                 {comment.edited && (
                   <span
-                    className="text-[10px] font-semibold text-slate-500 italic"
+                    className="text-[10px] font-semibold italic"
+                    style={{ color: 'var(--app-muted-text)' }}
                     title={
                       comment.updatedAt
                         ? `Edited ${comment.updatedAt}`
@@ -645,20 +678,22 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             {editErrorMsg && (
               <div
                 role="alert"
-                className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-medium text-rose-800 flex items-start space-x-2"
+                className="theme-error-banner p-2.5 border text-xs font-medium flex items-start space-x-2"
+                style={{ borderColor: 'var(--app-error-bg)' }}
               >
-                <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>{editErrorMsg}</span>
               </div>
             )}
             <div className="flex items-center justify-between">
               <label
                 htmlFor={`edit-body-${comment.id}`}
-                className="text-[11px] font-bold text-slate-700"
+                className="text-[11px] font-bold"
+                style={{ color: 'var(--app-heading-primary)' }}
               >
                 Edit your {options.isReply ? 'reply' : 'comment'}
               </label>
-              <span className="text-[10px] text-slate-400 tabular-nums">
+              <span className="text-[10px] tabular-nums" style={{ color: 'var(--app-muted-text)' }}>
                 {editingText.length}/{COMMENT_CONTENT_MAX_LENGTH}
               </span>
             </div>
@@ -668,7 +703,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               maxLength={COMMENT_CONTENT_MAX_LENGTH}
               value={editingText}
               onChange={(e) => setEditingText(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-teal-400 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-y"
+              className="theme-input w-full px-3 py-2 text-xs sm:text-sm border resize-y"
             />
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
@@ -678,14 +713,20 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                   setEditingCommentId(null);
                   setEditErrorMsg(null);
                 }}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-3 py-1.5 border text-xs font-semibold hover:opacity-90 cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--app-card-bg)',
+                  borderColor: 'var(--app-border-color)',
+                  color: 'var(--app-body-text)',
+                  borderRadius: 'var(--app-radius-btn)'
+                }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSavingEdit}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                className="theme-btn-primary inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60 hover:opacity-90"
               >
                 {isSavingEdit ? (
                   <>
@@ -699,7 +740,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             </div>
           </form>
         ) : (
-          <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+          <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words" style={{ color: 'var(--app-body-text)' }}>
             {comment.content}
           </p>
         )}
@@ -709,12 +750,18 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <div
             role="alertdialog"
             aria-label="Confirm comment deletion"
-            className="rounded-lg border border-rose-200 bg-rose-50/90 p-3 space-y-2.5"
+            className="border p-3 space-y-2.5"
+            style={{
+              backgroundColor: 'var(--app-error-soft)',
+              borderColor: 'var(--app-error-bg)',
+              color: 'var(--app-body-text)',
+              borderRadius: 'var(--app-radius-btn)'
+            }}
           >
             {deleteErrorMsg && (
-              <div className="text-xs font-semibold text-rose-800">{deleteErrorMsg}</div>
+              <div className="text-xs font-semibold" style={{ color: 'var(--app-error-bg)' }}>{deleteErrorMsg}</div>
             )}
-            <p className="text-xs text-rose-950 font-medium leading-relaxed">
+            <p className="text-xs font-medium leading-relaxed" style={{ color: 'var(--app-heading-primary)' }}>
               {childRepliesCount > 0
                 ? `This comment has ${childRepliesCount} ${
                     childRepliesCount === 1 ? 'reply' : 'replies'
@@ -731,7 +778,13 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                   setConfirmDeleteId(null);
                   setDeleteErrorMsg(null);
                 }}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-3 py-1.5 border text-xs font-semibold hover:opacity-90 cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--app-card-bg)',
+                  borderColor: 'var(--app-border-color)',
+                  color: 'var(--app-body-text)',
+                  borderRadius: 'var(--app-radius-btn)'
+                }}
               >
                 Cancel
               </button>
@@ -739,7 +792,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                 type="button"
                 disabled={isBusyDeleting}
                 onClick={() => handleConfirmDelete(comment, options.childReplyIds, false)}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                className="theme-error-banner inline-flex items-center space-x-1 px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60 hover:opacity-90"
               >
                 {isBusyDeleting ? (
                   <>
@@ -755,7 +808,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                   type="button"
                   disabled={isBusyDeleting}
                   onClick={() => handleConfirmDelete(comment, options.childReplyIds, true)}
-                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-rose-800 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                  className="theme-error-banner inline-flex items-center space-x-1 px-3 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-60 hover:opacity-90"
                 >
                   <span>Delete Comment &amp; {childRepliesCount} Replies</span>
                 </button>
@@ -770,7 +823,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             <button
               type="button"
               onClick={() => handleOpenReplyForm(comment, options.rootParentId)}
-              className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-bold text-teal-800 hover:text-teal-600 py-0.5 cursor-pointer"
+              className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-bold hover:opacity-80 py-0.5 cursor-pointer"
+              style={{ color: 'var(--app-primary)' }}
             >
               <Reply className="w-3.5 h-3.5" />
               <span>
@@ -782,7 +836,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               <button
                 type="button"
                 onClick={() => handleStartEdit(comment)}
-                className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-semibold text-slate-600 hover:text-slate-900 py-0.5 cursor-pointer"
+                className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-semibold hover:opacity-80 py-0.5 cursor-pointer"
+                style={{ color: 'var(--app-muted-text)' }}
               >
                 <Pencil className="w-3 h-3" />
                 <span>Edit</span>
@@ -797,7 +852,8 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                   setDeleteErrorMsg(null);
                   setConfirmDeleteId(comment.id);
                 }}
-                className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-semibold text-rose-700 hover:text-rose-500 py-0.5 cursor-pointer"
+                className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-semibold hover:opacity-80 py-0.5 cursor-pointer"
+                style={{ color: 'var(--app-error-bg)' }}
               >
                 <Trash2 className="w-3 h-3" />
                 <span>Delete</span>
@@ -816,19 +872,21 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
     <section
       id="article-comments"
       aria-labelledby="article-comments-heading"
-      className="pt-8 border-t border-slate-200 space-y-6 scroll-mt-36 sm:scroll-mt-40"
+      className="pt-8 border-t space-y-6 scroll-mt-36 sm:scroll-mt-40"
+      style={{ borderColor: 'var(--app-border-color)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center space-x-2.5">
-          <MessageSquare className="w-5 h-5 text-teal-700 shrink-0" />
+          <MessageSquare className="w-5 h-5 shrink-0" style={{ color: 'var(--app-primary)' }} />
           <h2
             id="article-comments-heading"
-            className="font-serif text-xl sm:text-2xl font-bold text-slate-900"
+            className="font-serif text-xl sm:text-2xl font-bold"
+            style={{ color: 'var(--app-heading-primary)' }}
           >
             Comments &amp; Discussion ({totalVisibleCount})
           </h2>
         </div>
-        <span className="text-xs text-slate-500 font-medium">
+        <span className="text-xs font-medium" style={{ color: 'var(--app-muted-text)' }}>
           No account required · Published instantly
         </span>
       </div>
@@ -836,14 +894,14 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       {/* Public Comment Submission Form */}
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 space-y-4 shadow-2xs"
+        className="theme-card border p-4 sm:p-6 space-y-4 shadow-2xs"
         noValidate
       >
         <div className="space-y-1">
-          <h3 className="text-sm font-bold text-slate-900">
+          <h3 className="text-sm font-bold" style={{ color: 'var(--app-heading-primary)' }}>
             Join the conversation on &ldquo;{postTitle}&rdquo;
           </h3>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs" style={{ color: 'var(--app-muted-text)' }}>
             Write your comment below and click Send. Comments appear immediately.
           </p>
         </div>
@@ -865,9 +923,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
         {errorMsg && (
           <div
             role="alert"
-            className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-800 flex items-start space-x-2"
+            className="theme-error-banner p-3 border text-xs font-medium flex items-start space-x-2"
+            style={{ borderColor: 'var(--app-error-bg)' }}
           >
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
         )}
@@ -875,9 +934,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
         {successMsg && (
           <div
             role="status"
-            className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-900 flex items-start space-x-2"
+            className="theme-success-banner p-3 border text-xs font-medium flex items-start space-x-2"
+            style={{ borderColor: 'var(--app-success-bg)' }}
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{successMsg}</span>
           </div>
         )}
@@ -886,9 +946,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <div>
             <label
               htmlFor={`comment-name-${postId}`}
-              className="block text-xs font-bold text-slate-800 mb-1"
+              className="block text-xs font-bold mb-1"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Display Name <span className="text-rose-600">*</span>
+              Display Name <span style={{ color: 'var(--app-error-bg)' }}>*</span>
             </label>
             <input
               ref={nameInputRef}
@@ -899,16 +960,17 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="theme-input w-full px-3.5 py-2.5 text-sm border"
             />
           </div>
 
           <div>
             <label
               htmlFor={`comment-email-${postId}`}
-              className="block text-xs font-bold text-slate-800 mb-1"
+              className="block text-xs font-bold mb-1"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Email <span className="font-normal text-slate-500">(optional)</span>
+              Email <span className="font-normal" style={{ color: 'var(--app-muted-text)' }}>(optional)</span>
             </label>
             <input
               id={`comment-email-${postId}`}
@@ -917,10 +979,10 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Private email (never shown publicly)"
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="theme-input w-full px-3.5 py-2.5 text-sm border"
             />
-            <p className="mt-1 inline-flex items-center space-x-1 text-[11px] text-slate-500">
-              <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+            <p className="mt-1 inline-flex items-center space-x-1 text-[11px]" style={{ color: 'var(--app-muted-text)' }}>
+              <Lock className="w-3 h-3 opacity-75 shrink-0" />
               <span>Optional — never displayed publicly</span>
             </p>
           </div>
@@ -930,11 +992,12 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <div className="flex items-center justify-between mb-1">
             <label
               htmlFor={`comment-body-${postId}`}
-              className="block text-xs font-bold text-slate-800"
+              className="block text-xs font-bold"
+              style={{ color: 'var(--app-heading-primary)' }}
             >
-              Comment <span className="text-rose-600">*</span>
+              Comment <span style={{ color: 'var(--app-error-bg)' }}>*</span>
             </label>
-            <span className="text-[11px] text-slate-400 tabular-nums">
+            <span className="text-[11px] tabular-nums" style={{ color: 'var(--app-muted-text)' }}>
               {message.length}/{COMMENT_CONTENT_MAX_LENGTH}
             </span>
           </div>
@@ -946,7 +1009,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Write your comment..."
-            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-y"
+            className="theme-input w-full px-3.5 py-2.5 text-sm border resize-y"
           />
         </div>
 
@@ -954,7 +1017,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs sm:text-sm font-bold shadow-2xs transition-colors disabled:opacity-60 cursor-pointer"
+            className="theme-btn-primary inline-flex items-center space-x-2 px-5 py-2.5 text-xs sm:text-sm font-bold shadow-2xs transition-opacity hover:opacity-90 disabled:opacity-60 cursor-pointer"
           >
             {isSubmitting ? (
               <>
@@ -974,17 +1037,18 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
       {threadNotice && (
         <div
           role="status"
-          className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-2 ${
-            threadNotice.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-rose-50 border-rose-200 text-rose-800'
+          className={`p-3 border text-xs font-medium flex items-center justify-between gap-2 ${
+            threadNotice.type === 'success' ? 'theme-success-banner' : 'theme-error-banner'
           }`}
+          style={{
+            borderColor: threadNotice.type === 'success' ? 'var(--app-success-bg)' : 'var(--app-error-bg)'
+          }}
         >
           <span className="flex items-center space-x-2">
             {threadNotice.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
             )}
             <span>{threadNotice.message}</span>
           </span>
@@ -992,7 +1056,7 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             type="button"
             onClick={() => setThreadNotice(null)}
             aria-label="Dismiss notice"
-            className="text-slate-400 hover:text-slate-700 cursor-pointer"
+            className="opacity-80 hover:opacity-100 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -1001,12 +1065,20 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
 
       {/* Threaded Comments List */}
       {isLoading ? (
-        <div className="py-6 text-center text-xs text-slate-500 flex items-center justify-center space-x-2">
-          <Loader2 className="w-4 h-4 animate-spin text-teal-700" />
+        <div className="py-6 text-center text-xs flex items-center justify-center space-x-2" style={{ color: 'var(--app-muted-text)' }}>
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--app-primary)' }} />
           <span>Loading comments...</span>
         </div>
       ) : totalVisibleCount === 0 ? (
-        <div className="bg-slate-50 rounded-xl border border-slate-200/80 p-6 text-center text-xs sm:text-sm text-slate-500">
+        <div
+          className="border p-6 text-center text-xs sm:text-sm"
+          style={{
+            backgroundColor: 'var(--app-card-bg)',
+            borderColor: 'var(--app-border-color)',
+            color: 'var(--app-muted-text)',
+            borderRadius: 'var(--app-radius-card)'
+          }}
+        >
           No comments yet for this article. Be the first reader to share your thoughts above.
         </div>
       ) : (
@@ -1024,11 +1096,15 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
                 })}
 
                 {replies.length > 0 && (
-                  <div className="ml-3 sm:ml-8 pl-3 sm:pl-4 border-l-2 border-teal-200 space-y-2.5">
+                  <div
+                    className="ml-3 sm:ml-8 pl-3 sm:pl-4 border-l-2 space-y-2.5"
+                    style={{ borderColor: 'var(--app-primary)' }}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleThreadReplies(comment.id)}
-                      className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-bold text-teal-800 hover:text-teal-600 py-0.5 cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-bold hover:opacity-80 py-0.5 cursor-pointer"
+                      style={{ color: 'var(--app-primary)' }}
                     >
                       {isCollapsed ? (
                         <>
@@ -1068,15 +1144,27 @@ export const ArticleCommentsSection: React.FC<ArticleCommentsSectionProps> = ({
             const isCollapsed = Boolean(collapsedThreads[parentId]);
             return (
               <div key={`orphan_${parentId}`} className="space-y-2.5">
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-500 italic">
+                <div
+                  className="border border-dashed px-4 py-3 text-xs italic"
+                  style={{
+                    backgroundColor: 'var(--app-body-bg)',
+                    borderColor: 'var(--app-border-color)',
+                    color: 'var(--app-muted-text)',
+                    borderRadius: 'var(--app-radius-card)'
+                  }}
+                >
                   Original comment was removed by its author.
                 </div>
 
-                <div className="ml-3 sm:ml-8 pl-3 sm:pl-4 border-l-2 border-slate-300 space-y-2.5">
+                <div
+                  className="ml-3 sm:ml-8 pl-3 sm:pl-4 border-l-2 space-y-2.5"
+                  style={{ borderColor: 'var(--app-border-color)' }}
+                >
                   <button
                     type="button"
                     onClick={() => toggleThreadReplies(parentId)}
-                    className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-bold text-slate-700 hover:text-slate-900 py-0.5 cursor-pointer"
+                    className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-bold hover:opacity-80 py-0.5 cursor-pointer"
+                    style={{ color: 'var(--app-heading-primary)' }}
                   >
                     {isCollapsed ? (
                       <>

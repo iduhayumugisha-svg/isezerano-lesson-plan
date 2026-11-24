@@ -75,6 +75,36 @@
         "name": "ISEZERANO ONLINE"
       }
     }
+    <!-- Anti-FOUC Theme Hydration Script (applies saved colors, light/dark/system mode, radius & spacing before paint) -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('isezerano_website_design');
+          var parsed = raw ? JSON.parse(raw) : null;
+          var colors = (parsed && parsed.colors) || {};
+          var app = (parsed && parsed.appearance) || {};
+          var mode = app.mode === 'dark' || app.mode === 'light' || app.mode === 'system' ? app.mode : 'light';
+          var prefersDark = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var eff = mode === 'dark' || (mode === 'system' && prefersDark) ? 'dark' : 'light';
+          var root = document.documentElement;
+          root.classList.toggle('dark', eff === 'dark');
+          root.setAttribute('data-theme', eff);
+          root.setAttribute('data-appearance-mode', mode);
+          root.setAttribute('data-radius', app.borderRadius || 'medium');
+          root.setAttribute('data-spacing', app.spacing || 'comfortable');
+          root.style.colorScheme = eff;
+          var bodyBg = eff === 'dark' && mode === 'system' && !colors.bodyBg ? '#090e1a' : (colors.bodyBg || (eff === 'dark' ? '#090e1a' : '#f8fafc'));
+          var bodyText = eff === 'dark' && mode === 'system' && !colors.bodyText ? '#e2e8f0' : (colors.bodyText || (eff === 'dark' ? '#e2e8f0' : '#1e293b'));
+          root.style.setProperty('--app-body-bg', bodyBg);
+          root.style.setProperty('--app-body-text', bodyText);
+          if (colors.cardBg) root.style.setProperty('--app-card-bg', colors.cardBg);
+          if (colors.headerBg) root.style.setProperty('--app-header-bg', colors.headerBg);
+          if (colors.footerBg) root.style.setProperty('--app-footer-bg', colors.footerBg);
+          if (colors.primaryColor) root.style.setProperty('--app-primary', colors.primaryColor);
+          if (colors.successBg) root.style.setProperty('--app-success-bg', colors.successBg);
+          if (colors.successText) root.style.setProperty('--app-success-text', colors.successText);
+        } catch (e) {}
+      })();
     </script>
   </head>
   <body style="font-family: 'Times New Roman', Times, Baskerville, Georgia, serif;">

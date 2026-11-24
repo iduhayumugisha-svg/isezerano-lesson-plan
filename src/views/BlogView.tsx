@@ -259,8 +259,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
     if (isLoading) {
       return (
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 text-center space-y-3">
-          <Loader2 className="w-6 h-6 text-teal-700 animate-spin mx-auto" />
-          <p className="text-sm text-slate-500">Loading article...</p>
+          <Loader2 className="w-6 h-6 animate-spin mx-auto" style={{ color: 'var(--app-primary)' }} />
+          <p className="text-sm" style={{ color: 'var(--app-muted-text)' }}>Loading article...</p>
         </div>
       );
     }
@@ -268,17 +268,17 @@ export const BlogView: React.FC<BlogViewProps> = ({
     if (!activePost) {
       return (
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 text-center space-y-4">
-          <FileText className="w-10 h-10 text-slate-400 mx-auto" />
-          <h1 className="font-serif text-2xl font-bold text-slate-900">
+          <FileText className="w-10 h-10 mx-auto" style={{ color: 'var(--app-muted-text)' }} />
+          <h1 className="font-serif text-2xl font-bold" style={{ color: 'var(--app-heading-primary)' }}>
             Article Not Found
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm" style={{ color: 'var(--app-muted-text)' }}>
             This article may have been unpublished or removed.
           </p>
           <button
             type="button"
             onClick={closeArticle}
-            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 cursor-pointer"
+            className="theme-btn-primary inline-flex items-center space-x-2 px-4 py-2.5 text-xs font-bold hover:opacity-90 cursor-pointer transition-opacity"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to All Articles</span>
@@ -313,7 +313,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
           <button
             type="button"
             onClick={closeArticle}
-            className="inline-flex items-center space-x-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-teal-800 transition-colors cursor-pointer"
+            className="inline-flex items-center space-x-2 text-xs sm:text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+            style={{ color: 'var(--app-body-text)' }}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to News</span>
@@ -323,9 +324,15 @@ export const BlogView: React.FC<BlogViewProps> = ({
             <button
               type="button"
               onClick={scrollToCommentsSection}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:text-teal-800 hover:border-teal-300 hover:bg-teal-50/40 transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 border text-xs font-semibold hover:opacity-90 transition-all cursor-pointer"
+              style={{
+                backgroundColor: 'var(--app-card-bg)',
+                borderColor: 'var(--app-border-color)',
+                color: 'var(--app-body-text)',
+                borderRadius: 'var(--app-radius-btn)'
+              }}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
+              <MessageSquare className="w-3.5 h-3.5" style={{ color: 'var(--app-primary)' }} />
               <span>Comments</span>
               <span className="tabular-nums font-bold">
                 ({resolvedCommentCounts[activePost.id] || 0})
@@ -337,57 +344,65 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
         {/* Article Header */}
         <header className="space-y-4">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm text-slate-600">
-            <span className="font-bold text-teal-800">{activePost.category}</span>
-            <span className="text-slate-300">·</span>
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs sm:text-sm" style={{ color: 'var(--app-muted-text)' }}>
+            <span className="font-bold" style={{ color: 'var(--app-primary)' }}>{activePost.category}</span>
+            <span className="opacity-50">·</span>
             <span className="inline-flex items-center space-x-1.5">
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-medium text-slate-800">
+              <User className="w-3.5 h-3.5 opacity-75" />
+              <span className="font-medium" style={{ color: 'var(--app-heading-primary)' }}>
                 {activePost.author?.name || 'ISEZERANO Editorial'}
               </span>
               {activePost.author?.role && (
-                <span className="text-slate-500">({activePost.author.role})</span>
+                <span style={{ color: 'var(--app-muted-text)' }}>({activePost.author.role})</span>
               )}
             </span>
             {dateInfo && (
               <>
-                <span className="text-slate-300">·</span>
+                <span className="opacity-50">·</span>
                 <time
                   dateTime={activePost.publishedAt}
                   className="inline-flex items-center space-x-1.5"
                 >
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <Calendar className="w-3.5 h-3.5 opacity-75" />
                   <span>{dateInfo.formattedDateFull}</span>
                 </time>
               </>
             )}
-            <span className="text-slate-300">·</span>
+            <span className="opacity-50">·</span>
             <button
               type="button"
               onClick={scrollToCommentsSection}
-              className="inline-flex items-center space-x-1 text-slate-600 hover:text-teal-800 font-medium cursor-pointer tabular-nums"
+              className="inline-flex items-center space-x-1 hover:opacity-80 font-medium cursor-pointer tabular-nums"
+              style={{ color: 'var(--app-muted-text)' }}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+              <MessageSquare className="w-3.5 h-3.5 opacity-75" />
               <span>
                 {resolvedCommentCounts[activePost.id] || 0}{' '}
                 {(resolvedCommentCounts[activePost.id] || 0) === 1 ? 'comment' : 'comments'}
               </span>
             </button>
-            <span className="text-slate-300">·</span>
+            <span className="opacity-50">·</span>
             <span className="inline-flex items-center space-x-1 tabular-nums">
-              <Eye className="w-3.5 h-3.5 text-slate-400" />
+              <Eye className="w-3.5 h-3.5 opacity-75" />
               <span>{activePost.views || 0}</span>
             </span>
           </div>
 
-          <h1 className="font-serif text-2xl sm:text-4xl font-bold text-slate-900 leading-tight tracking-tight">
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold leading-tight tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
             {activePost.title}
           </h1>
         </header>
 
         {/* Featured Image Banner (only when distinct from the first body image so Admin-resized first images aren't duplicated) */}
         {showSeparateBanner && (
-          <figure className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[16/9]">
+          <figure
+            className="overflow-hidden border aspect-[16/9]"
+            style={{
+              borderColor: 'var(--app-border-color)',
+              backgroundColor: 'var(--app-accent-bg)',
+              borderRadius: 'var(--app-radius-card)'
+            }}
+          >
             <ArticleThumbnailImage
               src={featuredThumb}
               alt={activePost.thumbnailAlt || activePost.title}
@@ -400,7 +415,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
         {/* Full Multi-Paragraph Formatted Content + Non-Destructive In-Article Ad Slots 1, 2, 3 */}
         <div
           data-testid="blog-article-body"
-          className="blog-article-body text-slate-800 text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-slate-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:border-teal-700 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-6 [&_a]:text-teal-700 [&_a]:underline"
+          className="blog-article-body text-base sm:text-[17px] leading-[1.75] space-y-5 [&_h1]:font-serif [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mt-8 [&_h1]:mb-3 [&_h2]:font-serif [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-7 [&_h2]:mb-2.5 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-5 [&_h3]:mb-2 [&_p]:mb-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5 [&_li]:mb-1.5 [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-6 [&_a]:underline"
         >
           {articleRenderPlan.segments.map((segment) =>
             segment.type === 'html' ? (
@@ -421,11 +436,17 @@ export const BlogView: React.FC<BlogViewProps> = ({
         </div>
 
         {/* Article Action Bar: Leave a Message & Share */}
-        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="pt-4 border-t flex flex-wrap items-center justify-between gap-3" style={{ borderColor: 'var(--app-border-color)' }}>
           <button
             type="button"
             onClick={scrollToCommentsSection}
-            className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-teal-50 border border-teal-200 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer"
+            className="inline-flex items-center space-x-2 px-4 py-2 border text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+            style={{
+              backgroundColor: 'var(--app-primary-soft)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-primary)',
+              borderRadius: 'var(--app-radius-btn)'
+            }}
           >
             <MessageSquare className="w-4 h-4" />
             <span>Write a Comment ({resolvedCommentCounts[activePost.id] || 0})</span>
@@ -442,11 +463,11 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
         {/* Related Articles Section (each displays its own correct thumbnail) */}
         {relatedPosts.length > 0 && (
-          <section className="pt-8 border-t border-slate-200 space-y-5">
-            <h2 className="font-serif text-xl sm:text-2xl font-bold text-slate-900">
+          <section className="pt-8 border-t space-y-5" style={{ borderColor: 'var(--app-border-color)' }}>
+            <h2 className="font-serif text-xl sm:text-2xl font-bold" style={{ color: 'var(--app-heading-primary)' }}>
               Related Articles
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--app-space-gap)' }}>
               {relatedPosts.map((related) => {
                 const relThumb = getSingleArticleThumbnailUrl(related);
                 const relDate = formatPublicationDate(related.publishedAt || related.updatedAt);
@@ -455,9 +476,12 @@ export const BlogView: React.FC<BlogViewProps> = ({
                   <article
                     key={related.id}
                     onClick={() => openArticle(related)}
-                    className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-sm transition-all flex flex-col cursor-pointer"
+                    className="group theme-card border overflow-hidden hover:shadow-sm transition-all flex flex-col cursor-pointer"
                   >
-                    <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                    <div
+                      className="aspect-[16/10] w-full overflow-hidden border-b"
+                      style={{ backgroundColor: 'var(--app-accent-bg)', borderColor: 'var(--app-border-color)' }}
+                    >
                       <ArticleThumbnailImage
                         src={relThumb}
                         alt={related.thumbnailAlt || related.title || 'Article placeholder'}
@@ -466,27 +490,31 @@ export const BlogView: React.FC<BlogViewProps> = ({
                     </div>
                     <div className="p-4 flex-1 flex flex-col justify-between space-y-2.5">
                       <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-500">
-                          <span className="font-bold text-teal-800">{related.category}</span>
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px]" style={{ color: 'var(--app-muted-text)' }}>
+                          <span className="font-bold" style={{ color: 'var(--app-primary)' }}>{related.category}</span>
                           {relDate && (
                             <>
-                              <span className="text-slate-300">·</span>
+                              <span className="opacity-50">·</span>
                               <span>{relDate.formattedDate}</span>
                             </>
                           )}
                         </div>
-                        <h3 className="font-serif text-base font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                        <h3 className="font-serif text-base font-bold transition-colors leading-snug line-clamp-2" style={{ color: 'var(--app-heading-primary)' }}>
                           {related.title}
                         </h3>
                       </div>
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <div
+                        className="pt-2 border-t flex items-center justify-between gap-2 text-xs"
+                        style={{ borderColor: 'var(--app-border-color)', color: 'var(--app-muted-text)' }}
+                      >
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             openArticle(related, true);
                           }}
-                          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md text-xs font-medium hover:opacity-80 transition-opacity cursor-pointer"
+                          style={{ color: 'var(--app-muted-text)' }}
                           title="Comments"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
@@ -505,11 +533,17 @@ export const BlogView: React.FC<BlogViewProps> = ({
         )}
 
         {/* Bottom Return Link */}
-        <div className="pt-8 border-t border-slate-200 flex items-center justify-between">
+        <div className="pt-8 border-t flex items-center justify-between" style={{ borderColor: 'var(--app-border-color)' }}>
           <button
             type="button"
             onClick={closeArticle}
-            className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 cursor-pointer"
+            className="inline-flex items-center space-x-2 px-4 py-2.5 border text-xs font-bold hover:opacity-90 cursor-pointer transition-opacity"
+            style={{
+              backgroundColor: 'var(--app-card-bg)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-heading-primary)',
+              borderRadius: 'var(--app-radius-btn)'
+            }}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>View All Published Articles</span>
@@ -529,18 +563,18 @@ export const BlogView: React.FC<BlogViewProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-10 sm:pt-7 sm:pb-12 space-y-7">
       {/* Editorial Section Header */}
-      <div className="border-b border-slate-200 pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <div className="border-b pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4" style={{ borderColor: 'var(--app-border-color)' }}>
         <div className="space-y-1.5">
           {(siteNameLabel || portalSubtitleLabel) && (
-            <div className="text-xs font-bold uppercase tracking-wider text-teal-800">
+            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--app-primary)' }}>
               {[siteNameLabel, portalSubtitleLabel].filter(Boolean).join(' · ')}
             </div>
           )}
-          <h1 className="font-serif text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+          <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
             News &amp; Editorial Articles
           </h1>
           {branding?.showWebsiteDescription !== false && branding?.websiteDescription?.trim() && (
-            <p className="text-xs sm:text-sm text-slate-600 max-w-2xl">
+            <p className="text-xs sm:text-sm max-w-2xl" style={{ color: 'var(--app-muted-text)' }}>
               {branding.websiteDescription}
             </p>
           )}
@@ -548,20 +582,20 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
         {/* Search Input */}
         <div className="relative w-full lg:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--app-muted-text)' }} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search articles..."
-            className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-teal-600"
+            className="theme-input w-full pl-10 pr-4 py-2.5 text-sm border"
           />
         </div>
       </div>
 
       {/* Category Filter Tabs (Live Firestore categories) */}
       <div className="space-y-2.5">
-        <div className="overflow-x-auto border-b border-slate-200 py-1.5 no-scrollbar">
+        <div className="overflow-x-auto border-b py-1.5 no-scrollbar" style={{ borderColor: 'var(--app-border-color)' }}>
           <div className="flex items-center gap-2 sm:gap-3 min-w-max">
             {categoryTabs.map((category) => {
               const active = selectedCategory === category;
@@ -582,8 +616,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
         </div>
 
         {selectedCategoryObj?.description && (
-          <p className="text-xs text-slate-600">
-            <strong className="text-slate-800">{selectedCategoryObj.name}:</strong>{' '}
+          <p className="text-xs" style={{ color: 'var(--app-muted-text)' }}>
+            <strong style={{ color: 'var(--app-heading-primary)' }}>{selectedCategoryObj.name}:</strong>{' '}
             {selectedCategoryObj.description}
           </p>
         )}
@@ -592,23 +626,23 @@ export const BlogView: React.FC<BlogViewProps> = ({
       {/* Blog Articles Feed */}
       {isLoading ? (
         <div className="py-16 text-center space-y-3">
-          <Loader2 className="w-6 h-6 text-teal-700 animate-spin mx-auto" />
-          <p className="text-sm text-slate-500">Loading published articles...</p>
+          <Loader2 className="w-6 h-6 animate-spin mx-auto" style={{ color: 'var(--app-primary)' }} />
+          <p className="text-sm" style={{ color: 'var(--app-muted-text)' }}>Loading published articles...</p>
         </div>
       ) : filteredPosts.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-2.5">
-          <FileText className="w-8 h-8 text-slate-400 mx-auto" />
-          <h2 className="font-serif text-xl font-bold text-slate-900">
+        <div className="theme-card border p-12 text-center space-y-2.5">
+          <FileText className="w-8 h-8 mx-auto" style={{ color: 'var(--app-muted-text)' }} />
+          <h2 className="font-serif text-xl font-bold" style={{ color: 'var(--app-heading-primary)' }}>
             {posts.length === 0 ? 'No articles published yet' : 'No matching articles found'}
           </h2>
-          <p className="text-sm text-slate-500 max-w-md mx-auto">
+          <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--app-muted-text)' }}>
             {posts.length === 0
               ? 'Published breaking news, special reports, and announcements will appear here.'
               : 'Try selecting another category or clearing your search filter.'}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 'var(--app-space-gap)' }}>
           {filteredPosts.map((post) => {
             const thumbSrc = getSingleArticleThumbnailUrl(post);
             const dateInfo = formatPublicationDate(post.publishedAt || post.updatedAt);
@@ -617,10 +651,13 @@ export const BlogView: React.FC<BlogViewProps> = ({
               <article
                 key={post.id}
                 onClick={() => openArticle(post)}
-                className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-teal-600/60 hover:shadow-md transition-all flex flex-col cursor-pointer"
+                className="group theme-card border overflow-hidden hover:shadow-md transition-all flex flex-col cursor-pointer"
               >
                 {/* Article's Own Thumbnail */}
-                <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden border-b border-slate-100">
+                <div
+                  className="aspect-[16/10] w-full overflow-hidden border-b"
+                  style={{ backgroundColor: 'var(--app-accent-bg)', borderColor: 'var(--app-border-color)' }}
+                >
                   <ArticleThumbnailImage
                     src={thumbSrc}
                     alt={post.thumbnailAlt || post.title}
@@ -629,29 +666,35 @@ export const BlogView: React.FC<BlogViewProps> = ({
                 </div>
 
                 {/* Card Body */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                <div
+                  className="flex-1 flex flex-col justify-between space-y-4"
+                  style={{ padding: 'var(--app-space-card)' }}
+                >
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                      <span className="font-bold text-teal-800">{post.category}</span>
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs" style={{ color: 'var(--app-muted-text)' }}>
+                      <span className="font-bold" style={{ color: 'var(--app-primary)' }}>{post.category}</span>
                       {dateInfo && (
                         <>
-                          <span className="text-slate-300">·</span>
+                          <span className="opacity-50">·</span>
                           <span>{dateInfo.formattedDate}</span>
                         </>
                       )}
                     </div>
 
-                    <h2 className="font-serif text-lg sm:text-xl font-bold text-slate-900 group-hover:text-teal-800 transition-colors leading-snug line-clamp-2">
+                    <h2 className="font-serif text-lg sm:text-xl font-bold transition-colors leading-snug line-clamp-2" style={{ color: 'var(--app-heading-primary)' }}>
                       {post.title}
                     </h2>
 
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-3">
+                    <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
                       {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
                     </p>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
-                    <span className="font-medium text-slate-700 truncate">
+                  <div
+                    className="pt-3 border-t flex items-center justify-between gap-2 text-xs"
+                    style={{ borderColor: 'var(--app-border-color)', color: 'var(--app-muted-text)' }}
+                  >
+                    <span className="font-medium truncate" style={{ color: 'var(--app-body-text)' }}>
                       {post.author?.name || 'ISEZERANO Editorial'}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
@@ -661,7 +704,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
                           e.stopPropagation();
                           openArticle(post, true);
                         }}
-                        className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-teal-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium hover:opacity-80 transition-opacity cursor-pointer"
+                        style={{ color: 'var(--app-muted-text)' }}
                         title="View or write comments"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />

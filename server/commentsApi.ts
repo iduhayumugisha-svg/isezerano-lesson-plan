@@ -549,8 +549,19 @@ async function syncCreateToFirestoreRest(
       body: JSON.stringify({ writes }),
       signal: controller.signal
     }).finally(() => clearTimeout(timer));
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.warn(
+        '[Comments API Firestore REST create sync failed]',
+        JSON.stringify({ commentId: comment.id, status: res.status, detail: detail.slice(0, 400) })
+      );
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[Comments API Firestore REST create sync error]',
+      err instanceof Error ? err.message : String(err)
+    );
     return false;
   }
 }
@@ -600,8 +611,19 @@ async function syncUpdateToFirestoreRest(
       body: JSON.stringify({ writes }),
       signal: controller.signal
     }).finally(() => clearTimeout(timer));
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.warn(
+        '[Comments API Firestore REST update sync failed]',
+        JSON.stringify({ commentId, status: res.status, detail: detail.slice(0, 400) })
+      );
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[Comments API Firestore REST update sync error]',
+      err instanceof Error ? err.message : String(err)
+    );
     return false;
   }
 }
@@ -643,8 +665,19 @@ async function syncDeleteToFirestoreRest(
       body: JSON.stringify({ writes }),
       signal: controller.signal
     }).finally(() => clearTimeout(timer));
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.warn(
+        '[Comments API Firestore REST delete sync failed]',
+        JSON.stringify({ commentId, status: res.status, detail: detail.slice(0, 400) })
+      );
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[Comments API Firestore REST delete sync error]',
+      err instanceof Error ? err.message : String(err)
+    );
     return false;
   }
 }

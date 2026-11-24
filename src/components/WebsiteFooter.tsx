@@ -49,15 +49,18 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
     <footer
       className="no-print border-t pt-12 pb-8 mt-auto transition-colors"
       style={{
-        backgroundColor: colors.footerBg,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        color: colors.footerBodyText
+        backgroundColor: 'var(--app-footer-bg)',
+        borderColor: 'var(--app-border-color)',
+        color: 'var(--app-footer-body-text)'
       }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Main 4-Column Responsive Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b"
+          style={{ borderColor: 'rgba(255, 255, 255, 0.12)' }}
+        >
 
           {/* Column 1: Brand & Editorial Identity */}
           <div className="sm:col-span-2 space-y-4">
@@ -91,15 +94,15 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                         typography?.websiteNameFontFamily ||
                         "'Times New Roman', Times, Baskerville, Georgia, serif",
                       fontSize: `clamp(16px, 4vw, ${Math.max(16, (Number(typography?.websiteNameSize) || 26) - 2)}px)`,
-                      color: colors.footerHeadingText
+                      color: 'var(--app-footer-heading-text)'
                     }}
                   >
                     {branding?.platformTitle || 'ISEZERANO ONLINE'}
                   </span>
                   {branding?.platformSubtitle && (
                     <span
-                      className="font-semibold tracking-wider uppercase mt-0.5 text-xs text-teal-400"
-                      style={{ color: colors.footerLinkColor }}
+                      className="font-semibold tracking-wider uppercase mt-0.5 text-xs"
+                      style={{ color: 'var(--app-footer-link-color)' }}
                     >
                       {branding.platformSubtitle}
                     </span>
@@ -109,22 +112,26 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             </div>
 
             {branding?.showWebsiteDescription !== false && (
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-md">
+              <p
+                className="text-xs sm:text-sm leading-relaxed max-w-md"
+                style={{ color: 'var(--app-footer-body-text)' }}
+              >
                 {branding?.websiteDescription?.trim() || branding?.footerTagline || 'Trusted news, analysis, and timely stories for readers.'}
               </p>
             )}
 
-            <div className="space-y-1.5 pt-1 text-xs text-slate-400">
+            <div className="space-y-1.5 pt-1 text-xs" style={{ color: 'var(--app-footer-body-text)' }}>
               <div className="flex items-center space-x-2">
-                <Globe className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <Globe className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--app-footer-link-color)' }} />
                 <span>Independent Digital News &amp; Information Portal</span>
               </div>
               <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--app-footer-link-color)' }} />
                 <button
                   type="button"
                   onClick={() => handleLink('admin')}
-                  className="hover:text-white transition-colors underline cursor-pointer"
+                  className="hover:opacity-90 transition-opacity underline cursor-pointer"
+                  style={{ color: 'var(--app-footer-link-color)' }}
                 >
                   Admin Portal
                 </button>
@@ -134,8 +141,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
 
           {/* Column 2: Newsroom Navigation (Configurable) */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
-              <Newspaper className="w-3.5 h-3.5 text-teal-400" />
+            <h3
+              className="text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5"
+              style={{ color: 'var(--app-footer-heading-text)' }}
+            >
+              <Newspaper className="w-3.5 h-3.5" style={{ color: 'var(--app-footer-link-color)' }} />
               <span>News &amp; Sections</span>
             </h3>
             <ul className="space-y-2 text-xs sm:text-sm">
@@ -149,7 +159,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                         href={item.path}
                         target={item.openInNewTab ? '_blank' : '_self'}
                         rel="noopener noreferrer"
-                        className="text-slate-300 hover:text-white transition-colors inline-flex items-center space-x-1.5"
+                        className="hover:opacity-85 transition-opacity inline-flex items-center space-x-1.5"
+                        style={{ color: 'var(--app-footer-body-text)' }}
                       >
                         <span>{item.label}</span>
                         {item.badge && (
@@ -167,7 +178,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                     <button
                       type="button"
                       onClick={() => handleLink(item.path as WebsitePage)}
-                      className="text-slate-300 hover:text-white transition-colors cursor-pointer inline-flex items-center space-x-1.5 text-left"
+                      className="hover:opacity-85 transition-opacity cursor-pointer inline-flex items-center space-x-1.5 text-left"
+                      style={{ color: 'var(--app-footer-body-text)' }}
                     >
                       <span>{item.id === 'nav-blog' && item.label === 'All News' ? allNewsLabel : item.label}</span>
                       {item.badge && (
@@ -188,8 +200,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
 
           {/* Column 3: Contact & Legal Pages */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center space-x-1.5">
-              <FileText className="w-3.5 h-3.5 text-teal-400" />
+            <h3
+              className="text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5"
+              style={{ color: 'var(--app-footer-heading-text)' }}
+            >
+              <FileText className="w-3.5 h-3.5" style={{ color: 'var(--app-footer-link-color)' }} />
               <span>Contact &amp; Legal</span>
             </h3>
             <ul className="space-y-2.5 text-xs sm:text-sm">
@@ -197,30 +212,33 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => handleLink('contact')}
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  className="group flex items-center space-x-2 hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ color: 'var(--app-footer-heading-text)' }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-transform" />
-                  <span className="font-semibold text-white group-hover:underline">{t.navContact || 'Contact Us'}</span>
+                  <span className="w-1.5 h-1.5 rounded-full group-hover:scale-125 transition-transform" style={{ backgroundColor: 'var(--app-footer-link-color)' }} />
+                  <span className="font-semibold group-hover:underline">{t.navContact || 'Contact Us'}</span>
                 </button>
               </li>
               <li>
                 <button
                   type="button"
                   onClick={() => handleLink('privacy')}
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  className="group flex items-center space-x-2 hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ color: 'var(--app-footer-heading-text)' }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-transform" />
-                  <span className="font-semibold text-white group-hover:underline">{t.navPrivacy || 'Privacy Policy'}</span>
+                  <span className="w-1.5 h-1.5 rounded-full group-hover:scale-125 transition-transform" style={{ backgroundColor: 'var(--app-footer-link-color)' }} />
+                  <span className="font-semibold group-hover:underline">{t.navPrivacy || 'Privacy Policy'}</span>
                 </button>
               </li>
               <li>
                 <button
                   type="button"
                   onClick={() => handleLink('terms')}
-                  className="group flex items-center space-x-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  className="group flex items-center space-x-2 hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ color: 'var(--app-footer-heading-text)' }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 group-hover:scale-125 transition-transform" />
-                  <span className="font-semibold text-white group-hover:underline">{t.navTerms || 'Terms & Conditions'}</span>
+                  <span className="w-1.5 h-1.5 rounded-full group-hover:scale-125 transition-transform" style={{ backgroundColor: 'var(--app-footer-link-color)' }} />
+                  <span className="font-semibold group-hover:underline">{t.navTerms || 'Terms & Conditions'}</span>
                 </button>
               </li>
             </ul>
@@ -229,7 +247,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
         </div>
 
         {/* Bottom Bar: Links & Copyright */}
-        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <div
+          className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs"
+          style={{ color: 'var(--app-footer-body-text)' }}
+        >
           <div>
             <span>{branding?.footerCopyright || '© 2026 ISEZERANO ONLINE. All rights reserved.'}</span>
           </div>
@@ -238,23 +259,26 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({ onNavigate }) => {
             <button
               type="button"
               onClick={() => handleLink('contact')}
-              className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
+              className="hover:opacity-90 font-medium transition-opacity cursor-pointer"
+              style={{ color: 'var(--app-footer-heading-text)' }}
             >
               {t.navContact || 'Contact Us'}
             </button>
-            <span className="text-slate-600">•</span>
+            <span className="opacity-50">•</span>
             <button
               type="button"
               onClick={() => handleLink('privacy')}
-              className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
+              className="hover:opacity-90 font-medium transition-opacity cursor-pointer"
+              style={{ color: 'var(--app-footer-heading-text)' }}
             >
               {t.navPrivacy || 'Privacy Policy'}
             </button>
-            <span className="text-slate-600">•</span>
+            <span className="opacity-50">•</span>
             <button
               type="button"
               onClick={() => handleLink('terms')}
-              className="text-slate-300 hover:text-white font-medium transition-colors cursor-pointer"
+              className="hover:opacity-90 font-medium transition-opacity cursor-pointer"
+              style={{ color: 'var(--app-footer-heading-text)' }}
             >
               {t.navTerms || 'Terms & Conditions'}
             </button>

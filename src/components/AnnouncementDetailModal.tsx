@@ -46,32 +46,36 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="theme-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={handleClose}
     >
       <div
-        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150 relative max-h-[90vh] overflow-y-auto"
+        className="theme-modal-card max-w-lg w-full p-6 sm:p-7 shadow-2xl border space-y-5 animate-in zoom-in-95 duration-150 relative max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
           onClick={handleClose}
-          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+          className="absolute top-5 right-5 p-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer"
+          style={{ color: 'var(--app-muted-text)' }}
           title="Close"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* HEADER */}
-        <div className="flex items-center space-x-3 border-b border-slate-100 pb-4 pr-10">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-teal-50 border border-teal-200 shadow-2xs shrink-0">
-            <Bell className="w-6 h-6 text-teal-700" />
+        <div className="flex items-center space-x-3 border-b pb-4 pr-10" style={{ borderColor: 'var(--app-border-color)' }}>
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center border shadow-2xs shrink-0"
+            style={{ backgroundColor: 'var(--app-primary-soft)', borderColor: 'var(--app-border-color)', color: 'var(--app-primary)' }}
+          >
+            <Bell className="w-6 h-6" />
           </div>
           <div className="min-w-0">
-            <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 block">
+            <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--app-primary)' }}>
               ISEZERANO ONLINE
             </span>
-            <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
+            <h3 className="text-base sm:text-lg font-black leading-snug" style={{ color: 'var(--app-heading-primary)' }}>
               News Alert &amp; Announcement
             </h3>
           </div>
@@ -79,39 +83,56 @@ export const AnnouncementDetailModal: React.FC<AnnouncementDetailModalProps> = (
 
         {/* Public announcement view (no reader login required) */}
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-100 font-semibold text-slate-700">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--app-muted-text)' }}>
+            <span
+              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full font-semibold border"
+              style={{ backgroundColor: 'var(--app-body-bg)', borderColor: 'var(--app-border-color)', color: 'var(--app-body-text)' }}
+            >
+              <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--app-muted-text)' }} />
               <span>{formatDate(announcement.createdAt)}</span>
             </span>
 
-            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-teal-50 font-semibold text-teal-800 border border-teal-200/60">
-              <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+            <span
+              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full font-semibold border"
+              style={{ backgroundColor: 'var(--app-primary-soft)', borderColor: 'var(--app-border-color)', color: 'var(--app-primary)' }}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
               <span>{announcement.senderName || 'ISEZERANO Editorial'}</span>
             </span>
 
             {(announcement.priority === 'high' || announcement.priority === 'urgent') && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800">
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                style={{ backgroundColor: 'var(--app-error-bg)', color: 'var(--app-error-text)' }}
+              >
                 Urgent
               </span>
             )}
           </div>
 
           <div>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            <h2 className="text-lg font-black tracking-tight" style={{ color: 'var(--app-heading-primary)' }}>
               {announcement.title}
             </h2>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line font-normal">
+          <div
+            className="p-4 border text-xs sm:text-sm leading-relaxed whitespace-pre-line font-normal"
+            style={{
+              backgroundColor: 'var(--app-body-bg)',
+              borderColor: 'var(--app-border-color)',
+              color: 'var(--app-body-text)',
+              borderRadius: 'var(--app-radius-card)'
+            }}
+          >
             {announcement.body}
           </div>
 
-          <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-end pt-2 border-t" style={{ borderColor: 'var(--app-border-color)' }}>
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 rounded-xl text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs cursor-pointer active:scale-95"
+              className="theme-btn-primary px-4 py-2 text-xs font-extrabold transition-all shadow-xs cursor-pointer active:scale-95 hover:opacity-90"
             >
               Close
             </button>

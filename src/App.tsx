@@ -84,7 +84,7 @@ const getBlogSlugFromUrl = (): string | null => {
 
 function AppContent() {
   const { user, isAdmin, signOutUser } = useAuth();
-  const { colors, branding } = useWebsiteDesign();
+  const { branding } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -283,8 +283,8 @@ function AppContent() {
     <div
       className="min-h-screen flex flex-col w-full antialiased overflow-x-clip selection:bg-teal-700 selection:text-white transition-colors"
       style={{
-        backgroundColor: colors.bodyBg,
-        color: colors.bodyText
+        backgroundColor: 'var(--app-body-bg)',
+        color: 'var(--app-body-text)'
       }}
     >
       {/* Site-Wide Monetag Vignette & Global Head Scripts (skipped on /admin) */}
@@ -327,7 +327,10 @@ function AppContent() {
 
         <Suspense
           fallback={
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center text-sm text-slate-500">
+            <div
+              className="max-w-5xl mx-auto px-4 sm:px-6 py-16 text-center text-sm"
+              style={{ color: 'var(--app-muted-text)' }}
+            >
               Loading page...
             </div>
           }

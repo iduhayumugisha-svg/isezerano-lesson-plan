@@ -40,12 +40,10 @@ import {
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import { useAuth } from '../context/AuthContext';
 import { 
-  DEFAULT_WEBSITE_COLORS, 
   DEFAULT_WEBSITE_TYPOGRAPHY, 
   DEFAULT_WEBSITE_LOGO,
   DEFAULT_HOMEPAGE_SECTIONS,
   DEFAULT_NAVIGATION_MENUS,
-  WebsiteColorSettings,
   WebsiteTypographySettings,
   WebsiteLogoSettings,
   HomepageSectionConfig,
@@ -56,85 +54,9 @@ import {
 } from '../types/websiteDesign';
 import { LogoUploadProgress, validateImageUrl } from '../services/websiteDesignService';
 import { CategoryAppearanceManager } from './CategoryAppearanceManager';
+import { ColorAppearanceManager } from './ColorAppearanceManager';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
-
-// Preset palettes for 1-click theme switching
-const PALETTE_PRESETS: { name: string; description: string; colors: Partial<WebsiteColorSettings> }[] = [
-  {
-    name: 'Official ISEZERANO ONLINE (Teal & Navy)',
-    description: 'The standard editorial palette of ISEZERANO ONLINE',
-    colors: { ...DEFAULT_WEBSITE_COLORS }
-  },
-  {
-    name: 'Emerald & Slate',
-    description: 'Refined emerald newsroom feel with high-contrast slate text',
-    colors: {
-      headerBg: '#ffffff',
-      headerText: '#064e3b',
-      headerBorder: '#d1fae5',
-      navLinkHover: '#059669',
-      navLinkActive: '#047857',
-      primaryButtonBg: '#059669',
-      primaryButtonText: '#ffffff',
-      secondaryButtonBg: '#064e3b',
-      footerBg: '#022c22',
-      footerHeadingText: '#ffffff',
-      footerBodyText: '#a7f3d0',
-      footerLinkColor: '#34d399',
-      headingPrimary: '#064e3b',
-      headingSecondary: '#047857',
-      accentBg: '#ecfdf5',
-      accentBadgeBg: '#d1fae5',
-      accentBadgeText: '#065f46'
-    }
-  },
-  {
-    name: 'Royal Editorial Blue',
-    description: 'Distinguished broadsheet & international press tone',
-    colors: {
-      headerBg: '#ffffff',
-      headerText: '#1e3a8a',
-      headerBorder: '#dbeafe',
-      navLinkHover: '#2563eb',
-      navLinkActive: '#1d4ed8',
-      primaryButtonBg: '#1d4ed8',
-      primaryButtonText: '#ffffff',
-      secondaryButtonBg: '#1e3a8a',
-      footerBg: '#0f172a',
-      footerHeadingText: '#ffffff',
-      footerBodyText: '#93c5fd',
-      footerLinkColor: '#60a5fa',
-      headingPrimary: '#1e3a8a',
-      headingSecondary: '#1d4ed8',
-      accentBg: '#eff6ff',
-      accentBadgeBg: '#dbeafe',
-      accentBadgeText: '#1e40af'
-    }
-  },
-  {
-    name: 'Classic Print Burgundy',
-    description: 'Prestigious classical journalism contrast',
-    colors: {
-      headerBg: '#ffffff',
-      headerText: '#831843',
-      headerBorder: '#fbcfe8',
-      navLinkHover: '#be185d',
-      navLinkActive: '#9d174d',
-      primaryButtonBg: '#be185d',
-      primaryButtonText: '#ffffff',
-      secondaryButtonBg: '#701a75',
-      footerBg: '#500724',
-      footerHeadingText: '#ffffff',
-      footerBodyText: '#fbcfe8',
-      footerLinkColor: '#f472b6',
-      headingPrimary: '#831843',
-      headingSecondary: '#9d174d',
-      accentBg: '#fdf2f8',
-      accentBadgeBg: '#fce7f3',
-      accentBadgeText: '#9d174d'
-    }
-  }
-];
+import { normalizeHexColor } from '../utils/appearanceUtils';
 
 // Curated professional font families for digital publishing and news
 const FONT_PRESETS = [
@@ -277,7 +199,6 @@ export const WebsiteDesignManager: React.FC = () => {
     isDraftDirty,
     isPublishing,
     updateDraftBranding,
-    updateDraftColors,
     updateDraftTypography,
     updateDraftLogo,
     homepageSections,
@@ -549,10 +470,15 @@ export const WebsiteDesignManager: React.FC = () => {
               type="button"
               onClick={handlePublish}
               disabled={isPublishing}
+              style={
+                !isDraftDirty
+                  ? { backgroundColor: 'var(--app-success-bg)', color: 'var(--app-success-text)' }
+                  : undefined
+              }
               className={`inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md cursor-pointer ${
                 isDraftDirty 
                   ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 animate-pulse' 
-                  : 'bg-teal-600 hover:bg-teal-500 text-white'
+                  : 'hover:opacity-95'
               }`}
             >
               {isPublishing ? (
@@ -572,17 +498,20 @@ export const WebsiteDesignManager: React.FC = () => {
 
         {/* Status Toast */}
         {statusMessage && (
-          <div className={`mt-4 p-3 rounded-xl border text-xs flex items-center space-x-2 animate-in fade-in ${
-            statusMessage.type === 'success' 
-              ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200' 
-              : 'bg-red-500/20 border-red-400/40 text-red-200'
-          }`}>
+          <div
+            style={
+              statusMessage.type === 'success'
+                ? { backgroundColor: 'var(--app-success-bg)', color: 'var(--app-success-text)' }
+                : { backgroundColor: 'var(--app-error-bg)', color: 'var(--app-error-text)' }
+            }
+            className="mt-4 p-3 rounded-xl border border-white/20 text-xs flex items-center space-x-2 animate-in fade-in shadow-sm"
+          >
             {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
             )}
-            <span className="font-medium">{statusMessage.text}</span>
+            <span className="font-semibold">{statusMessage.text}</span>
           </div>
         )}
       </div>
@@ -1157,7 +1086,7 @@ export const WebsiteDesignManager: React.FC = () => {
                     <input
                       type="color"
                       aria-label="Website name color picker"
-                      value={normalizeHexForPicker(draftNameColor)}
+                      value={normalizeHexColor(draftNameColor, '#0f172a')}
                       onChange={(e) => updateDraftTypography({ websiteNameColor: e.target.value })}
                       className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
                     />
@@ -1803,151 +1732,8 @@ export const WebsiteDesignManager: React.FC = () => {
 
       {/* TAB 2: WEBSITE APPEARANCE & COLORS */}
       {activeTab === 'colors' && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-8">
-          
-          {/* Section Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Website Color System</h3>
-              <p className="text-xs text-slate-500">
-                Customize colors using native color pickers or hexadecimal values (#RRGGBB). Choose a curated educational preset or fine-tune individual components.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => resetSectionToDefault('colors')}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer shrink-0"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Colors to Default</span>
-            </button>
-          </div>
-
-          {/* 1-Click Educational Palettes */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              1-Click Academic Color Themes
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {PALETTE_PRESETS.map((p, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => updateDraftColors(p.colors)}
-                  className="p-3.5 rounded-xl border border-slate-200 hover:border-teal-500 hover:shadow-xs transition-all cursor-pointer bg-slate-50/50 hover:bg-teal-50/30 group"
-                >
-                  <div className="flex items-center space-x-1.5 mb-2">
-                    <span 
-                      className="w-4 h-4 rounded-full border border-black/10" 
-                      style={{ backgroundColor: p.colors.primaryButtonBg || '#0f766e' }} 
-                    />
-                    <span 
-                      className="w-4 h-4 rounded-full border border-black/10" 
-                      style={{ backgroundColor: p.colors.secondaryButtonBg || '#0f172a' }} 
-                    />
-                    <span 
-                      className="w-4 h-4 rounded-full border border-black/10" 
-                      style={{ backgroundColor: p.colors.footerBg || '#090e1a' }} 
-                    />
-                  </div>
-                  <h5 className="text-xs font-bold text-slate-900 group-hover:text-teal-800">{p.name}</h5>
-                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{p.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Color Groups */}
-          <div className="space-y-6 pt-4 border-t border-slate-100">
-            
-            {/* Group 1: Header and Navigation */}
-            <ColorGroupSection
-              title="1. Header & Navigation Bar"
-              description="Top banner, navigation menu background, text, and active link states"
-              fields={[
-                { key: 'headerBg', label: 'Header Background', value: draftSettings.colors.headerBg },
-                { key: 'headerText', label: 'Header Text & Title', value: draftSettings.colors.headerText },
-                { key: 'headerBorder', label: 'Header Border', value: draftSettings.colors.headerBorder },
-                { key: 'navLinkHover', label: 'Nav Link Hover Tint', value: draftSettings.colors.navLinkHover },
-                { key: 'navLinkActive', label: 'Active Page Highlight', value: draftSettings.colors.navLinkActive },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-            {/* Group 2: Body and Page Background */}
-            <ColorGroupSection
-              title="2. Body & Background"
-              description="Overall website page canvas, main paragraphs, and secondary labels"
-              fields={[
-                { key: 'bodyBg', label: 'Page Background', value: draftSettings.colors.bodyBg },
-                { key: 'bodyText', label: 'Body Text Color', value: draftSettings.colors.bodyText },
-                { key: 'mutedText', label: 'Muted Labels & Metadata', value: draftSettings.colors.mutedText },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-            {/* Group 3: Cards and Main Content */}
-            <ColorGroupSection
-              title="3. Cards & Content Sections"
-              description="News article cards, editorial panels, and content containers"
-              fields={[
-                { key: 'cardBg', label: 'Card Background', value: draftSettings.colors.cardBg },
-                { key: 'cardBorder', label: 'Card Border Line', value: draftSettings.colors.cardBorder },
-                { key: 'accentBg', label: 'Highlighted Container Fill', value: draftSettings.colors.accentBg },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-            {/* Group 4: Buttons, Links & Forms */}
-            <ColorGroupSection
-              title="4. Buttons, Links & Forms"
-              description="Action triggers, submit buttons, links, and text input outlines"
-              fields={[
-                { key: 'primaryButtonBg', label: 'Primary Button Background', value: draftSettings.colors.primaryButtonBg },
-                { key: 'primaryButtonText', label: 'Primary Button Text', value: draftSettings.colors.primaryButtonText },
-                { key: 'secondaryButtonBg', label: 'Secondary Button', value: draftSettings.colors.secondaryButtonBg },
-                { key: 'linkColor', label: 'Hyperlinks', value: draftSettings.colors.linkColor },
-                { key: 'formInputBorder', label: 'Form Input Border', value: draftSettings.colors.formInputBorder },
-                { key: 'formFocusRing', label: 'Form Focus Highlight', value: draftSettings.colors.formFocusRing },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-            {/* Group 5: Footer & Copyright */}
-            <ColorGroupSection
-              title="5. Footer & Information Bar"
-              description="Bottom website footer background, column headers, and links"
-              fields={[
-                { key: 'footerBg', label: 'Footer Background', value: draftSettings.colors.footerBg },
-                { key: 'footerHeadingText', label: 'Footer Headings', value: draftSettings.colors.footerHeadingText },
-                { key: 'footerBodyText', label: 'Footer Description Text', value: draftSettings.colors.footerBodyText },
-                { key: 'footerLinkColor', label: 'Footer Links & Badges', value: draftSettings.colors.footerLinkColor },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-            {/* Group 6: Headings and Accents */}
-            <ColorGroupSection
-              title="6. Headings & Sidebars"
-              description="H1/H2 titles, sidebar drawers, and status badges"
-              fields={[
-                { key: 'headingPrimary', label: 'Main Heading H1', value: draftSettings.colors.headingPrimary },
-                { key: 'headingSecondary', label: 'Section Heading H2', value: draftSettings.colors.headingSecondary },
-                { key: 'sidebarBg', label: 'Sidebar Background', value: draftSettings.colors.sidebarBg },
-                { key: 'accentBadgeBg', label: 'Badge Background', value: draftSettings.colors.accentBadgeBg },
-                { key: 'accentBadgeText', label: 'Badge Text', value: draftSettings.colors.accentBadgeText },
-              ]}
-              onChange={(key, val) => updateDraftColors({ [key]: val })}
-              onReset={(key) => resetSingleField('colors', key)}
-            />
-
-          </div>
-
+        <div className="space-y-6">
+          <ColorAppearanceManager embedded />
         </div>
       )}
 
@@ -3488,95 +3274,6 @@ export const WebsiteDesignManager: React.FC = () => {
         </div>
       )}
 
-    </div>
-  );
-};
-
-// Reusable Color Group Component with Hex & Picker Inputs
-interface ColorField {
-  key: keyof WebsiteColorSettings;
-  label: string;
-  value: string;
-}
-
-const normalizeHexForPicker = (hex: string): string => {
-  if (!hex) return '#ffffff';
-  let cleaned = hex.trim();
-  if (!cleaned.startsWith('#')) cleaned = `#${cleaned}`;
-  if (/^#[0-9A-Fa-f]{6}$/.test(cleaned)) return cleaned;
-  return '#ffffff';
-};
-
-const ColorGroupSection: React.FC<{
-  title: string;
-  description: string;
-  fields: ColorField[];
-  onChange: (key: keyof WebsiteColorSettings, value: string) => void;
-  onReset: (key: string) => void;
-}> = ({ title, description, fields, onChange, onReset }) => {
-  return (
-    <div className="space-y-3">
-      <div>
-        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
-        <p className="text-xs text-slate-500">{description}</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {fields.map((f) => {
-          const displayHex = f.value || '#ffffff';
-          const pickerVal = normalizeHexForPicker(displayHex);
-
-          return (
-            <div 
-              key={f.key}
-              className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between space-x-3 transition-colors hover:border-slate-300"
-            >
-              <div className="flex-1 min-w-0">
-                <span className="block text-xs font-semibold text-slate-700 truncate">{f.label}</span>
-                <div className="flex items-center space-x-2 mt-1">
-                  <input 
-                    type="text" 
-                    value={f.value}
-                    onChange={(e) => {
-                      let val = e.target.value.trim();
-                      if (val && !val.startsWith('#') && /^[0-9A-Fa-f]{3,6}$/.test(val)) {
-                        val = `#${val}`;
-                      }
-                      onChange(f.key, val);
-                    }}
-                    className="w-22 px-2 py-0.5 text-xs font-mono font-semibold uppercase border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onReset(f.key)}
-                    className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 rounded"
-                    title="Reset this color"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Native Color Picker Circle */}
-              <label 
-                className="relative w-8 h-8 rounded-full border border-slate-300 shadow-2xs overflow-hidden cursor-pointer shrink-0 block hover:scale-105 transition-transform"
-                title={`Click to pick color for ${f.label}`}
-              >
-                <input 
-                  type="color" 
-                  value={pickerVal}
-                  onChange={(e) => onChange(f.key, e.target.value)}
-                  className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                />
-                <span 
-                  className="block w-full h-full" 
-                  style={{ backgroundColor: displayHex }} 
-                />
-              </label>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };

@@ -113,13 +113,22 @@ enum OperationType {
 
 interface FirestoreErrorInfo {
   error: string;
+  code?: string;
   operationType: OperationType;
   path: string | null;
   authInfo: {
     userId?: string;
+    isAnonymous?: boolean;
     email?: string | null;
     emailVerified?: boolean;
   };
+}
+
+function extractFirestoreErrorCode(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return String((error as { code?: unknown }).code || '').trim();
+  }
+  return '';
 }
 
 function logFirestoreCommentError(
@@ -128,12 +137,15 @@ function logFirestoreCommentError(
   path: string | null
 ): void {
   const auth = getFirebaseAuth();
+  const code = extractFirestoreErrorCode(error);
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
+    ...(code ? { code } : {}),
     operationType,
     path,
     authInfo: {
       userId: auth?.currentUser?.uid,
+      isAnonymous: auth?.currentUser?.isAnonymous,
       email: auth?.currentUser?.email ?? null,
       emailVerified: auth?.currentUser?.emailVerified
     }
@@ -145,10 +157,7 @@ export const formatFirestoreCommentError = (
   err: unknown,
   fallbackMessage: string
 ): string => {
-  const code =
-    typeof err === 'object' && err !== null && 'code' in err
-      ? String((err as { code?: unknown }).code || '')
-      : '';
+  const code = extractFirestoreErrorCode(err);
   const rawMessage =
     err instanceof Error
       ? err.message
@@ -161,6 +170,15 @@ export const formatFirestoreCommentError = (
     /missing or insufficient permissions|permission-denied|permission_denied/i.test(rawMessage)
   ) {
     return 'Unable to save comment right now due to server permissions. Please refresh the page and try again.';
+  }
+  if (code === 'unauthenticated' || /unauthenticated/i.test(rawMessage)) {
+    return 'Your session expired before saving this comment. Please refresh the page and try again.';
+  }
+  if (code === 'failed-precondition') {
+    return 'Could not save this comment because the thread state changed. Please refresh the page and try again.';
+  }
+  if (code === 'invalid-argument') {
+    return 'Some comment details could not be validated. Please check your name and message and try again.';
   }
   if (code === 'unavailable' || /network|offline|unavailable/i.test(rawMessage)) {
     return 'Network connection interrupted. Please check your internet connection and try again.';

@@ -133,16 +133,30 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         aria-label="News Alerts & Announcements"
         title="News Alerts & Announcements"
-        className={`relative p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+        className="relative p-2 border transition-all cursor-pointer flex items-center justify-center hover:opacity-90"
+        style={
           isOpen
-            ? 'bg-teal-700 text-white border-teal-700 shadow-md ring-2 ring-teal-400/40'
-            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-        }`}
+            ? {
+                backgroundColor: 'var(--app-primary)',
+                color: 'var(--app-primary-btn-text)',
+                borderColor: 'var(--app-primary)',
+                borderRadius: 'var(--app-radius-btn)'
+              }
+            : {
+                backgroundColor: 'var(--app-body-bg)',
+                color: 'var(--app-header-text)',
+                borderColor: 'var(--app-border-color)',
+                borderRadius: 'var(--app-radius-btn)'
+              }
+        }
       >
         <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
 
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-md animate-pulse">
+          <span
+            className="absolute -top-1 -right-1 text-[10px] font-black w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center shadow-md animate-pulse"
+            style={{ backgroundColor: 'var(--app-error-bg)', color: 'var(--app-error-text)' }}
+          >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -151,20 +165,23 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
       {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-80 sm:w-96 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right text-slate-800"
+          className="theme-modal-card absolute right-0 mt-2 w-80 sm:w-96 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto shadow-2xl border py-3 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right"
           role="dialog"
         >
           {/* Header */}
-          <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-4 py-2 border-b flex items-center justify-between" style={{ borderColor: 'var(--app-border-color)' }}>
             <div className="flex items-center space-x-2">
-              <span className="p-1.5 rounded-xl bg-teal-50 text-teal-700">
+              <span
+                className="p-1.5 rounded-xl"
+                style={{ backgroundColor: 'var(--app-primary-soft)', color: 'var(--app-primary)' }}
+              >
                 <Bell className="w-4 h-4" />
               </span>
               <div>
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                <h4 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--app-heading-primary)' }}>
                   News Alerts
                 </h4>
-                <p className="text-[10px] text-slate-400">
+                <p className="text-[10px]" style={{ color: 'var(--app-muted-text)' }}>
                   {unreadCount > 0 ? `${unreadCount} unread alert(s)` : 'All alerts caught up'}
                 </p>
               </div>
@@ -174,7 +191,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
               <button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="text-[10px] font-bold text-teal-700 hover:text-teal-900 cursor-pointer flex items-center space-x-1"
+                className="theme-link text-[10px] font-bold hover:opacity-80 cursor-pointer flex items-center space-x-1"
                 title="Mark all as read"
               >
                 <Check className="w-3 h-3" />
@@ -184,28 +201,41 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
           </div>
 
           {/* Real Push Notifications Device Permission Card */}
-          <div className="p-3 mx-3 mt-2 rounded-2xl bg-gradient-to-r from-teal-50 via-slate-50 to-teal-50 border border-teal-200/80 space-y-2">
+          <div
+            className="p-3 mx-3 mt-2 border space-y-2"
+            style={{
+              backgroundColor: 'var(--app-primary-soft)',
+              borderColor: 'var(--app-border-color)',
+              borderRadius: 'var(--app-radius-card)'
+            }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-1.5">
-                <Smartphone className="w-3.5 h-3.5 text-teal-700" />
-                <span className="text-[11px] font-black text-slate-900">
+                <Smartphone className="w-3.5 h-3.5" style={{ color: 'var(--app-primary)' }} />
+                <span className="text-[11px] font-black" style={{ color: 'var(--app-heading-primary)' }}>
                   Breaking News Push Alerts
                 </span>
               </div>
 
               {permission === 'granted' && hasDeviceToken ? (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1">
+                <span
+                  className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center space-x-1"
+                  style={{ backgroundColor: 'var(--app-success-bg)', color: 'var(--app-success-text)' }}
+                >
                   <CheckCircle2 className="w-2.5 h-2.5" />
                   <span>Enabled</span>
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                <span
+                  className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
+                  style={{ backgroundColor: 'var(--app-warning-bg)', color: 'var(--app-warning-text)' }}
+                >
                   Not enabled
                 </span>
               )}
             </div>
 
-            <p className="text-[10px] text-slate-600 leading-snug">
+            <p className="text-[10px] leading-snug" style={{ color: 'var(--app-muted-text)' }}>
               Receive instant breaking news alerts from ISEZERANO ONLINE directly on your phone or desktop. No account required.
             </p>
 
@@ -214,7 +244,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                 type="button"
                 onClick={handleEnablePush}
                 disabled={isEnabling}
-                className="w-full py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-extrabold transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                className="theme-btn-primary w-full py-2 px-3 text-[11px] font-extrabold transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 active:scale-95 hover:opacity-90"
               >
                 <Bell className="w-3.5 h-3.5" />
                 <span>{isEnabling ? 'Enabling...' : 'Enable Breaking News Alerts'}</span>
@@ -228,28 +258,45 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                     'News alerts are active and working on this device.'
                   );
                 }}
-                className="w-full py-1.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full py-1.5 px-3 border text-[10px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer hover:opacity-90"
+                style={{
+                  backgroundColor: 'var(--app-card-bg)',
+                  color: 'var(--app-body-text)',
+                  borderColor: 'var(--app-border-color)',
+                  borderRadius: 'var(--app-radius-btn)'
+                }}
               >
-                <Volume2 className="w-3 h-3 text-teal-600" />
+                <Volume2 className="w-3 h-3" style={{ color: 'var(--app-primary)' }} />
                 <span>Test Alert Preview</span>
               </button>
             )}
 
             {feedback && (
-              <div className="text-[10px] font-bold text-teal-800 bg-white p-1.5 rounded-lg border border-teal-200">
+              <div
+                className="text-[10px] font-bold p-1.5 border"
+                style={{
+                  backgroundColor: 'var(--app-card-bg)',
+                  borderColor: 'var(--app-border-color)',
+                  color: 'var(--app-primary)',
+                  borderRadius: 'var(--app-radius-btn)'
+                }}
+              >
                 {feedback}
               </div>
             )}
           </div>
 
           {/* Announcements List */}
-          <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 mt-2 px-1">
+          <div className="max-h-72 overflow-y-auto divide-y mt-2 px-1" style={{ borderColor: 'var(--app-border-color)' }}>
             {announcements.length === 0 ? (
               <div className="py-8 px-4 text-center space-y-2">
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                <div
+                  className="w-10 h-10 rounded-full mx-auto flex items-center justify-center"
+                  style={{ backgroundColor: 'var(--app-body-bg)', color: 'var(--app-muted-text)' }}
+                >
                   <Bell className="w-5 h-5" />
                 </div>
-                <p className="text-xs text-slate-500 font-medium">
+                <p className="text-xs font-medium" style={{ color: 'var(--app-muted-text)' }}>
                   No news alerts published yet.
                 </p>
               </div>
@@ -260,42 +307,56 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                   <div
                     key={item.id}
                     onClick={() => handleOpenNotice(item)}
-                    className={`p-3 rounded-2xl mx-2 my-1 transition-all cursor-pointer flex items-start space-x-3 hover:bg-teal-50/50 ${
-                      !isRead ? 'bg-teal-50/30 font-semibold' : 'bg-white opacity-85'
+                    className={`p-3 mx-2 my-1 transition-all cursor-pointer flex items-start space-x-3 hover:opacity-90 ${
+                      !isRead ? 'font-semibold' : 'opacity-85'
                     }`}
+                    style={{
+                      backgroundColor: !isRead ? 'var(--app-primary-soft)' : 'var(--app-card-bg)',
+                      borderRadius: 'var(--app-radius-btn)'
+                    }}
                   >
                     <div className="shrink-0 mt-0.5">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-teal-50 border border-teal-200">
-                        <Bell className="w-3.5 h-3.5 text-teal-600" />
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center border"
+                        style={{
+                          backgroundColor: 'var(--app-primary-soft)',
+                          borderColor: 'var(--app-border-color)',
+                          color: 'var(--app-primary)'
+                        }}
+                      >
+                        <Bell className="w-3.5 h-3.5" />
                       </div>
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <h5 className="text-xs font-bold text-slate-900 truncate pr-2">
+                        <h5 className="text-xs font-bold truncate pr-2" style={{ color: 'var(--app-heading-primary)' }}>
                           {item.title}
                         </h5>
                         {!isRead && (
-                          <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--app-primary)' }} />
                         )}
                       </div>
 
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                      <p className="text-[11px] line-clamp-2 mt-0.5" style={{ color: 'var(--app-muted-text)' }}>
                         {item.body}
                       </p>
 
-                      <div className="flex items-center space-x-2 mt-1.5 text-[10px] text-slate-400">
+                      <div className="flex items-center space-x-2 mt-1.5 text-[10px]" style={{ color: 'var(--app-muted-text)' }}>
                         <Clock className="w-3 h-3" />
                         <span>{formatDate(item.createdAt)}</span>
                         {(item.priority === 'high' || item.priority === 'urgent') && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-rose-100 text-rose-800">
+                          <span
+                            className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase"
+                            style={{ backgroundColor: 'var(--app-error-bg)', color: 'var(--app-error-text)' }}
+                          >
                             Urgent
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 self-center" />
+                    <ChevronRight className="w-4 h-4 shrink-0 self-center" style={{ color: 'var(--app-muted-text)' }} />
                   </div>
                 );
               })

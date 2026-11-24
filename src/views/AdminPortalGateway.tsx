@@ -255,22 +255,28 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
         {/* Action Body */}
         <div className="p-6 sm:p-8 space-y-5">
           {errorMsg && (
-            <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
-              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div
+              className="theme-error-banner p-4 border text-xs flex items-start space-x-2.5 animate-in fade-in"
+              style={{ borderColor: 'var(--app-error-bg)' }}
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
               <span className="font-medium leading-relaxed">{errorMsg}</span>
             </div>
           )}
 
           {unauthorizedDomainHost && (
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2 animate-in fade-in">
-              <div className="flex items-center space-x-2 font-bold text-amber-950">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <div
+              className="theme-warning-banner p-4 border text-xs space-y-2 animate-in fade-in"
+              style={{ borderColor: 'var(--app-warning-bg)' }}
+            >
+              <div className="flex items-center space-x-2 font-bold">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>1-Step Action in Firebase Console:</span>
               </div>
-              <p className="text-[11px] leading-relaxed text-amber-800">
+              <p className="text-[11px] leading-relaxed opacity-95">
                 To enable Google Sign-In on this browser URL, add the hostname below to your authorized domains in project <strong className="font-mono">isezerano-news</strong>:
               </p>
-              <div className="flex items-center space-x-2 bg-white/80 p-2 rounded-lg border border-amber-200 font-mono text-[11px] select-all">
+              <div className="flex items-center space-x-2 bg-white/90 text-slate-900 p-2 rounded-lg border font-mono text-[11px] select-all">
                 <span>{unauthorizedDomainHost}</span>
               </div>
               <div className="pt-1">
@@ -278,7 +284,7 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
                   href="https://console.firebase.google.com/project/isezerano-news/authentication/settings"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-[11px] transition-colors"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-900 text-white font-semibold text-[11px] transition-colors"
                 >
                   <span>Open Firebase Authorized Domains Settings</span>
                   <ExternalLink className="w-3 h-3" />
@@ -288,8 +294,11 @@ export const AdminPortalGateway: React.FC<AdminPortalGatewayProps> = ({
           )}
 
           {successMsg && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div
+              className="theme-success-banner p-4 border text-xs flex items-start space-x-2.5 animate-in fade-in"
+              style={{ borderColor: 'var(--app-success-bg)' }}
+            >
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               <span className="font-medium leading-relaxed">{successMsg}</span>
             </div>
           )}
