@@ -1,15 +1,10 @@
 import {
   AdsDisplaySettings,
-  DEFAULT_ADS_DISPLAY_SETTINGS,
-  TopVideoAdDisplaySettings,
-  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
+  DEFAULT_ADS_DISPLAY_SETTINGS
 } from '../utils/displaySettingsUtils';
 
-export type { AdsDisplaySettings, TopVideoAdDisplaySettings };
-export {
-  DEFAULT_ADS_DISPLAY_SETTINGS,
-  DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
-};
+export type { AdsDisplaySettings };
+export { DEFAULT_ADS_DISPLAY_SETTINGS };
 
 // ==================== ADS TYPES ====================
 export type AdPlacement = 'above_footer';
@@ -200,25 +195,22 @@ export const DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG: MonetagInPagePushConfig = {
   desktopEnabled: true
 };
 
-export interface TopVideoAdConfig {
+export const HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC =
+  '//conventionalresponse.com/bAXuVDs/d.GjlE0NYvWHcM/pe/m_9OuoZNUQlTkfP/Tocs2jNKTXcy4tObT/MPtQN-zEYB1kNBzvgz5DNBwP';
+
+export interface FloatingVideoAdConfig {
   enabled: boolean;
-  vimeoUrl: string;
-  videoId: string;
-  playerEmbedUrl: string;
-  title: string;
-  label?: string;
-  displaySettings?: TopVideoAdDisplaySettings;
+  provider: 'hilltopads';
+  zoneFormat: 'multitag_video_slider';
+  scriptUrl: string;
   updatedAt?: string;
 }
 
-export const DEFAULT_TOP_VIDEO_AD_CONFIG: TopVideoAdConfig = {
+export const DEFAULT_FLOATING_VIDEO_AD_CONFIG: FloatingVideoAdConfig = {
   enabled: false,
-  vimeoUrl: '',
-  videoId: '',
-  playerEmbedUrl: '',
-  title: '',
-  label: 'Sponsored Video',
-  displaySettings: DEFAULT_TOP_VIDEO_AD_DISPLAY_SETTINGS
+  provider: 'hilltopads',
+  zoneFormat: 'multitag_video_slider',
+  scriptUrl: HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC
 };
 
 export interface AdsSettings {
@@ -231,7 +223,7 @@ export interface AdsSettings {
   inArticleAds?: InArticleAdsSettings;
   homepageInFeedAds?: HomepageInFeedAdsSettings;
   globalScripts?: GlobalAdScriptConfig;
-  aboveHeaderVideoAd?: TopVideoAdConfig;
+  floatingVideoAd?: FloatingVideoAdConfig;
   displaySettings?: AdsDisplaySettings;
   updatedAt?: string;
   updatedBy?: string;
@@ -262,7 +254,7 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
   inArticleAds: DEFAULT_IN_ARTICLE_ADS_SETTINGS,
   homepageInFeedAds: DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   globalScripts: DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
-  aboveHeaderVideoAd: DEFAULT_TOP_VIDEO_AD_CONFIG,
+  floatingVideoAd: DEFAULT_FLOATING_VIDEO_AD_CONFIG,
   displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS
 };
 

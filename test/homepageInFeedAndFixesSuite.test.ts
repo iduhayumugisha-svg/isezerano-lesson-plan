@@ -536,7 +536,7 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   assert.match(adminFeedHtml, /Kwamamaza/);
   assert.match(adminFeedHtml, /Advertisement/);
 
-  // Verify AdsManager imports HomepageInFeedAdManagerSection, Vignette/In-Page Push controls & preserves Top Video Ad + Global Scripts without Below Website Header
+  // Verify AdsManager imports HomepageInFeedAdManagerSection, Vignette/In-Page Push controls, Floating Video Slider & removes Top Vimeo Ad without Below Website Header
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   assert.doesNotMatch(adsMgrSrc, /1\. Below Website Header/);
   assert.match(adsMgrSrc, /1\. Monetag Vignette Banner/);
@@ -546,7 +546,8 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
   assert.match(adsMgrSrc, /normalizeHomepageInFeedAdsSettings/);
   assert.match(adsMgrSrc, /normalizeVignetteAdConfig/);
   assert.match(adsMgrSrc, /normalizeInPagePushAdConfig/);
-  assert.match(adsMgrSrc, /aboveHeaderVideoAd/);
+  assert.match(adsMgrSrc, /floatingVideoAd/);
+  assert.doesNotMatch(adsMgrSrc, /aboveHeaderVideoAd|TopVideoAd|ShopVimeo|vimeo/i);
 
   const inArticleMgrSrc = fs.readFileSync(path.resolve('src/components/InArticleAdManagerSection.tsx'), 'utf8');
   assert.match(inArticleMgrSrc, /ads-in-page-push-manager/);

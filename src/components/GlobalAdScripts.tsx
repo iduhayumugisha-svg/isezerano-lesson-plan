@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AdsSettings, DEFAULT_ADS_SETTINGS } from '../types/platform';
+import {
+  AdsSettings,
+  DEFAULT_ADS_SETTINGS,
+  HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC
+} from '../types/platform';
 import {
   getAdsSettings,
   getCachedAdsSettingsSync,
@@ -10,6 +14,7 @@ import {
   installIntrusivePopunderDomGuard,
   isIntrusivePopunderElement,
   isSafeAdScriptUrl,
+  normalizeFloatingVideoAdConfig,
   normalizeInPagePushAdConfig,
   sanitizeAdCodePayload,
   shouldSkipDuplicateOverlayScript
@@ -19,6 +24,11 @@ interface GlobalAdScriptsProps {
   currentPage: string;
 }
 
+interface HilltopAdsScriptElement extends HTMLScriptElement {
+  settings?: Record<string, unknown>;
+}
+
+const FLOATING_VIDEO_SCRIPT_KEY = `hilltopads-video-slider::${HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC}`;
 const executedGlobalScriptSignatures = new Set<string>();
 const executedGlobalScriptSources = new Set<string>();
 
@@ -52,6 +62,56 @@ export const GlobalAdScripts: React.FC<GlobalAdScriptsProps> = ({ currentPage })
 
   const globalConfig = adsSettings.globalScripts ?? DEFAULT_ADS_SETTINGS.globalScripts;
   const inPagePushConfig = normalizeInPagePushAdConfig(adsSettings.inPagePushAd);
+  const floatingVideoConfig = normalizeFloatingVideoAdConfig(adsSettings.floatingVideoAd);
+
+  // HilltopAds MultiTag Video Slider (Floating Video Advertisement) — disabled by default; executes strictly when enabled & off /admin
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const isAdminRoute =
+      currentPage === 'admin' || window.location.pathname.toLowerCase().startsWith('/admin');
+    const shouldLoadFloatingVideo = Boolean(
+      !isAdminRoute && adsSettings.masterEnabled && floatingVideoConfig.enabled
+    );
+
+    if (!shouldLoadFloatingVideo) {
+      executedGlobalScriptSources.delete(FLOATING_VIDEO_SCRIPT_KEY);
+      document
+        .querySelectorAll('script[data-isezerano-global-ad="hilltopads-video-slider"]')
+        .forEach((node) => node.remove());
+      return;
+    }
+
+    let cancelled = false;
+
+    const timerId = setTimeout(() => {
+      if (cancelled) return;
+      if (
+        executedGlobalScriptSources.has(FLOATING_VIDEO_SCRIPT_KEY) ||
+        document.querySelector('script[src*="conventionalresponse.com/bAXuVDs/"]')
+      ) {
+        executedGlobalScriptSources.add(FLOATING_VIDEO_SCRIPT_KEY);
+        return;
+      }
+
+      const targetParent = document.body || document.documentElement;
+      if (!targetParent) return;
+
+      const s = document.createElement('script') as HilltopAdsScriptElement;
+      s.settings = {};
+      s.src = HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC;
+      s.async = true;
+      s.referrerPolicy = 'no-referrer-when-downgrade';
+      s.setAttribute('data-isezerano-global-ad', 'hilltopads-video-slider');
+
+      executedGlobalScriptSources.add(FLOATING_VIDEO_SCRIPT_KEY);
+      targetParent.appendChild(s);
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [currentPage, adsSettings.masterEnabled, floatingVideoConfig.enabled]);
 
   // Dedicated Monetag In-Page Push injection (floating/corner push banner, never rendered inside a header card)
   useEffect(() => {

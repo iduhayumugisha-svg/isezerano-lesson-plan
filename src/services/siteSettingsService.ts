@@ -2,24 +2,25 @@ import {
   doc,
   getDoc,
   setDoc,
-  onSnapshot
+  onSnapshot,
+  deleteField
 } from 'firebase/firestore';
 import { db, getFirebaseAuth } from '../config/firebase';
 import {
   AdsSettings,
   DEFAULT_ADS_SETTINGS,
+  DEFAULT_FLOATING_VIDEO_AD_CONFIG,
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   DEFAULT_IN_ARTICLE_ADS_SETTINGS,
   DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
-  DEFAULT_MONETAG_VIGNETTE_CONFIG,
-  DEFAULT_TOP_VIDEO_AD_CONFIG
+  DEFAULT_MONETAG_VIGNETTE_CONFIG
 } from '../types/platform';
 import { normalizeAdsDisplaySettings } from '../utils/displaySettingsUtils';
-import { normalizeTopVideoAdConfig } from './shopVideoService';
 import {
   extractLegacyInPagePushFromSnippet,
   extractLegacyVignetteFromSnippet,
+  normalizeFloatingVideoAdConfig,
   normalizeGlobalAdScriptConfig,
   normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdsSettings,
@@ -61,7 +62,7 @@ export const normalizeAdsSettingsPayload = (
         slot3: { ...DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS.slot3 }
       },
       globalScripts: { ...DEFAULT_GLOBAL_AD_SCRIPT_CONFIG },
-      aboveHeaderVideoAd: { ...DEFAULT_TOP_VIDEO_AD_CONFIG },
+      floatingVideoAd: { ...DEFAULT_FLOATING_VIDEO_AD_CONFIG },
       displaySettings: normalizeAdsDisplaySettings(DEFAULT_ADS_SETTINGS.displaySettings)
     };
   }
@@ -128,7 +129,7 @@ export const normalizeAdsSettingsPayload = (
     inArticleAds: normalizeInArticleAdsSettings(remoteData.inArticleAds, true),
     homepageInFeedAds: normalizeHomepageInFeedAdsSettings(remoteData.homepageInFeedAds, true),
     globalScripts,
-    aboveHeaderVideoAd: normalizeTopVideoAdConfig(remoteData.aboveHeaderVideoAd),
+    floatingVideoAd: normalizeFloatingVideoAdConfig(remoteData.floatingVideoAd),
     displaySettings: normalizeAdsDisplaySettings(remoteData.displaySettings),
     updatedAt: remoteData.updatedAt || new Date().toISOString(),
     updatedBy: remoteData.updatedBy || 'admin'
@@ -161,10 +162,12 @@ let sharedAdsSettings: AdsSettings | null = null;
 const sharedAdsSubscribers = new Set<(settings: AdsSettings) => void>();
 let sharedAdsUnsubscribe: (() => void) | null = null;
 let pendingAdsFetch: Promise<AdsSettings> | null = null;
+let suppressAdsSnapshotForTests = false;
 
-export const __resetAdsSettingsCacheForTests = (): void => {
+export const __resetAdsSettingsCacheForTests = (suppressSnapshot = false): void => {
   sharedAdsSettings = null;
   pendingAdsFetch = null;
+  suppressAdsSnapshotForTests = suppressSnapshot;
   sharedAdsSubscribers.clear();
   if (sharedAdsUnsubscribe) {
     sharedAdsUnsubscribe();
@@ -302,8 +305,11 @@ export const saveAdsSettings = async (
     };
   }
 
+  const { aboveHeaderVideoAd: _removedObsoleteTopVideo, ...cleanSettingsInput } =
+    settings as AdsSettings & { aboveHeaderVideoAd?: unknown };
+
   const payload: AdsSettings = stripUndefinedDeep({
-    ...settings,
+    ...cleanSettingsInput,
     belowHeaderAd: {
       ...DEFAULT_ADS_SETTINGS.belowHeaderAd!,
       enabled: false,
@@ -319,7 +325,7 @@ export const saveAdsSettings = async (
     inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds, true),
     homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds, true),
     globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts, true),
-    aboveHeaderVideoAd: normalizeTopVideoAdConfig(settings.aboveHeaderVideoAd),
+    floatingVideoAd: normalizeFloatingVideoAdConfig(settings.floatingVideoAd),
     displaySettings: normalizeAdsDisplaySettings(settings.displaySettings),
     updatedAt: new Date().toISOString(),
     updatedBy: adminUid
@@ -335,7 +341,14 @@ export const saveAdsSettings = async (
   if (db) {
     try {
       const docRef = doc(db, 'appSettings', 'ads');
-      await setDoc(docRef, payload, { merge: true });
+      await setDoc(
+        docRef,
+        {
+          ...payload,
+          aboveHeaderVideoAd: deleteField()
+        },
+        { merge: true }
+      );
       return { success: true };
     } catch (err: any) {
       console.warn('Could not save ads settings to Firestore:', err);
@@ -358,7 +371,7 @@ export const subscribeToAdsSettings = (
     onUpdate(sharedAdsSettings);
   }
 
-  if (db && !sharedAdsUnsubscribe) {
+  if (db && !sharedAdsUnsubscribe && !suppressAdsSnapshotForTests) {
     try {
       const docRef = doc(db, 'appSettings', 'ads');
       sharedAdsUnsubscribe = onSnapshot(

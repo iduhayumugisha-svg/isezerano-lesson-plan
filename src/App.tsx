@@ -6,9 +6,9 @@ import { WebsiteFooter } from './components/WebsiteFooter';
 import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
-import { TopVideoAdBanner } from './components/TopVideoAdBanner';
 import { GlobalAdScripts } from './components/GlobalAdScripts';
 import { MonetagVignetteBanner } from './components/MonetagVignetteBanner';
+import { HilltopAdsHeaderBanner } from './components/HilltopAdsHeaderBanner';
 
 // Code-split Secondary Public Views & Modals
 const BlogView = lazy(() => import('./views/BlogView').then((m) => ({ default: m.BlogView })));
@@ -291,13 +291,11 @@ function AppContent() {
       <MonetagVignetteBanner currentPage={currentPage} />
       <GlobalAdScripts currentPage={currentPage} />
 
-      {/* 1. Unified Sticky Top Area: Site-Wide Video Ad Banner + Global Newspaper Header */}
+      {/* 1. Unified Sticky Top Area: Global Newspaper Header */}
       <div
         data-testid="top-header-sticky-group"
         className="sticky top-0 z-40 w-full"
       >
-        <TopVideoAdBanner currentPage={currentPage} />
-
         <WebsiteHeader
           currentPage={currentPage}
           onNavigate={handleNavigate}
@@ -307,6 +305,9 @@ function AppContent() {
           onSelectCategory={setSelectedNewsCategory}
         />
       </div>
+
+      {/* Below-Header HilltopAds 300x100 Banner (skipped on /admin, loaded once across navigation) */}
+      <HilltopAdsHeaderBanner currentPage={currentPage} />
 
       {/* 2. Natural Document Flow Main Body */}
       <main className="flex-1 w-full min-w-0 relative z-0">

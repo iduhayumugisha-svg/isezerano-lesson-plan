@@ -1,12 +1,15 @@
 import {
   AdProviderId,
   AdSlotConfig,
+  DEFAULT_FLOATING_VIDEO_AD_CONFIG,
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS,
   DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS,
   DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
   DEFAULT_MONETAG_VIGNETTE_CONFIG,
+  FloatingVideoAdConfig,
   GlobalAdScriptConfig,
+  HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC,
   HOMEPAGE_IN_FEED_POSITION_LIMITS,
   HomepageInFeedAdSlotConfig,
   HomepageInFeedAdSlotKey,
@@ -621,6 +624,21 @@ export const normalizeInPagePushAdConfig = (
     scriptUrl: isSafeAdScriptUrl(candidateUrl) ? candidateUrl : '',
     mobileEnabled: raw.mobileEnabled !== false,
     desktopEnabled: raw.desktopEnabled !== false,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  };
+};
+
+export const normalizeFloatingVideoAdConfig = (
+  raw?: Partial<FloatingVideoAdConfig> | null
+): FloatingVideoAdConfig => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_FLOATING_VIDEO_AD_CONFIG };
+  }
+  return {
+    enabled: Boolean(raw.enabled),
+    provider: 'hilltopads',
+    zoneFormat: 'multitag_video_slider',
+    scriptUrl: HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
   };
 };

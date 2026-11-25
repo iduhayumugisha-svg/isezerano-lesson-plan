@@ -30,6 +30,7 @@ import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import { ArticleShareButton } from '../components/ArticleShareButton';
 import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
 import { InArticleAdSlot } from '../components/InArticleAdSlot';
+import { HilltopAdsArticleBanner } from '../components/HilltopAdsArticleBanner';
 import { buildArticleRenderSegments } from '../utils/articleAdInjector';
 import {
   extractFirstImageFromContent,
@@ -453,6 +454,9 @@ export const BlogView: React.FC<BlogViewProps> = ({
           </button>
           <ArticleShareButton post={activePost} variant="button" />
         </div>
+
+        {/* HilltopAds 300x250 Article Banner */}
+        <HilltopAdsArticleBanner articleId={activePost.id} />
 
         {/* Reader Messages / Comments Section */}
         <ArticleCommentsSection

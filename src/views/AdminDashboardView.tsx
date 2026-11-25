@@ -316,7 +316,7 @@ promoteToAdmin('twizerefelix90@gmail.com');`;
               activeTab === 'ads' ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
             }`}
           >
-            Header &amp; Footer
+            Banners, Video &amp; Slots
           </span>
         </button>
 
