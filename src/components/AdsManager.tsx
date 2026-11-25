@@ -20,22 +20,23 @@ import {
   Video,
   Minus,
   Plus,
-  AlertTriangle,
-  Layers
+  AlertTriangle
 } from 'lucide-react';
 import {
   AdSlotConfig,
   AdsSettings,
   DEFAULT_ADS_SETTINGS,
+  DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG,
   FloatingVideoAdConfig,
   GlobalAdScriptConfig,
+  HILLTOPADS_IN_ARTICLE_VAST_TAG_URL,
   HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC,
   HomepageInFeedAdSlotConfig,
   HomepageInFeedAdSlotKey,
+  IN_ARTICLE_PARAGRAPH_LIMITS,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
-  MonetagInPagePushConfig,
-  MonetagVignetteConfig
+  InArticleVastVideoAdConfig
 } from '../types/platform';
 import { getAdsSettings, saveAdsSettings } from '../services/siteSettingsService';
 import { useAuth } from '../context/AuthContext';
@@ -53,17 +54,16 @@ import {
   formatDeviceVisibilitySummary,
   hasRenderableAdCode,
   isSafeAdAssetOrClickUrl,
-  isSafeAdScriptUrl,
   normalizeFloatingVideoAdConfig,
   normalizeGlobalAdScriptConfig,
   normalizeHomepageInFeedAdSlotConfig,
   normalizeHomepageInFeedAdsSettings,
   normalizeInArticleAdSlotConfig,
   normalizeInArticleAdsSettings,
-  normalizeInPagePushAdConfig,
-  normalizeStandardAdSlotConfig,
-  normalizeVignetteAdConfig
+  normalizeInArticleVastVideoAdConfig,
+  normalizeStandardAdSlotConfig
 } from '../utils/inArticleAdUtils';
+import { isSafeVastHttpsUrl } from '../utils/vastParser';
 
 export const AdsManager: React.FC = () => {
   const { user } = useAuth();
@@ -73,6 +73,7 @@ export const AdsManager: React.FC = () => {
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [floatingVideoStatus, setFloatingVideoStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [vastVideoStatus, setVastVideoStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -94,12 +95,11 @@ export const AdsManager: React.FC = () => {
           DEFAULT_ADS_SETTINGS.aboveFooterAd,
           true
         ),
-        vignetteAd: normalizeVignetteAdConfig(data.vignetteAd),
-        inPagePushAd: normalizeInPagePushAdConfig(data.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(data.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(data.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(data.globalScripts),
         floatingVideoAd: normalizeFloatingVideoAdConfig(data.floatingVideoAd),
+        inArticleVastVideoAd: normalizeInArticleVastVideoAdConfig(data.inArticleVastVideoAd),
         displaySettings: normalizeAdsDisplaySettings(data.displaySettings)
       });
     } catch (err) {
@@ -111,6 +111,17 @@ export const AdsManager: React.FC = () => {
 
   const handleSave = async () => {
     if (!user) return;
+    const rawVastUrl = (settings.inArticleVastVideoAd?.vastTagUrl || '').trim();
+    if (rawVastUrl && !isSafeVastHttpsUrl(rawVastUrl)) {
+      const errMsg = {
+        type: 'error' as const,
+        text: 'HilltopAds VAST Tag URL must be a valid public https:// URL.'
+      };
+      setStatusMessage(errMsg);
+      setVastVideoStatus(errMsg);
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -122,12 +133,11 @@ export const AdsManager: React.FC = () => {
           code: ''
         },
         aboveFooterAd: normalizeStandardAdConfigForSave(settings.aboveFooterAd),
-        vignetteAd: normalizeVignetteAdConfig(settings.vignetteAd),
-        inPagePushAd: normalizeInPagePushAdConfig(settings.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         floatingVideoAd: normalizeFloatingVideoAdConfig(settings.floatingVideoAd),
+        inArticleVastVideoAd: normalizeInArticleVastVideoAdConfig(settings.inArticleVastVideoAd),
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
       const result = await saveAdsSettings(payloadToSave, user.uid);
@@ -168,9 +178,17 @@ export const AdsManager: React.FC = () => {
     }));
   };
 
-  const currentVignetteAd = normalizeVignetteAdConfig(settings.vignetteAd);
-  const currentInPagePushAd = normalizeInPagePushAdConfig(settings.inPagePushAd);
   const currentFloatingVideo = normalizeFloatingVideoAdConfig(settings.floatingVideoAd);
+  const currentInArticleVastVideo: InArticleVastVideoAdConfig = {
+    ...DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG,
+    ...(settings.inArticleVastVideoAd || {}),
+    afterParagraph: normalizeInArticleVastVideoAdConfig(settings.inArticleVastVideoAd).afterParagraph,
+    secondAfterParagraph: normalizeInArticleVastVideoAdConfig(settings.inArticleVastVideoAd)
+      .secondAfterParagraph
+  };
+  const vastTagUrlTrimmed = (currentInArticleVastVideo.vastTagUrl || '').trim();
+  const isVastTagUrlValid = vastTagUrlTrimmed === '' || isSafeVastHttpsUrl(vastTagUrlTrimmed);
+
   const currentInArticleAds = normalizeInArticleAdsSettings(settings.inArticleAds, false);
   const currentHomepageInFeedAds = normalizeHomepageInFeedAdsSettings(
     settings.homepageInFeedAds,
@@ -188,24 +206,20 @@ export const AdsManager: React.FC = () => {
     }));
   };
 
-  const updateVignetteAd = (patch: Partial<MonetagVignetteConfig>) => {
-    setSettings(prev => ({
-      ...prev,
-      vignetteAd: normalizeVignetteAdConfig({
-        ...normalizeVignetteAdConfig(prev.vignetteAd),
+  const updateInArticleVastVideoAd = (patch: Partial<InArticleVastVideoAdConfig>) => {
+    setSettings(prev => {
+      const base = prev.inArticleVastVideoAd || DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG;
+      const merged: InArticleVastVideoAdConfig = {
+        ...DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG,
+        ...base,
         ...patch
-      })
-    }));
-  };
-
-  const updateInPagePushAd = (patch: Partial<MonetagInPagePushConfig>) => {
-    setSettings(prev => ({
-      ...prev,
-      inPagePushAd: normalizeInPagePushAdConfig({
-        ...normalizeInPagePushAdConfig(prev.inPagePushAd),
-        ...patch
-      })
-    }));
+      };
+      if (typeof patch.vastTagUrl !== 'string') {
+        const norm = normalizeInArticleVastVideoAdConfig(merged);
+        return { ...prev, inArticleVastVideoAd: norm };
+      }
+      return { ...prev, inArticleVastVideoAd: merged };
+    });
   };
 
   const updateInArticleSlot = (
@@ -274,6 +288,21 @@ export const AdsManager: React.FC = () => {
 
   const persistCurrentSettingsSection = async (successLabel: string) => {
     if (!user) return;
+    const rawVastUrl = (settings.inArticleVastVideoAd?.vastTagUrl || '').trim();
+    if (
+      successLabel === 'HilltopAds In-Article VAST 3.0 Video' &&
+      rawVastUrl !== '' &&
+      !isSafeVastHttpsUrl(rawVastUrl)
+    ) {
+      const errMsg = {
+        type: 'error' as const,
+        text: 'HilltopAds VAST Tag URL must be a valid public https:// URL.'
+      };
+      setVastVideoStatus(errMsg);
+      setStatusMessage(errMsg);
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -285,12 +314,11 @@ export const AdsManager: React.FC = () => {
           code: ''
         },
         aboveFooterAd: normalizeStandardAdConfigForSave(settings.aboveFooterAd),
-        vignetteAd: normalizeVignetteAdConfig(settings.vignetteAd),
-        inPagePushAd: normalizeInPagePushAdConfig(settings.inPagePushAd),
         inArticleAds: normalizeInArticleAdsSettings(settings.inArticleAds),
         homepageInFeedAds: normalizeHomepageInFeedAdsSettings(settings.homepageInFeedAds),
         globalScripts: normalizeGlobalAdScriptConfig(settings.globalScripts),
         floatingVideoAd: normalizeFloatingVideoAdConfig(settings.floatingVideoAd),
+        inArticleVastVideoAd: normalizeInArticleVastVideoAdConfig(settings.inArticleVastVideoAd),
         displaySettings: normalizeAdsDisplaySettings(settings.displaySettings)
       };
       const result = await saveAdsSettings(payloadToSave, user.uid);
@@ -306,6 +334,9 @@ export const AdsManager: React.FC = () => {
         if (successLabel === 'HilltopAds MultiTag Video Slider') {
           setFloatingVideoStatus(msg);
           setTimeout(() => setFloatingVideoStatus(null), 5000);
+        } else if (successLabel === 'HilltopAds In-Article VAST 3.0 Video') {
+          setVastVideoStatus(msg);
+          setTimeout(() => setVastVideoStatus(null), 5000);
         }
       } else {
         const errMsg = {
@@ -315,6 +346,8 @@ export const AdsManager: React.FC = () => {
         setStatusMessage(errMsg);
         if (successLabel === 'HilltopAds MultiTag Video Slider') {
           setFloatingVideoStatus(errMsg);
+        } else if (successLabel === 'HilltopAds In-Article VAST 3.0 Video') {
+          setVastVideoStatus(errMsg);
         }
       }
     } catch (err: any) {
@@ -325,6 +358,8 @@ export const AdsManager: React.FC = () => {
       setStatusMessage(errMsg);
       if (successLabel === 'HilltopAds MultiTag Video Slider') {
         setFloatingVideoStatus(errMsg);
+      } else if (successLabel === 'HilltopAds In-Article VAST 3.0 Video') {
+        setVastVideoStatus(errMsg);
       }
     } finally {
       setIsSaving(false);
@@ -369,14 +404,6 @@ export const AdsManager: React.FC = () => {
   const previewFrameWidth =
     previewViewport === 'mobile' ? 340 : previewViewport === 'tablet' ? 680 : 960;
 
-  const vignetteReady = Boolean(
-    currentVignetteAd.enabled &&
-      currentVignetteAd.scriptUrl &&
-      isSafeAdScriptUrl(currentVignetteAd.scriptUrl) &&
-      (currentVignetteAd.desktopEnabled || currentVignetteAd.mobileEnabled)
-  );
-  const vignetteNeedsConfig = currentVignetteAd.enabled && !vignetteReady;
-
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -391,7 +418,7 @@ export const AdsManager: React.FC = () => {
               Ads & Sponsorship Management
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Manage HilltopAds MultiTag Video Slider, Monetag Vignette Banner overlays, In-Page Push, In-Article Sponsored Direct Link cards, Homepage In-Feed slots, and Above Website Footer banners cleanly without any below-header clutter box.
+              Manage HilltopAds MultiTag Video Slider, In-Article Sponsored Direct Link cards, Homepage In-Feed slots, and Above Website Footer banners cleanly without any below-header clutter box.
             </p>
           </div>
 
@@ -564,7 +591,7 @@ export const AdsManager: React.FC = () => {
 
           <div className="md:col-span-3 flex flex-wrap items-center justify-between gap-3 pt-1">
             <span className="text-[11px] text-slate-500">
-              Fixed HilltopAds 300×100 header banner, 300×250 article banner, and Monetag placements remain active and untouched.
+              Fixed HilltopAds 300×100 header banner and 300×250 article banner remain active and untouched.
             </span>
 
             <button
@@ -605,6 +632,285 @@ export const AdsManager: React.FC = () => {
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
             )}
             <span>{floatingVideoStatus.text}</span>
+          </div>
+        )}
+      </div>
+
+      {/* HilltopAds VAST 3.0 In-Article Video Advertisement */}
+      <div
+        data-testid="ads-vast-video-manager"
+        className="bg-white p-6 rounded-2xl border-2 border-teal-200/80 shadow-sm space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
+              <Video className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>In-Article Video Advertisement (VAST 3.0)</span>
+            </div>
+            <h3 className="text-base font-extrabold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>HilltopAds In-Article VAST 3.0 Video Player</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  currentInArticleVastVideo.enabled &&
+                  settings.masterEnabled &&
+                  vastTagUrlTrimmed !== '' &&
+                  isVastTagUrlValid
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : currentInArticleVastVideo.enabled
+                    ? 'bg-amber-100 text-amber-900'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {currentInArticleVastVideo.enabled &&
+                settings.masterEnabled &&
+                vastTagUrlTrimmed !== '' &&
+                isVastTagUrlValid
+                  ? `ACTIVE AFTER P${currentInArticleVastVideo.afterParagraph}`
+                  : currentInArticleVastVideo.enabled
+                  ? 'ENABLED (CHECK MASTER / VAST URL)'
+                  : 'DISABLED'}
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
+              Plays a native HTML5 VAST 3.0 video ad directly between article paragraphs (default after paragraph 3, optional second placement after paragraph 8 on longer articles). Never uses VPAID scripts or popunders.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              updateInArticleVastVideoAd({ enabled: !currentInArticleVastVideo.enabled })
+            }
+            data-testid="ads-vast-video-enable-toggle"
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center space-x-1.5 transition-all cursor-pointer self-start sm:self-center shrink-0 ${
+              currentInArticleVastVideo.enabled
+                ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-500'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            {currentInArticleVastVideo.enabled ? (
+              <>
+                <ToggleRight className="w-4 h-4" aria-hidden="true" />
+                <span>In-Article VAST Enabled</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-4 h-4" aria-hidden="true" />
+                <span>In-Article VAST Disabled</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="ads-vast-tag-url"
+                className="block text-xs font-bold text-slate-700"
+              >
+                HilltopAds VAST 3.0 Tag URL (HTTPS Only)
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  updateInArticleVastVideoAd({ vastTagUrl: HILLTOPADS_IN_ARTICLE_VAST_TAG_URL })
+                }
+                className="text-[11px] font-semibold text-teal-700 hover:text-teal-600 underline cursor-pointer"
+              >
+                Restore HilltopAds Tag URL
+              </button>
+            </div>
+            <input
+              id="ads-vast-tag-url"
+              type="url"
+              value={currentInArticleVastVideo.vastTagUrl}
+              onChange={(e) => updateInArticleVastVideoAd({ vastTagUrl: e.target.value })}
+              placeholder="https://..."
+              data-testid="ads-vast-tag-url-input"
+              className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-teal-500"
+            />
+            {!isVastTagUrlValid && (
+              <p className="text-[11px] text-rose-700 font-semibold">
+                Enter a valid public https:// VAST 3.0 URL (http://, private IPs, and unsafe schemes are blocked).
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="ads-vast-after-paragraph"
+                className="block text-xs font-bold text-slate-700"
+              >
+                1st Placement After Paragraph
+              </label>
+              <input
+                id="ads-vast-after-paragraph"
+                type="number"
+                min={IN_ARTICLE_PARAGRAPH_LIMITS.min}
+                max={IN_ARTICLE_PARAGRAPH_LIMITS.max}
+                value={currentInArticleVastVideo.afterParagraph}
+                onChange={(e) =>
+                  updateInArticleVastVideoAd({
+                    afterParagraph: Number(e.target.value) || 3
+                  })
+                }
+                data-testid="ads-vast-p1-input"
+                className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-teal-500"
+              />
+              <span className="block text-[11px] text-slate-500">Default: Paragraph 3</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>2nd Placement (Long Articles)</span>
+                <input
+                  type="checkbox"
+                  checked={currentInArticleVastVideo.secondPlacementEnabled}
+                  onChange={(e) =>
+                    updateInArticleVastVideoAd({ secondPlacementEnabled: e.target.checked })
+                  }
+                  data-testid="ads-vast-p2-toggle"
+                  className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                />
+              </label>
+              <input
+                id="ads-vast-second-paragraph"
+                type="number"
+                min={Math.min(
+                  IN_ARTICLE_PARAGRAPH_LIMITS.max,
+                  currentInArticleVastVideo.afterParagraph + 2
+                )}
+                max={IN_ARTICLE_PARAGRAPH_LIMITS.max}
+                disabled={!currentInArticleVastVideo.secondPlacementEnabled}
+                value={currentInArticleVastVideo.secondAfterParagraph}
+                onChange={(e) =>
+                  updateInArticleVastVideoAd({
+                    secondAfterParagraph: Number(e.target.value) || 8
+                  })
+                }
+                data-testid="ads-vast-p2-input"
+                className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-teal-500 disabled:bg-slate-100 disabled:text-slate-400"
+              />
+              <span className="block text-[11px] text-slate-500">
+                Optional (Default: Paragraph 8)
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="ads-vast-label"
+                className="block text-xs font-bold text-slate-700"
+              >
+                Disclosure Label
+              </label>
+              <input
+                id="ads-vast-label"
+                type="text"
+                maxLength={40}
+                value={currentInArticleVastVideo.label || 'Sponsored Video'}
+                onChange={(e) => updateInArticleVastVideoAd({ label: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 focus:ring-2 focus:ring-teal-500"
+              />
+              <span className="block text-[11px] text-slate-500">
+                Shown above the video frame
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 pt-1 text-xs">
+            <label className="inline-flex items-center gap-1.5 font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={currentInArticleVastVideo.desktopEnabled}
+                onChange={(e) =>
+                  updateInArticleVastVideoAd({ desktopEnabled: e.target.checked })
+                }
+                className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              <span>Desktop</span>
+            </label>
+
+            <label className="inline-flex items-center gap-1.5 font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={currentInArticleVastVideo.mobileEnabled}
+                onChange={(e) =>
+                  updateInArticleVastVideoAd({ mobileEnabled: e.target.checked })
+                }
+                className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              <span>Mobile</span>
+            </label>
+
+            <label className="inline-flex items-center gap-1.5 font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={currentInArticleVastVideo.autoplayMuted}
+                onChange={(e) =>
+                  updateInArticleVastVideoAd({ autoplayMuted: e.target.checked })
+                }
+                className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <span>Autoplay Muted (Browser Safe)</span>
+            </label>
+
+            <span className="text-[11px] text-slate-500 ml-auto font-medium">
+              {formatDeviceVisibilitySummary(
+                currentInArticleVastVideo.mobileEnabled,
+                currentInArticleVastVideo.desktopEnabled
+              )}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200">
+            <span className="text-[11px] text-slate-500">
+              Empty/no-fill VAST responses collapse automatically without blank space.
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                persistCurrentSettingsSection('HilltopAds In-Article VAST 3.0 Video')
+              }
+              disabled={isSaving}
+              data-testid="ads-vast-video-save"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Save In-Article VAST Settings</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {vastVideoStatus && (
+          <div
+            data-testid="ads-vast-video-status"
+            role="status"
+            className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-semibold ${
+              vastVideoStatus.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            {vastVideoStatus.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+            )}
+            <span>{vastVideoStatus.text}</span>
           </div>
         )}
       </div>
@@ -846,166 +1152,18 @@ export const AdsManager: React.FC = () => {
         </div>
       </div>
 
-      {/* Placement 1: Dedicated Monetag Vignette Banner (Site-Wide Overlay) */}
-      <div
-        data-testid="ads-vignette-manager"
-        className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
-              <Layers className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Monetag Vignette Banner Overlay Integration</span>
-            </div>
-            <h4 className="text-base font-bold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
-              <span>1. Monetag Vignette Banner (Site-Wide Overlay)</span>
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                  vignetteReady
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : vignetteNeedsConfig
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                {vignetteReady
-                  ? 'ACTIVE SITE-WIDE'
-                  : vignetteNeedsConfig
-                  ? 'ENABLED · NEEDS SCRIPT URL'
-                  : 'DISABLED'}
-              </span>
-            </h4>
-            <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
-              Runs Monetag Vignette Banner cleanly once per session across public SPA navigation with native frequency capping and dismissal. Never boxed inside the header area and never executed on <code className="font-mono">/admin</code>.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => updateVignetteAd({ enabled: !currentVignetteAd.enabled })}
-            data-testid="ads-vignette-enable-toggle"
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center space-x-1.5 transition-all cursor-pointer self-start sm:self-center shrink-0 ${
-              currentVignetteAd.enabled
-                ? 'bg-emerald-600 text-white shadow-2xs'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-            }`}
-          >
-            {currentVignetteAd.enabled ? (
-              <>
-                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Vignette Enabled</span>
-              </>
-            ) : (
-              <>
-                <ToggleLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Vignette Disabled</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {vignetteNeedsConfig && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-            <span>
-              Vignette Banner is enabled, but requires a valid HTTPS Vignette script URL (e.g. <code className="font-mono">https://n6wxm.com/vignette.min.js</code>) before activating on public pages.
-            </span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="space-y-1.5">
-            <label htmlFor="ads-vignette-zone" className="block text-xs font-bold text-slate-700">
-              Monetag Vignette Zone ID
-            </label>
-            <input
-              id="ads-vignette-zone"
-              data-testid="ads-vignette-zone-input"
-              type="text"
-              inputMode="numeric"
-              value={currentVignetteAd.zoneId}
-              onChange={(e) =>
-                updateVignetteAd({ zoneId: e.target.value.replace(/\D/g, '').slice(0, 20) })
-              }
-              placeholder="e.g. 12322670"
-              className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-
-          <div className="space-y-1.5 md:col-span-2">
-            <label htmlFor="ads-vignette-url" className="block text-xs font-bold text-slate-700">
-              Vignette Script URL (HTTPS)
-            </label>
-            <input
-              id="ads-vignette-url"
-              data-testid="ads-vignette-script-input"
-              type="url"
-              value={currentVignetteAd.scriptUrl}
-              onChange={(e) => updateVignetteAd({ scriptUrl: e.target.value })}
-              placeholder="https://n6wxm.com/vignette.min.js"
-              className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-
-          <div className="md:col-span-3 flex flex-wrap items-center justify-between gap-3 pt-1">
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={currentVignetteAd.desktopEnabled}
-                  onChange={(e) => updateVignetteAd({ desktopEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                <span>Desktop</span>
-              </label>
-
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={currentVignetteAd.mobileEnabled}
-                  onChange={(e) => updateVignetteAd({ mobileEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                <span>Mobile</span>
-              </label>
-
-              <span className="text-[11px] text-slate-500">
-                {formatDeviceVisibilitySummary(
-                  currentVignetteAd.mobileEnabled,
-                  currentVignetteAd.desktopEnabled
-                )}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => persistCurrentSettingsSection('Monetag Vignette Banner')}
-              disabled={isSaving}
-              data-testid="ads-vignette-save"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Save Vignette Settings</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Placement 2: Above Footer (Below Post Ads) */}
+      {/* Placement 1: Above Footer (Below Post Ads) */}
       <AdPlacementCard
-        placementTitle="2. Above Website Footer"
+        placementTitle="1. Above Website Footer"
         placementDescription="Below Post Ads position: displayed immediately above the bottom website footer when a custom banner image or custom HTML/script is configured (collapses cleanly when empty)."
         config={settings.aboveFooterAd}
         onChange={updateAboveFooter}
       />
 
-      {/* Placements 3, 4, 5 & In-Page Push & Global Site-Wide Scripts */}
+      {/* Placements 2, 3, 4 & Global Site-Wide Scripts */}
       <InArticleAdManagerSection
         inArticleAds={currentInArticleAds}
         globalScripts={currentGlobalScripts}
-        inPagePushAd={currentInPagePushAd}
         isSaving={isSaving}
         onUpdateSlot={updateInArticleSlot}
         onSaveSlot={(slotKey) =>
@@ -1017,13 +1175,11 @@ export const AdsManager: React.FC = () => {
               : 'In-Article Ad Slot 3'
           )
         }
-        onUpdateInPagePush={updateInPagePushAd}
-        onSaveInPagePush={() => persistCurrentSettingsSection('Monetag In-Page Push')}
         onUpdateGlobalScripts={updateGlobalScripts}
         onSaveGlobalScripts={() => persistCurrentSettingsSection('Global Site-Wide Scripts')}
       />
 
-      {/* Placements 6, 7, 8: Homepage In-Feed Ads */}
+      {/* Placements 5, 6, 7: Homepage In-Feed Ads */}
       <HomepageInFeedAdManagerSection
         homepageInFeedAds={currentHomepageInFeedAds}
         isSaving={isSaving}
@@ -1248,13 +1404,13 @@ const AdPlacementCard: React.FC<AdPlacementCardProps> = ({
             <label className="block text-xs font-semibold text-slate-700">
               Paste Ad Embed Code or HTML:
             </label>
-            <span className="text-[11px] text-slate-400 font-mono">HTML / JS / Monetag / AdSense</span>
+            <span className="text-[11px] text-slate-400 font-mono">HTML / JS / HilltopAds / AdSense</span>
           </div>
           <textarea
             rows={5}
             value={config.code || ''}
             onChange={(e) => onChange({ code: e.target.value })}
-            placeholder={`<!-- Paste Monetag / AdSense / Ad Network HTML & Script here -->\n<script async src="https://..."></script>`}
+            placeholder={`<!-- Paste HilltopAds / AdSense / Ad Network HTML & Script here -->\n<script async src="https://..."></script>`}
             className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg bg-slate-900 text-teal-300 focus:ring-2 focus:ring-teal-500"
           />
           {bareDirectLink && (

@@ -5,8 +5,7 @@ import {
   DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS,
   DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS,
-  DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
-  DEFAULT_MONETAG_VIGNETTE_CONFIG,
+  DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG,
   FloatingVideoAdConfig,
   GlobalAdScriptConfig,
   HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC,
@@ -20,12 +19,12 @@ import {
   InArticleAdSlotKey,
   InArticleAdsSettings,
   InArticleDirectLinkCardConfig,
-  MonetagInPagePushConfig,
-  MonetagVignetteConfig,
+  InArticleVastVideoAdConfig,
   createDefaultHomepageInFeedSlotConfig,
   createDefaultInArticleDirectLinkCardConfig,
   createDefaultInArticleSlotConfig
 } from '../types/platform';
+import { isSafeVastHttpsUrl } from './vastParser';
 
 export const AD_PROVIDER_OPTIONS: ReadonlyArray<{
   id: AdProviderId;
@@ -33,9 +32,9 @@ export const AD_PROVIDER_OPTIONS: ReadonlyArray<{
   description: string;
 }> = [
   {
-    id: 'monetag',
-    label: 'Monetag',
-    description: 'Supports non-intrusive Monetag native/in-article snippets, banners, and verified header meta tags (intrusive OnClick/Popunder tab-opening tags are automatically blocked).'
+    id: 'hilltopads',
+    label: 'HilltopAds',
+    description: 'Supports approved HilltopAds native banners and non-intrusive ad snippets (intrusive popunders and blocked third-party ad network tags are automatically blocked).'
   },
   {
     id: 'adscod',
@@ -54,19 +53,21 @@ export const AD_DISCLOSURE_LABEL_OPTIONS = ['Advertisement', 'Sponsored', 'Kwama
 export const MAX_AD_CODE_LENGTH = 25000;
 
 /**
- * Matches known intrusive tab-opening Monetag OnClick / Popunder script sources or click-hijack blocks
- * (including `https://quge5.com/88/tag.min.js` and zone `313598`), while preserving legitimate
- * Monetag In-Page Push (`nap5k.com/tag.min.js`), Vignette (`n6wxm.com/vignette.min.js`),
- * Native Banner embeds, `<meta name="monetag" ...>` verification tags, and `/sw.js`.
+ * Matches known intrusive tab-opening OnClick / Popunder script sources and all
+ * discontinued Monetag domains, zones, verification meta tags, vignette, in-page push,
+ * and service-worker endpoints so stale or pasted Monetag tags are permanently blocked.
  */
-const INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN =
-  /(?:https?:)?\/\/(?:[^/"'\s]+\.)*(?:quge5\.com|glizauvo\.net|thubanoa\.com|niphaume\.com|propu\.sh)(?:\/[^"'\s]*)?/i;
+export const INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN =
+  /(?:https?:)?\/\/(?:[^/"'\s]+\.)*(?:quge5\.com|glizauvo\.net|thubanoa\.com|niphaume\.com|propu\.sh|nap5k\.com|n6wxm\.com|alwingulla\.com|5gvci\.com|uplcm\.com|monetag\.com)(?:\/[^"'\s]*)?|(?:\/sw\.js\b|\/vignette\.min\.js\b)/i;
 
 const INTRUSIVE_POPUNDER_ZONE_PATTERN =
-  /(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?313598["']?/i;
+  /(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?(?:313598|12145119|12322670|12321969|12329910)["']?/i;
+
+const MONETAG_META_TAG_PATTERN =
+  /<meta\b[^>]*\bname\s*=\s*(?:"monetag"|'monetag'|monetag\b)[^>]*>/i;
 
 const INTRUSIVE_INLINE_POPUNDER_PATTERN =
-  /\b(?:popunder|onclick[_-]?ad|openPopunder|clickUnder)\b|(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?313598["']?|quge5\.com/i;
+  /\b(?:popunder|onclick[_-]?ad|openPopunder|clickUnder)\b|(?:\bdata-zone|\bdataset\.zone|\bzone)\s*[:=]\s*["']?(?:313598|12145119|12322670|12321969|12329910)["']?|(?:quge5\.com|nap5k\.com|n6wxm\.com|alwingulla\.com|5gvci\.com|uplcm\.com|monetag\.com|vignette\.min\.js)/i;
 
 export interface PopunderSanitizationResult {
   cleanedCode: string;
@@ -83,6 +84,7 @@ export const detectIntrusivePopunderAdCode = (rawCode: unknown): boolean => {
   return (
     INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(activeMarkup) ||
     INTRUSIVE_POPUNDER_ZONE_PATTERN.test(activeMarkup) ||
+    MONETAG_META_TAG_PATTERN.test(activeMarkup) ||
     INTRUSIVE_INLINE_POPUNDER_PATTERN.test(activeMarkup)
   );
 };
@@ -98,7 +100,7 @@ export const stripIntrusivePopunderAdCode = (
   let removedCount = 0;
   let working = rawCode.replace(/\u0000/g, '').slice(0, MAX_AD_CODE_LENGTH);
 
-  // 1. Remove full <script ...>...</script> tags that reference quge5.com, zone 313598, or explicit popunder scripts
+  // 1. Remove full <script ...>...</script> tags that reference blocked popunder/Monetag scripts or zones
   working = working.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullMatch, attrs: string, body: string) => {
     const srcMatch = attrs.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     const src = (srcMatch?.[1] ?? srcMatch?.[2] ?? srcMatch?.[3] ?? '').trim();
@@ -113,9 +115,15 @@ export const stripIntrusivePopunderAdCode = (
     return fullMatch;
   });
 
-  // 2. Remove unclosed/self-closing tags (e.g., <script ... quge5.com ...> or <iframe ... quge5.com ...>) before line fallback
+  // 2. Remove Monetag verification <meta name="monetag" ...> tags
+  working = working.replace(new RegExp(MONETAG_META_TAG_PATTERN.source, 'gi'), () => {
+    removedCount += 1;
+    return '';
+  });
+
+  // 3. Remove unclosed/self-closing tags referencing blocked domains/zones before line fallback
   if (detectIntrusivePopunderAdCode(working)) {
-    working = working.replace(/<(?:script|iframe|img|a)\b[^>]*>/gi, (tag) => {
+    working = working.replace(/<(?:script|iframe|img|a|meta)\b[^>]*>/gi, (tag) => {
       if (detectIntrusivePopunderAdCode(tag)) {
         removedCount += 1;
         return '';
@@ -124,7 +132,7 @@ export const stripIntrusivePopunderAdCode = (
     });
   }
 
-  // 3. Also remove bare script-less lines containing quge5.com / zone 313598 / popunder loaders
+  // 4. Also remove bare script-less lines containing blocked domains / zones / popunder loaders
   if (detectIntrusivePopunderAdCode(working)) {
     const filteredLines = working.split('\n').filter((line) => {
       if (detectIntrusivePopunderAdCode(line)) {
@@ -147,6 +155,9 @@ export const stripIntrusivePopunderAdCode = (
 export const isIntrusivePopunderElement = (el: Element | null | undefined): boolean => {
   if (!el || el.nodeType !== 1) return false;
   const tag = el.tagName?.toUpperCase();
+  if (tag === 'META') {
+    return (el.getAttribute('name') || '').trim().toLowerCase() === 'monetag';
+  }
   if (tag !== 'SCRIPT' && tag !== 'IFRAME') return false;
 
   const src = el.getAttribute('src')?.trim() || '';
@@ -154,7 +165,7 @@ export const isIntrusivePopunderElement = (el: Element | null | undefined): bool
   const body = el.textContent || '';
 
   if (src && INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(src)) return true;
-  if (dataZone === '313598') return true;
+  if (['313598', '12145119', '12322670', '12321969', '12329910'].includes(dataZone)) return true;
   if (detectIntrusivePopunderAdCode(`${el.outerHTML || ''}\n${body}`)) return true;
   return false;
 };
@@ -176,7 +187,7 @@ export const installIntrusivePopunderDomGuard = (): void => {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
 
   const purgeExistingPopunders = () => {
-    for (const candidate of Array.from(document.querySelectorAll('script, iframe'))) {
+    for (const candidate of Array.from(document.querySelectorAll('script, iframe, meta[name="monetag"]'))) {
       if (isIntrusivePopunderElement(candidate)) {
         if (candidate.tagName === 'SCRIPT') {
           candidate.setAttribute('type', 'javascript/blocked');
@@ -212,7 +223,7 @@ export const installIntrusivePopunderDomGuard = (): void => {
           el.remove();
           continue;
         }
-        for (const nested of Array.from(el.querySelectorAll('script, iframe'))) {
+        for (const nested of Array.from(el.querySelectorAll('script, iframe, meta[name="monetag"]'))) {
           if (isIntrusivePopunderElement(nested)) {
             if (nested.tagName === 'SCRIPT') {
               nested.setAttribute('type', 'javascript/blocked');
@@ -230,8 +241,7 @@ export const installIntrusivePopunderDomGuard = (): void => {
 };
 
 /**
- * Extracts a unique page-level key ONLY for singleton overlay/page-wide injectors
- * (e.g. Monetag Vignette `vignette.min.js`, In-Page Push, or MultiTag document.body append loaders).
+ * Extracts a unique page-level key ONLY for singleton overlay/page-wide injectors.
  * Returns `null` for container-scoped Native Banners, AdSense, Adsterra, or custom HTML slots
  * so multiple container ads continue rendering independently.
  */
@@ -240,17 +250,12 @@ export const extractSingletonOverlayKey = (scriptEl: HTMLScriptElement): string 
   const dataZone = (scriptEl.getAttribute('data-zone') || '').trim();
   const body = scriptEl.textContent || '';
 
-  const isKnownOverlaySrc =
-    /(?:vignette\.min\.js|in-page-push|nap5k\.com\/tag\.min\.js|alwingulla\.com\/88\/tag\.min\.js)/i.test(
-      src
-    );
+  const isKnownOverlaySrc = /(?:multitag|overlay-tag)/i.test(src);
   if (src && isKnownOverlaySrc) {
     return `src:${src}::zone:${dataZone}`;
   }
 
-  const inlineSrcMatch = body.match(
-    /https?:\/\/[^"'\s]+(?:vignette\.min\.js|in-page-push|nap5k\.com\/tag\.min\.js)/i
-  );
+  const inlineSrcMatch = body.match(/https?:\/\/[^"'\s]+(?:multitag|overlay-tag)/i);
   if (!src && inlineSrcMatch) {
     const inlineZoneMatch = body.match(/(?:dataset\.zone|data-zone|\bzone)\s*[:=]\s*["']?(\d+)["']?/i);
     return `inline:${inlineSrcMatch[0]}::zone:${inlineZoneMatch?.[1] || ''}`;
@@ -317,10 +322,13 @@ export const clampHomepageInFeedPosition = (
 };
 
 export const normalizeAdProvider = (raw: unknown): AdProviderId => {
-  if (raw === 'monetag' || raw === 'adscod' || raw === 'other') {
+  if (raw === 'hilltopads' || raw === 'adscod' || raw === 'other') {
     return raw;
   }
-  return 'monetag';
+  if (raw === 'monetag') {
+    return 'other';
+  }
+  return 'hilltopads';
 };
 
 export const sanitizeAdConfigText = (
@@ -374,7 +382,7 @@ export const isSafeDirectLinkUrl = (rawUrl: unknown): boolean => {
   if (!trimmed || trimmed.length > 500) return false;
   if (!/^https:\/\/[^\s<>"']+$/i.test(trimmed)) return false;
   if (INTRUSIVE_POPUNDER_SCRIPT_SRC_PATTERN.test(trimmed)) return false;
-  if (/[?&](?:zone|z|zoneId)=313598\b/i.test(trimmed)) return false;
+  if (/[?&](?:zone|z|zoneId)=(?:313598|12145119|12322670|12321969|12329910)\b/i.test(trimmed)) return false;
   try {
     const parsed = new URL(trimmed);
     return parsed.protocol === 'https:' && Boolean(parsed.hostname) && parsed.hostname.includes('.');
@@ -590,44 +598,6 @@ export const normalizeGlobalAdScriptConfig = (
   };
 };
 
-export const normalizeVignetteAdConfig = (
-  raw?: Partial<MonetagVignetteConfig> | null
-): MonetagVignetteConfig => {
-  if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_MONETAG_VIGNETTE_CONFIG };
-  }
-  const zoneId =
-    typeof raw.zoneId === 'string' ? raw.zoneId.replace(/\D/g, '').slice(0, 20) : '';
-  const candidateUrl = typeof raw.scriptUrl === 'string' ? raw.scriptUrl.trim() : '';
-  return {
-    enabled: Boolean(raw.enabled),
-    zoneId,
-    scriptUrl: isSafeAdScriptUrl(candidateUrl) ? candidateUrl : '',
-    mobileEnabled: raw.mobileEnabled !== false,
-    desktopEnabled: raw.desktopEnabled !== false,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
-  };
-};
-
-export const normalizeInPagePushAdConfig = (
-  raw?: Partial<MonetagInPagePushConfig> | null
-): MonetagInPagePushConfig => {
-  if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG };
-  }
-  const zoneId =
-    typeof raw.zoneId === 'string' ? raw.zoneId.replace(/\D/g, '').slice(0, 20) : '';
-  const candidateUrl = typeof raw.scriptUrl === 'string' ? raw.scriptUrl.trim() : '';
-  return {
-    enabled: Boolean(raw.enabled),
-    zoneId,
-    scriptUrl: isSafeAdScriptUrl(candidateUrl) ? candidateUrl : '',
-    mobileEnabled: raw.mobileEnabled !== false,
-    desktopEnabled: raw.desktopEnabled !== false,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
-  };
-};
-
 export const normalizeFloatingVideoAdConfig = (
   raw?: Partial<FloatingVideoAdConfig> | null
 ): FloatingVideoAdConfig => {
@@ -642,58 +612,6 @@ export const normalizeFloatingVideoAdConfig = (
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
   };
 };
-
-export interface ExtractedMonetagTagInfo {
-  zoneId: string;
-  scriptUrl: string;
-  cleanedRemainder: string;
-}
-
-export const extractMonetagScriptByPattern = (
-  rawCode: unknown,
-  srcPattern: RegExp
-): ExtractedMonetagTagInfo | null => {
-  if (typeof rawCode !== 'string' || !rawCode.trim()) return null;
-  const sanitized = sanitizeAdCodePayload(rawCode, true);
-  if (!sanitized || !srcPattern.test(sanitized)) return null;
-
-  let foundZone = '';
-  let foundSrc = '';
-
-  const cleanedRemainder = sanitized
-    .replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (fullMatch, attrs: string, body: string) => {
-      const combined = `${attrs}\n${body}`;
-      if (!srcPattern.test(combined)) {
-        return fullMatch;
-      }
-      const urlMatch = combined.match(/https?:\/\/[^\s"'`<>]+/i);
-      const zoneMatch = combined.match(/(?:dataset\.zone|data-zone|\bzone)\s*[:=]\s*["']?(\d{4,16})["']?/i);
-      const srcCandidate = urlMatch?.[0]?.trim() || '';
-      if (srcCandidate && isSafeAdScriptUrl(srcCandidate)) {
-        foundSrc = srcCandidate;
-      }
-      if (zoneMatch?.[1]) {
-        foundZone = zoneMatch[1];
-      }
-      return '';
-    })
-    .trim();
-
-  if (!foundSrc) return null;
-  return {
-    zoneId: foundZone,
-    scriptUrl: foundSrc,
-    cleanedRemainder
-  };
-};
-
-export const extractLegacyVignetteFromSnippet = (rawCode: unknown): ExtractedMonetagTagInfo | null =>
-  extractMonetagScriptByPattern(rawCode, /vignette\.min\.js/i);
-
-export const extractLegacyInPagePushFromSnippet = (
-  rawCode: unknown
-): ExtractedMonetagTagInfo | null =>
-  extractMonetagScriptByPattern(rawCode, /nap5k\.com\/tag\.min\.js|in-page-push/i);
 
 export interface AdCodeSnippetAnalysis {
   hasCode: boolean;
@@ -724,7 +642,7 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
       metaTags: [],
       warnings: hasIntrusivePopunder
         ? [
-            'Intrusive OnClick/Popunder script detected (e.g., quge5.com / zone 313598) and automatically removed to stop unwanted new browser tabs.'
+            'Intrusive OnClick/Popunder or blocked third-party ad network script detected and automatically removed.'
           ]
         : []
     };
@@ -778,7 +696,7 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
   const hasMetaTags = metaTags.length > 0;
   const isLikelyGlobalScript =
     hasMetaTags ||
-    /(alwingulla|in-page-push|vignette|multitag|navigator\.serviceWorker|sw\.js|data-zone\s*=)/i.test(
+    /(multitag|navigator\.serviceWorker|data-zone\s*=)/i.test(
       code
     );
   const needsSerializedQueue = /atOptions\s*=|document\.write/i.test(code);
@@ -786,7 +704,7 @@ export const analyzeAdCodeSnippet = (rawCode: string): AdCodeSnippetAnalysis => 
   const warnings: string[] = [];
   if (hasIntrusivePopunder) {
     warnings.push(
-      'Intrusive OnClick/Popunder script detected (e.g., quge5.com / zone 313598) and automatically removed to stop unwanted new browser tabs.'
+      'Intrusive OnClick/Popunder or blocked third-party ad network script detected and automatically removed.'
     );
   }
   if (hasUnsafeUrls) {
@@ -842,7 +760,7 @@ export const getProviderDisplayName = (
   provider: AdProviderId,
   customLabel?: string
 ): string => {
-  if (provider === 'monetag') return 'Monetag';
+  if (provider === 'hilltopads') return 'HilltopAds';
   if (provider === 'adscod') return 'Adscod';
   return sanitizeAdConfigText(customLabel, 'Custom Network', 40);
 };
@@ -855,4 +773,49 @@ export const formatDeviceVisibilitySummary = (
   if (mobileEnabled) return 'Mobile Only';
   if (desktopEnabled) return 'Desktop Only';
   return 'Hidden on All Devices';
+};
+
+export const normalizeInArticleVastVideoAdConfig = (
+  raw?: Partial<InArticleVastVideoAdConfig> | null
+): InArticleVastVideoAdConfig => {
+  const base: InArticleVastVideoAdConfig = {
+    ...DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG
+  };
+  if (!raw || typeof raw !== 'object') {
+    return base;
+  }
+
+  const afterParagraph = clampInArticleParagraph(
+    raw.afterParagraph,
+    DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG.afterParagraph
+  );
+  const rawSecondParagraph = clampInArticleParagraph(
+    raw.secondAfterParagraph,
+    DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG.secondAfterParagraph
+  );
+  const secondAfterParagraph = Math.min(
+    IN_ARTICLE_PARAGRAPH_LIMITS.max,
+    Math.max(afterParagraph + 2, rawSecondParagraph)
+  );
+
+  const rawUrl = typeof raw.vastTagUrl === 'string' ? raw.vastTagUrl.trim() : '';
+  const vastTagUrl = rawUrl === '' ? '' : isSafeVastHttpsUrl(rawUrl) ? rawUrl : '';
+
+  return {
+    enabled: Boolean(raw.enabled),
+    provider: 'hilltopads',
+    vastTagUrl,
+    afterParagraph,
+    secondPlacementEnabled: Boolean(raw.secondPlacementEnabled),
+    secondAfterParagraph,
+    autoplayMuted: raw.autoplayMuted !== false,
+    mobileEnabled: raw.mobileEnabled !== false,
+    desktopEnabled: raw.desktopEnabled !== false,
+    label: sanitizeAdConfigText(
+      raw.label,
+      DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG.label || 'Sponsored Video',
+      40
+    ),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  };
 };

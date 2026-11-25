@@ -16,7 +16,7 @@ A modern digital news and editorial publishing platform powered by React, TypeSc
    - **Admin Management Portal (`/admin`)**:
      - Articles & Categories CMS (`posts`, `categories`) with Rich Text editing and comment moderation (`comments`).
      - Static Website Pages CMS (`website_pages`: About Us, Contact Us, Privacy Policy, Terms & Conditions).
-     - Website Design, Branding, Typography, Top Announcement Ticker, WhatsApp Contact Settings, and Ads/Monetag Slots (`appSettings`, `siteSettings`).
+     - Website Design, Branding, Typography, Top Announcement Ticker, WhatsApp Contact Settings, and HilltopAds & Sponsorship Slots (`appSettings`, `siteSettings`).
      - Breaking News Push Notifications & Analytics (`announcements`, `fcm_tokens`).
 
 3. **Production Firebase Architecture**

@@ -15,10 +15,6 @@ import {
   __resetGlobalAdScriptsCacheForTests
 } from '../src/components/GlobalAdScripts';
 import {
-  MonetagVignetteBanner,
-  __resetMonetagVignetteCacheForTests
-} from '../src/components/MonetagVignetteBanner';
-import {
   __resetPopunderGuardAndOverlayCacheForTests,
   analyzeAdCodeSnippet,
   clampInArticleParagraph,
@@ -28,10 +24,12 @@ import {
   isSafeAdAssetOrClickUrl,
   isSafeAdScriptUrl,
   isSafeDirectLinkUrl,
+  normalizeAdProvider,
   normalizeGlobalAdScriptConfig,
   normalizeInArticleAdSlotConfig,
   normalizeInArticleAdsSettings,
   sanitizeAdCodeInput,
+  sanitizeAdCodePayload,
   sanitizeAdConfigText,
   sanitizeStaticAdElement
 } from '../src/utils/inArticleAdUtils';
@@ -62,13 +60,15 @@ function makeParagraphs(count: number, extraMarkupBetween?: Record<number, strin
   return parts.join('\n');
 }
 
-function testOldAdscodCompletelyRemovedAndCoreAssetsPreserved(): void {
+function testOldAdscodAndMonetagCompletelyRemovedAndCoreAssetsPreserved(): void {
   const removedPaths = [
     'src/types/adscod.ts',
     'src/services/adscodService.ts',
     'src/components/AdscodBannerAd.tsx',
     'src/components/AdscodInlineAd.tsx',
-    'test/adscodIntegrationSuite.test.ts'
+    'test/adscodIntegrationSuite.test.ts',
+    'public/sw.js',
+    'src/components/MonetagVignetteBanner.tsx'
   ];
   for (const rel of removedPaths) {
     assert.equal(fs.existsSync(path.resolve(rel)), false, `${rel} must be removed`);
@@ -85,27 +85,25 @@ function testOldAdscodCompletelyRemovedAndCoreAssetsPreserved(): void {
     const src = fs.readFileSync(path.resolve(rel), 'utf8');
     assert.doesNotMatch(
       src,
-      /AdscodBannerAd|AdscodInlineAd|adscodService|types\/adscod|workers\.dev|api\.adscod\.com|ads-adscod-diagnostics/,
-      `Obsolete Adscod integration reference still exists in ${rel}`
+      /AdscodBannerAd|AdscodInlineAd|adscodService|types\/adscod|workers\.dev|api\.adscod\.com|ads-adscod-diagnostics|MonetagVignetteBanner|monetag/i,
+      `Obsolete Adscod or Monetag reference still exists in ${rel}`
     );
   }
 
-  // Root service worker & referrer meta remain preserved
-  assert.equal(fs.existsSync(path.resolve('public/sw.js')), true);
-  assert.match(fs.readFileSync(path.resolve('public/sw.js'), 'utf8'), /zoneId/);
+  // Referrer meta required by HilltopAds remains preserved
   assert.match(
     fs.readFileSync(path.resolve('index.html'), 'utf8'),
     /name="referrer"\s+content="no-referrer-when-downgrade"/
   );
 
-  // Below-header ad slot removed cleanly; Vignette Banner, Global Scripts, and Above-Footer preserved in App.tsx
+  // Below-header ad slot and Monetag Vignette removed cleanly; Global Scripts and Above-Footer preserved in App.tsx
   const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
   assert.doesNotMatch(appSrc, /<AdSlot placement="below_header"/);
-  assert.match(appSrc, /<MonetagVignetteBanner currentPage=\{currentPage\} \/>/);
+  assert.doesNotMatch(appSrc, /MonetagVignetteBanner/);
   assert.match(appSrc, /<AdSlot placement="above_footer"/);
   assert.match(appSrc, /<GlobalAdScripts currentPage=\{currentPage\} \/>/);
 
-  console.log('✓ 1. Old Adscod removed, below_header AdSlot removed & Monetag components wired cleanly');
+  console.log('✓ 1. Old Adscod & Monetag completely removed, below_header AdSlot removed & HilltopAds/core slots wired cleanly');
 }
 
 function testConfigNormalizationValidationAndSecurity(): void {
@@ -116,7 +114,9 @@ function testConfigNormalizationValidationAndSecurity(): void {
   assert.equal(defaults.slot1.enabled, false);
   assert.equal(defaults.slot2.enabled, false);
   assert.equal(defaults.slot3.enabled, false);
-  assert.equal(defaults.slot1.provider, 'monetag');
+  assert.equal(defaults.slot1.provider, 'hilltopads');
+  assert.equal(normalizeAdProvider('monetag'), 'other');
+  assert.equal(normalizeAdProvider('hilltopads'), 'hilltopads');
 
   assert.equal(clampInArticleParagraph(-3, 3), 1);
   assert.equal(clampInArticleParagraph(999, 7), 50);
@@ -129,13 +129,19 @@ function testConfigNormalizationValidationAndSecurity(): void {
   assert.equal(isSafeAdScriptUrl('http://insecure.example.com/tag.js'), false);
   assert.equal(isSafeAdAssetOrClickUrl('data:text/html,<script>1</script>'), false);
 
-  const monetagMultitag = `<meta name="monetag" content="abc123def"><script src="https://alwingulla.com/88/tag.min.js" data-zone="12345" async data-cfasync="false"></script>`;
-  const analysis = analyzeAdCodeSnippet(monetagMultitag);
+  const partnerGlobalTag = `<meta name="partner-site-verify" content="abc123def"><script src="https://cdn.example.com/global-multitag.js" data-zone="12345" async data-cfasync="false"></script>`;
+  const analysis = analyzeAdCodeSnippet(partnerGlobalTag);
   assert.equal(analysis.hasCode, true);
   assert.equal(analysis.hasMetaTags, true);
   assert.equal(analysis.isLikelyGlobalScript, true);
   assert.equal(analysis.hasUnsafeUrls, false);
-  assert.deepEqual(analysis.metaTags, [{ name: 'monetag', content: 'abc123def' }]);
+  assert.deepEqual(analysis.metaTags, [{ name: 'partner-site-verify', content: 'abc123def' }]);
+
+  const discontinuedMonetagSnippet = `<meta name="monetag" content="abc123def"><script src="https://alwingulla.com/88/tag.min.js" data-zone="12345" async data-cfasync="false"></script>`;
+  const blockedAnalysis = analyzeAdCodeSnippet(discontinuedMonetagSnippet);
+  assert.equal(blockedAnalysis.hasIntrusivePopunder, true);
+  assert.equal(blockedAnalysis.hasCode, false);
+  assert.equal(sanitizeAdCodePayload(discontinuedMonetagSnippet), '');
 
   const unsafeAnalysis = analyzeAdCodeSnippet(`<script src="javascript:alert(1)"></script><a href="javascript:void(0)">click</a>`);
   assert.equal(unsafeAnalysis.hasUnsafeUrls, true);
@@ -159,16 +165,17 @@ function testConfigNormalizationValidationAndSecurity(): void {
 
   const globalCfg = normalizeGlobalAdScriptConfig({
     enabled: true,
-    provider: 'monetag',
-    code: monetagMultitag,
+    provider: 'hilltopads',
+    code: partnerGlobalTag,
     mobileEnabled: true,
     desktopEnabled: false
   });
   assert.equal(globalCfg.enabled, true);
+  assert.equal(globalCfg.provider, 'hilltopads');
   assert.equal(globalCfg.mobileEnabled, true);
   assert.equal(globalCfg.desktopEnabled, false);
 
-  console.log('✓ 2. Multi-provider normalization, clamping, URL/markup validation & Monetag detection verified');
+  console.log('✓ 2. Multi-provider normalization, clamping, URL/markup validation & Monetag blocking verified');
 }
 
 function testDynamicInArticlePlacementAcrossArticleLengthsAndRichMarkup(): void {
@@ -179,10 +186,10 @@ function testDynamicInArticlePlacementAcrossArticleLengthsAndRichMarkup(): void 
       slot1: {
         ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot1,
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         afterParagraph: 3,
         label: 'Kwamamaza',
-        code: '<script data-zone="101" src="https://example.com/monetag-slot1.js"></script>'
+        code: '<script data-zone="101" src="https://example.com/hilltopads-slot1.js"></script>'
       },
       slot2: {
         ...DEFAULT_IN_ARTICLE_ADS_SETTINGS.slot2,
@@ -322,7 +329,7 @@ function testSsrRenderingAndSeoNonMutation(): void {
       articleId: 'post-abc',
       slotConfig: {
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         code: '<div class="promo">Sponsor Card</div>',
         afterParagraph: 3,
         mobileEnabled: true,
@@ -332,7 +339,7 @@ function testSsrRenderingAndSeoNonMutation(): void {
     })
   );
   assert.match(activeSlotHtml, /data-testid="in-article-ad-slot1"/);
-  assert.match(activeSlotHtml, /data-ad-provider="monetag"/);
+  assert.match(activeSlotHtml, /data-ad-provider="hilltopads"/);
   assert.match(activeSlotHtml, /data-after-paragraph="3"/);
   assert.match(activeSlotHtml, /Kwamamaza/);
   assert.match(activeSlotHtml, /block md:hidden/);
@@ -413,14 +420,14 @@ function testAdminControlsAndSecurityWiring(): void {
   assert.doesNotMatch(adsMgrSrc, /window\.(alert|confirm|open)/);
   assert.doesNotMatch(inArticleMgrSrc, /window\.(alert|confirm|open)/);
 
-  // All active positions represented clearly in Admin UI (without 1. Below Website Header)
+  // All active positions represented clearly in Admin UI (zero Monetag controls or sw.js checks)
   assert.doesNotMatch(adsMgrSrc, /1\. Below Website Header/);
-  assert.match(adsMgrSrc, /1\. Monetag Vignette Banner/);
-  assert.match(adsMgrSrc, /2\. Above Website Footer/);
-  assert.match(inArticleMgrSrc, /3\. In-Article Ad Slot 1/);
-  assert.match(inArticleMgrSrc, /4\. In-Article Ad Slot 2/);
-  assert.match(inArticleMgrSrc, /5\. In-Article Ad Slot 3/);
-  assert.match(inArticleMgrSrc, /Monetag In-Page Push Banner/);
+  assert.doesNotMatch(adsMgrSrc, /Monetag|vignette|inPagePush/i);
+  assert.match(adsMgrSrc, /1\. Above Website Footer/);
+  assert.match(inArticleMgrSrc, /2\. In-Article Ad Slot 1/);
+  assert.match(inArticleMgrSrc, /3\. In-Article Ad Slot 2/);
+  assert.match(inArticleMgrSrc, /4\. In-Article Ad Slot 3/);
+  assert.doesNotMatch(inArticleMgrSrc, /ads-in-page-push-manager|\/sw\.js|5gvci|nap5k|uplcm|monetag/i);
   assert.match(inArticleMgrSrc, /Global Site-Wide Ad &amp; Verification Scripts/);
 
   // BlogView uses dynamic injector without altering post.content
@@ -428,13 +435,15 @@ function testAdminControlsAndSecurityWiring(): void {
   assert.match(blogViewSrc, /<InArticleAdSlot/);
   assert.match(blogViewSrc, /updateBlogPostSeo\(activePost, branding\)/);
 
-  // Admin write protection verified across client & rules
+  // Admin write protection & Firestore Monetag field cleanup verified across client & rules
   assert.match(siteSettingsSrc, /isAuthorizedAdminEmail/);
   assert.match(siteSettingsSrc, /normalizeInArticleAdsSettings/);
   assert.match(siteSettingsSrc, /normalizeGlobalAdScriptConfig/);
+  assert.match(siteSettingsSrc, /vignetteAd:\s*deleteField\(\)/);
+  assert.match(siteSettingsSrc, /inPagePushAd:\s*deleteField\(\)/);
   assert.match(rulesSrc, /match \/appSettings\/ads[\s\S]*allow get:\s*if true;[\s\S]*allow list, write:\s*if isAdmin\(\);/);
 
-  console.log('✓ 5. Admin Dashboard 5-position controls, Global Scripts panel & Admin-only security wiring verified');
+  console.log('✓ 5. Admin Dashboard clean numbered positions, Global Scripts panel, Monetag deletion & Admin security verified');
 }
 
 async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
@@ -456,8 +465,8 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
     masterEnabled: true,
     globalScripts: {
       enabled: true,
-      provider: 'monetag',
-      code: `<meta name="monetag" content="verify-999" /><script src="https://alwingulla.com/88/tag.min.js" data-zone="999001" async data-cfasync="false"></script>`,
+      provider: 'hilltopads',
+      code: `<meta name="partner-verify" content="verify-999" /><meta name="monetag" content="blocked-meta" /><script src="https://cdn.example.com/global-tag.min.js" data-zone="999001" async data-cfasync="false"></script>`,
       mobileEnabled: true,
       desktopEnabled: true
     }
@@ -501,18 +510,21 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
     root.render(React.createElement(GlobalAdScripts, { currentPage: 'admin' }));
     await new Promise((r) => setTimeout(r, 100));
     assert.equal(dom.window.document.head.querySelectorAll('script[data-isezerano-global-ad]').length, 0);
+    assert.equal(dom.window.document.head.querySelectorAll('meta[name="partner-verify"]').length, 0);
     assert.equal(dom.window.document.head.querySelectorAll('meta[name="monetag"]').length, 0);
 
-    // 2. Public route injects meta + global script once cleanly
+    // 2. Public route injects approved meta + global script once cleanly while stripping Monetag meta
     root.render(React.createElement(GlobalAdScripts, { currentPage: 'blog' }));
     await new Promise((r) => setTimeout(r, 100));
-    assert.equal(dom.window.document.head.querySelectorAll('meta[name="monetag"]').length, 1);
+    assert.equal(dom.window.document.head.querySelectorAll('meta[name="partner-verify"]').length, 1);
+    assert.equal(dom.window.document.head.querySelectorAll('meta[name="monetag"]').length, 0);
     assert.equal(dom.window.document.head.querySelectorAll('script[data-isezerano-global-ad]').length, 1);
 
     // 3. Re-navigating across public pages does NOT duplicate script/meta in document.head
     root.render(React.createElement(GlobalAdScripts, { currentPage: 'home' }));
     await new Promise((r) => setTimeout(r, 100));
-    assert.equal(dom.window.document.head.querySelectorAll('meta[name="monetag"]').length, 1);
+    assert.equal(dom.window.document.head.querySelectorAll('meta[name="partner-verify"]').length, 1);
+    assert.equal(dom.window.document.head.querySelectorAll('meta[name="monetag"]').length, 0);
     assert.equal(dom.window.document.head.querySelectorAll('script[data-isezerano-global-ad]').length, 1);
   } finally {
     root.unmount();
@@ -524,7 +536,7 @@ async function testGlobalAdScriptsRuntimeDeduplication(): Promise<void> {
     (globalThis as any).CSS = prevCss;
   }
 
-  console.log('✓ 6. GlobalAdScripts runtime /admin suppression & single-execution deduplication verified');
+  console.log('✓ 6. GlobalAdScripts runtime /admin suppression, Monetag meta stripping & single-execution deduplication verified');
 }
 
 async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
@@ -550,13 +562,13 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
       enabled: true,
       type: 'code',
       label: 'Header Partner',
-      code: '<div class="monetag-hdr"><script async src="https://cdn.example.com/header-zone.js" data-zone="111"></script></div>'
+      code: '<div class="partner-hdr"><script async src="https://cdn.example.com/header-zone.js" data-zone="111"></script></div>'
     },
     aboveFooterAd: {
       enabled: true,
       type: 'code',
       label: 'Below Post Sponsor',
-      code: '<div class="monetag-ftr"><script src="https://cdn.example.com/footer-zone.js" data-zone="222"></script></div>'
+      code: '<div class="partner-ftr"><script src="https://cdn.example.com/footer-zone.js" data-zone="222"></script></div>'
     }
   };
 
@@ -604,7 +616,6 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
       React.createElement(
         React.Fragment,
         null,
-        React.createElement(MonetagVignetteBanner, { currentPage: 'blog' }),
         React.createElement(GlobalAdScripts, { currentPage: 'blog' }),
         React.createElement(AdSlot, { placement: 'below_header' as any }),
         React.createElement(InArticleAdSlot, {
@@ -612,12 +623,12 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
           articleId: 'post-nested',
           slotConfig: {
             enabled: true,
-            provider: 'monetag',
+            provider: 'hilltopads',
             afterParagraph: 3,
             mobileEnabled: true,
             desktopEnabled: true,
             label: 'Advertisement',
-            code: '<div class="monetag-inline"><script src="https://cdn.example.com/inarticle-slot1.js" data-zone="333"></script></div>'
+            code: '<div class="partner-inline"><script src="https://cdn.example.com/inarticle-slot1.js" data-zone="333"></script></div>'
           }
         }),
         React.createElement(InArticleAdSlot, {
@@ -625,7 +636,7 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
           articleId: 'post-comment-only',
           slotConfig: {
             enabled: true,
-            provider: 'monetag',
+            provider: 'hilltopads',
             afterParagraph: 7,
             mobileEnabled: true,
             desktopEnabled: true,
@@ -646,8 +657,8 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
     const inArticleSlot1 = container.querySelector('[data-testid="in-article-ad-slot1"]') as HTMLElement | null;
     assert.ok(inArticleSlot1, 'In-Article Slot 1 must mount when enabled and configured');
     assert.doesNotMatch(inArticleSlot1.className, /max-h-0|opacity-0|pointer-events-none/);
-    const inlineScript = inArticleSlot1.querySelector('.monetag-inline script') as HTMLScriptElement | null;
-    assert.ok(inlineScript, 'Nested <script> inside .monetag-inline must execute inside DOM wrapper');
+    const inlineScript = inArticleSlot1.querySelector('.partner-inline script') as HTMLScriptElement | null;
+    assert.ok(inlineScript, 'Nested <script> inside .partner-inline must execute inside DOM wrapper');
     assert.equal(inlineScript.getAttribute('data-zone'), '333');
 
     // Comment-only slot 2 collapses cleanly
@@ -656,8 +667,8 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
     // Below-Post / Above-Footer Ad rendered & nested script executed
     const footerWrap = container.querySelector('[data-ad-placement="above_footer"]');
     assert.ok(footerWrap, 'Below-Post AdSlot must mount when enabled and configured');
-    const footerScript = footerWrap.querySelector('.monetag-ftr script') as HTMLScriptElement | null;
-    assert.ok(footerScript, 'Nested <script> inside .monetag-ftr must execute inside DOM wrapper');
+    const footerScript = footerWrap.querySelector('.partner-ftr script') as HTMLScriptElement | null;
+    assert.ok(footerScript, 'Nested <script> inside .partner-ftr must execute inside DOM wrapper');
     assert.equal(footerScript.getAttribute('data-zone'), '222');
   } finally {
     root.unmount();
@@ -675,17 +686,25 @@ async function testHeaderFooterAndInArticleRuntimeExecution(): Promise<void> {
   console.log('✓ 7. Removed below_header, Below-Post & In-Article nested script DOM execution verified');
 }
 
-async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void> {
-  // 1. Direct Link URL security & bare URL detection
-  assert.equal(isSafeDirectLinkUrl('https://uplcm.com/4/12329910'), true);
-  assert.equal(isSafeDirectLinkUrl('http://uplcm.com/4/12329910'), false);
+async function testDirectLinkCardsAndLegacyMonetagPurge(): Promise<void> {
+  // 1. Direct Link URL security & Monetag domain rejection
+  assert.equal(isSafeDirectLinkUrl('https://partner.example.com/offer/123'), true);
+  assert.equal(isSafeDirectLinkUrl('http://partner.example.com/offer/123'), false);
   assert.equal(isSafeDirectLinkUrl('javascript:alert(1)'), false);
+  assert.equal(isSafeDirectLinkUrl('https://uplcm.com/4/12329910'), false);
   assert.equal(isSafeDirectLinkUrl('https://quge5.com/4/313598'), false);
-  assert.equal(extractBareSafeDirectLinkUrl('  https://uplcm.com/4/12329910  '), 'https://uplcm.com/4/12329910');
+  assert.equal(isSafeAdScriptUrl('https://nap5k.com/tag.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://n6wxm.com/vignette.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://5gvci.com/act/files/service-worker.min.js?r=sw'), false);
+  assert.equal(isSafeAdScriptUrl('https://alwingulla.com/88/tag.min.js'), false);
+  assert.equal(
+    extractBareSafeDirectLinkUrl('  https://partner.example.com/offer/123  '),
+    'https://partner.example.com/offer/123'
+  );
   assert.equal(extractBareSafeDirectLinkUrl('<div>Banner</div>'), null);
 
-  // 2. Legacy live Firestore appSettings/ads migration preserves real Monetag codes & disables belowHeaderAd without inventing fake copy
-  const migrated = normalizeAdsSettingsPayload({
+  // 2. Stale Firestore appSettings/ads containing legacy Monetag fields/codes is cleanly stripped at runtime
+  const purged = normalizeAdsSettingsPayload({
     masterEnabled: true,
     belowHeaderAd: {
       enabled: true,
@@ -693,9 +712,23 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
       label: 'Advertisement',
       code: "<script>(function(s){s.dataset.zone='12321969',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>"
     },
+    vignetteAd: {
+      enabled: true,
+      zoneId: '12322670',
+      scriptUrl: 'https://n6wxm.com/vignette.min.js',
+      mobileEnabled: true,
+      desktopEnabled: true
+    },
+    inPagePushAd: {
+      enabled: true,
+      zoneId: '12321969',
+      scriptUrl: 'https://nap5k.com/tag.min.js',
+      mobileEnabled: true,
+      desktopEnabled: true
+    },
     globalScripts: {
       enabled: true,
-      provider: 'monetag',
+      provider: 'monetag' as any,
       mobileEnabled: true,
       desktopEnabled: true,
       code: `<meta name="monetag" content="verify-live" /><script>(function(s){s.dataset.zone='12322670',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>`
@@ -704,12 +737,12 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
       enabled: true,
       type: 'code',
       label: 'Sponsored Content',
-      code: 'https://uplcm.com/4/12329910'
+      code: 'https://partner.example.com/offer/123'
     },
     inArticleAds: {
       slot1: {
         enabled: true,
-        provider: 'monetag',
+        provider: 'monetag' as any,
         afterParagraph: 3,
         mobileEnabled: true,
         desktopEnabled: true,
@@ -717,29 +750,22 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
         code: 'https://uplcm.com/4/12329910'
       }
     } as AdsSettings['inArticleAds']
-  });
+  } as any);
 
-  assert.equal(migrated.belowHeaderAd?.enabled, false);
-  assert.equal(migrated.belowHeaderAd?.code, '');
-  assert.equal(migrated.vignetteAd?.enabled, true);
-  assert.equal(migrated.vignetteAd?.zoneId, '12322670');
-  assert.equal(migrated.vignetteAd?.scriptUrl, 'https://n6wxm.com/vignette.min.js');
-  assert.equal(migrated.inPagePushAd?.enabled, true);
-  assert.equal(migrated.inPagePushAd?.zoneId, '12321969');
-  assert.equal(migrated.inPagePushAd?.scriptUrl, 'https://nap5k.com/tag.min.js');
-  assert.doesNotMatch(migrated.globalScripts?.code || '', /vignette\.min\.js|12322670/);
-  assert.match(migrated.globalScripts?.code || '', /meta name="monetag" content="verify-live"/);
-  assert.equal(migrated.inArticleAds?.slot1.adFormat, 'direct_link');
-  assert.equal(migrated.inArticleAds?.slot1.directLinkCard?.directLinkUrl, 'https://uplcm.com/4/12329910');
-  assert.equal(migrated.inArticleAds?.slot1.directLinkCard?.headline, '');
-  assert.equal(migrated.inArticleAds?.slot1.directLinkCard?.ctaText, '');
-  // Migrated URL-only Direct Link card stays collapsed cleanly until Admin provides real Headline + CTA text
-  assert.equal(isInArticleSlotRenderable(migrated.inArticleAds?.slot1), false);
+  assert.equal(purged.belowHeaderAd?.enabled, false);
+  assert.equal(purged.belowHeaderAd?.code, '');
+  assert.equal('vignetteAd' in purged, false);
+  assert.equal('inPagePushAd' in purged, false);
+  assert.equal(purged.globalScripts?.provider, 'other');
+  assert.equal(purged.globalScripts?.code, '');
+  assert.equal(purged.inArticleAds?.slot1.provider, 'other');
+  assert.equal(purged.inArticleAds?.slot1.directLinkCard?.directLinkUrl, '');
+  assert.equal(isInArticleSlotRenderable(purged.inArticleAds?.slot1), false);
 
   // Bare URL placed inside legacy aboveFooterAd ('code' mode) never leaks raw URL text onto public pages
   const prevLs = (globalThis as any).localStorage;
   (globalThis as any).localStorage = {
-    getItem: (k: string) => (k === 'isezerano_ads_settings' ? JSON.stringify(migrated) : null),
+    getItem: (k: string) => (k === 'isezerano_ads_settings' ? JSON.stringify(purged) : null),
     setItem: () => undefined,
     removeItem: () => undefined
   };
@@ -749,14 +775,14 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
     (globalThis as any).localStorage = prevLs;
   }
 
-  // 3. Complete In-Article Direct Link Sponsored Ad Card renders responsive rectangular card between P3, P7, P11
+  // 3. Complete non-Monetag In-Article Direct Link Sponsored Ad Card renders responsive rectangular card between P3, P7, P11
   const configuredDirectSettings: AdsSettings = {
     ...DEFAULT_ADS_SETTINGS,
     masterEnabled: true,
     inArticleAds: {
       slot1: {
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         adFormat: 'direct_link',
         code: '',
         afterParagraph: 3,
@@ -764,7 +790,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
         desktopEnabled: true,
         label: 'Sponsored',
         directLinkCard: {
-          directLinkUrl: 'https://uplcm.com/4/12329910',
+          directLinkUrl: 'https://partner.example.com/offer/123',
           headline: 'Discover Verified Partner Offers Across Kigali',
           description: 'Explore curated mobile & business services.',
           thumbnailUrl: 'https://cdn.example.com/offer-thumb.jpg',
@@ -774,7 +800,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
       },
       slot2: {
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         adFormat: 'direct_link',
         code: '',
         afterParagraph: 7,
@@ -782,7 +808,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
         desktopEnabled: true,
         label: 'Advertisement',
         directLinkCard: {
-          directLinkUrl: 'https://uplcm.com/4/12329910',
+          directLinkUrl: 'https://partner.example.com/offer/456',
           headline: 'Trusted Local Digital Solutions',
           description: '',
           thumbnailUrl: '',
@@ -792,7 +818,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
       },
       slot3: {
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         adFormat: 'direct_link',
         code: '',
         afterParagraph: 11,
@@ -800,7 +826,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
         desktopEnabled: true,
         label: 'Kwamamaza',
         directLinkCard: {
-          directLinkUrl: 'https://uplcm.com/4/12329910',
+          directLinkUrl: 'https://partner.example.com/offer/789',
           headline: '',
           description: 'Incomplete slot collapses',
           thumbnailUrl: '',
@@ -836,7 +862,7 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
     })
   );
   assert.match(directCardHtml, /data-ad-format="direct_link"/);
-  assert.match(directCardHtml, /href="https:\/\/uplcm\.com\/4\/12329910"/);
+  assert.match(directCardHtml, /href="https:\/\/partner\.example\.com\/offer\/123"/);
   assert.match(directCardHtml, /target="_blank"/);
   assert.match(directCardHtml, /rel="noopener noreferrer sponsored"/);
   assert.match(directCardHtml, /Discover Verified Partner Offers Across Kigali/);
@@ -844,79 +870,18 @@ async function testMonetagRestructureDirectLinkCardsAndVignette(): Promise<void>
   assert.match(directCardHtml, /flex-col sm:flex-row/);
   assert.match(directCardHtml, /SPONSORED/);
 
-  // 4. MonetagVignetteBanner SPA lifecycle: executes once across page switches, skips /admin, respects mobileEnabled/desktopEnabled
-  __resetMonetagVignetteCacheForTests();
-  __resetPopunderGuardAndOverlayCacheForTests();
-  __resetAdsSettingsCacheForTests();
-
-  const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
-    url: 'https://isezerano.online/'
-  });
-  const prevWindow = (globalThis as any).window;
-  const prevDocument = (globalThis as any).document;
-  const prevLocalStorage = (globalThis as any).localStorage;
-  const prevFetch = (globalThis as any).fetch;
-
-  const vignetteSettings: AdsSettings = {
-    ...DEFAULT_ADS_SETTINGS,
-    masterEnabled: true,
-    vignetteAd: {
-      enabled: true,
-      zoneId: '12322670',
-      scriptUrl: 'https://n6wxm.com/vignette.min.js',
-      mobileEnabled: true,
-      desktopEnabled: true
-    }
-  };
-
-  (globalThis as any).window = dom.window;
-  (globalThis as any).document = dom.window.document;
-  (globalThis as any).localStorage = {
-    getItem: (k: string) => (k === 'isezerano_ads_settings' ? JSON.stringify(vignetteSettings) : null),
-    setItem: () => undefined,
-    removeItem: () => undefined
-  };
-  (globalThis as any).fetch = async () => ({ ok: false });
-
-  const container = dom.window.document.getElementById('root')!;
-  const root = createRoot(container);
-
-  try {
-    // Admin route suppresses Vignette
-    root.render(React.createElement(MonetagVignetteBanner, { currentPage: 'admin' }));
-    await new Promise((r) => setTimeout(r, 100));
-    assert.equal(dom.window.document.querySelectorAll('script[data-isezerano-vignette]').length, 0);
-
-    // Public route mounts Vignette once
-    root.render(React.createElement(MonetagVignetteBanner, { currentPage: 'home' }));
-    await new Promise((r) => setTimeout(r, 100));
-    assert.equal(dom.window.document.querySelectorAll('script[data-isezerano-vignette]').length, 1);
-
-    // Navigating to blog article does NOT duplicate Vignette script
-    root.render(React.createElement(MonetagVignetteBanner, { currentPage: 'blog' }));
-    await new Promise((r) => setTimeout(r, 100));
-    assert.equal(dom.window.document.querySelectorAll('script[data-isezerano-vignette]').length, 1);
-  } finally {
-    root.unmount();
-    await new Promise((r) => setTimeout(r, 20));
-    (globalThis as any).window = prevWindow;
-    (globalThis as any).document = prevDocument;
-    (globalThis as any).localStorage = prevLocalStorage;
-    (globalThis as any).fetch = prevFetch;
-  }
-
-  console.log('✓ 8. Direct Link Sponsored Cards, live Firestore migration, bare-URL suppression & MonetagVignetteBanner SPA guard verified');
+  console.log('✓ 8. Direct Link Sponsored Cards, legacy Monetag purge & bare-URL suppression verified');
 }
 
 async function runSuite(): Promise<void> {
-  testOldAdscodCompletelyRemovedAndCoreAssetsPreserved();
+  testOldAdscodAndMonetagCompletelyRemovedAndCoreAssetsPreserved();
   testConfigNormalizationValidationAndSecurity();
   testDynamicInArticlePlacementAcrossArticleLengthsAndRichMarkup();
   testSsrRenderingAndSeoNonMutation();
   testAdminControlsAndSecurityWiring();
   await testGlobalAdScriptsRuntimeDeduplication();
   await testHeaderFooterAndInArticleRuntimeExecution();
-  await testMonetagRestructureDirectLinkCardsAndVignette();
+  await testDirectLinkCardsAndLegacyMonetagPurge();
   console.log('\nALL MULTI-PROVIDER & IN-ARTICLE ADVERTISING TESTS PASSED!');
 }
 

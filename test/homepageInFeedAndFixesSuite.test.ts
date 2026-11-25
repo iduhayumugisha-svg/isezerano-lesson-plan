@@ -6,10 +6,11 @@ import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import {
-  AdsSettings,
   DEFAULT_ADS_SETTINGS,
   DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
-  DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS
+  DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS,
+  HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC,
+  AdsSettings
 } from '../src/types/platform';
 import {
   __resetPopunderGuardAndOverlayCacheForTests,
@@ -31,10 +32,8 @@ import {
   GlobalAdScripts,
   __resetGlobalAdScriptsCacheForTests
 } from '../src/components/GlobalAdScripts';
-import {
-  MonetagVignetteBanner,
-  __resetMonetagVignetteCacheForTests
-} from '../src/components/MonetagVignetteBanner';
+import { HILLTOPADS_SCRIPT_SRC } from '../src/components/HilltopAdsArticleBanner';
+import { HILLTOPADS_HEADER_SCRIPT_SRC } from '../src/components/HilltopAdsHeaderBanner';
 import { AdSlot } from '../src/components/AdSlot';
 import { InArticleAdSlot } from '../src/components/InArticleAdSlot';
 import { HomepageInFeedAdSlot } from '../src/components/HomepageInFeedAdSlot';
@@ -69,16 +68,20 @@ function makeSamplePosts(count: number, category = 'General News'): BlogPost[] {
   });
 }
 
-function testPopunderDetectionAndSanitization(): void {
+function testPopunderAndMonetagDetectionAndSanitization(): void {
   assert.equal(detectIntrusivePopunderAdCode(EXACT_INTRUSIVE_POPUNDER), true);
   assert.equal(
+    detectIntrusivePopunderAdCode('<meta name="monetag" content="verify-123" />'),
+    true
+  );
+  assert.equal(
     detectIntrusivePopunderAdCode(
-      `<meta name="monetag" content="verify-123" />\n${EXACT_INTRUSIVE_POPUNDER}`
+      `<meta name="google-site-verification" content="verify-123" />\n${EXACT_INTRUSIVE_POPUNDER}`
     ),
     true
   );
   assert.equal(
-    detectIntrusivePopunderAdCode('<meta name="monetag" content="verify-123" />'),
+    detectIntrusivePopunderAdCode('<meta name="google-site-verification" content="verify-123" />'),
     false
   );
   assert.equal(
@@ -88,28 +91,33 @@ function testPopunderDetectionAndSanitization(): void {
     false
   );
 
-  // URL validator blocks quge5.com and click-under hosts while keeping https native embeds
+  // URL validator blocks quge5.com and all Monetag domains while keeping HilltopAds and approved https embeds
   assert.equal(isSafeAdScriptUrl('https://quge5.com/88/tag.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://nap5k.com/tag.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://n6wxm.com/vignette.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://5gvci.com/act/files/service-worker.min.js?r=sw'), false);
+  assert.equal(isSafeAdScriptUrl('https://alwingulla.com/88/tag.min.js'), false);
+  assert.equal(isSafeAdScriptUrl('https://uplcm.com/4/12329910'), false);
   assert.equal(isSafeAdScriptUrl('https://cdn.example.com/native-widget.js'), true);
 
-  // Strips exact popunder from mixed snippet while keeping <meta name="monetag">
-  const mixed = `<meta name="monetag" content="abcd9876" />\n${EXACT_INTRUSIVE_POPUNDER}`;
+  // Strips popunder AND Monetag tags from mixed snippet while keeping approved verification meta tags
+  const mixed = `<meta name="google-site-verification" content="abcd9876" />\n<meta name="monetag" content="strip-me" />\n${EXACT_INTRUSIVE_POPUNDER}`;
   const strippedMixed = stripIntrusivePopunderAdCode(mixed);
   assert.equal(strippedMixed.hadIntrusivePopunder, true);
-  assert.equal(strippedMixed.removedCount, 1);
-  assert.equal(strippedMixed.cleanedCode, '<meta name="monetag" content="abcd9876" />');
-  assert.doesNotMatch(strippedMixed.cleanedCode, /quge5\.com|313598/);
+  assert.equal(strippedMixed.removedCount, 2);
+  assert.equal(strippedMixed.cleanedCode, '<meta name="google-site-verification" content="abcd9876" />');
+  assert.doesNotMatch(strippedMixed.cleanedCode, /quge5\.com|313598|monetag/);
 
   // Stripping pure popunder yields empty string and non-renderable code
   assert.equal(sanitizeAdCodePayload(EXACT_INTRUSIVE_POPUNDER), '');
   assert.equal(hasRenderableAdCode(EXACT_INTRUSIVE_POPUNDER), false);
 
-  // analyzeAdCodeSnippet flags popunder warning clearly
+  // analyzeAdCodeSnippet flags popunder / Monetag warning clearly
   const popunderAnalysis = analyzeAdCodeSnippet(EXACT_INTRUSIVE_POPUNDER);
   assert.equal(popunderAnalysis.hasIntrusivePopunder, true);
-  assert.ok(popunderAnalysis.warnings.some((w) => /Popunder|OnClick/i.test(w)));
+  assert.ok(popunderAnalysis.warnings.some((w) => /Popunder|OnClick|Monetag/i.test(w)));
 
-  // All slot normalizers strip the popunder automatically
+  // All slot normalizers strip the popunder and Monetag tags automatically
   const cleanHeader = normalizeStandardAdSlotConfig({
     enabled: true,
     type: 'code',
@@ -133,13 +141,12 @@ function testPopunderDetectionAndSanitization(): void {
     enabled: true,
     code: mixed
   });
-  assert.equal(cleanGlobal.code, '<meta name="monetag" content="abcd9876" />');
+  assert.equal(cleanGlobal.code, '<meta name="google-site-verification" content="abcd9876" />');
 
-  // Root /sw.js remains preserved
-  assert.equal(fs.existsSync(path.resolve('public/sw.js')), true);
-  assert.match(fs.readFileSync(path.resolve('public/sw.js'), 'utf8'), /"zoneId":\s*12145119/);
+  // Root /sw.js must be permanently deleted
+  assert.equal(fs.existsSync(path.resolve('public/sw.js')), false);
 
-  console.log('✓ 1. Intrusive Monetag OnClick/Popunder removal verified across all normalizers & root sw.js preserved');
+  console.log('✓ 1. Intrusive OnClick/Popunder & Monetag removal verified across all normalizers & /sw.js deleted');
 }
 
 async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
@@ -159,7 +166,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
   const prevRAF = (globalThis as any).requestAnimationFrame;
   const prevCAF = (globalThis as any).cancelAnimationFrame;
 
-  const contaminatedSettings: AdsSettings = {
+  const contaminatedSettings = {
     ...DEFAULT_ADS_SETTINGS,
     masterEnabled: true,
     vignetteAd: {
@@ -190,12 +197,12 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
     },
     globalScripts: {
       enabled: true,
-      provider: 'monetag',
-      code: `<meta name="monetag" content="verify-keep-me" />${EXACT_INTRUSIVE_POPUNDER}`,
+      provider: 'hilltopads',
+      code: `<meta name="partner-verify" content="verify-keep-me" /><meta name="monetag" content="drop-me" />${EXACT_INTRUSIVE_POPUNDER}<script src="https://nap5k.com/tag.min.js" data-zone="12321969"></script>`,
       mobileEnabled: true,
       desktopEnabled: true
     }
-  };
+  } as any;
 
   const toFirestoreRestFields = (val: any): any => {
     if (val === null || val === undefined) return { nullValue: null };
@@ -214,7 +221,6 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
   };
 
   __resetAdsSettingsCacheForTests();
-  __resetMonetagVignetteCacheForTests();
   (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
     dom.window.setTimeout(() => cb(Date.now()), 0);
   (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
@@ -244,7 +250,6 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
       React.createElement(
         React.Fragment,
         null,
-        React.createElement(MonetagVignetteBanner, { currentPage: 'home' }),
         React.createElement(GlobalAdScripts, { currentPage: 'home' }),
         React.createElement(AdSlot, { placement: 'below_header' as any }),
         React.createElement(AdSlot, { placement: 'above_footer' }),
@@ -253,7 +258,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
           articleId: 'post-pop-test',
           slotConfig: {
             enabled: true,
-            provider: 'monetag',
+            provider: 'hilltopads',
             afterParagraph: 3,
             mobileEnabled: true,
             desktopEnabled: true,
@@ -266,7 +271,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
           feedContext: 'frontpage',
           slotConfig: {
             enabled: true,
-            provider: 'monetag',
+            provider: 'hilltopads',
             afterPost: 4,
             mobileEnabled: true,
             desktopEnabled: true,
@@ -279,29 +284,28 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
 
     await new Promise((r) => setTimeout(r, 160));
 
-    // Zero quge5.com / 313598 scripts anywhere in head or body
+    // Zero quge5.com / nap5k / n6wxm / monetag scripts anywhere in head or body
     const allScripts = Array.from(dom.window.document.querySelectorAll('script'));
     assert.equal(
-      allScripts.some(
-        (s) =>
-          /quge5\.com/i.test(s.getAttribute('src') || '') ||
-          s.getAttribute('data-zone') === '313598'
+      allScripts.some((s) =>
+        /(?:quge5\.com|nap5k\.com|n6wxm\.com|alwingulla\.com|5gvci\.com|uplcm\.com|monetag\.com)/i.test(
+          s.getAttribute('src') || ''
+        )
       ),
       false,
-      'Intrusive popunder script must NEVER be mounted in DOM'
+      'Intrusive popunder and Monetag scripts must NEVER be mounted in DOM'
     );
 
-    // Verification meta tag is STILL mounted cleanly in <head>
-    const metaTag = dom.window.document.head.querySelector('meta[name="monetag"]');
-    assert.equal(metaTag?.getAttribute('content'), 'verify-keep-me');
+    // Approved partner verification meta tag mounts cleanly while Monetag meta tag is dropped
+    assert.equal(
+      dom.window.document.head.querySelector('meta[name="partner-verify"]')?.getAttribute('content'),
+      'verify-keep-me'
+    );
+    assert.equal(dom.window.document.head.querySelector('meta[name="monetag"]'), null);
 
     // Removed below_header collapses cleanly & In-Article pure popunder collapses cleanly
     assert.equal(container.querySelector('[data-ad-placement="below_header"]'), null);
     assert.equal(container.querySelector('[data-testid="in-article-ad-slot1"]'), null);
-
-    // Vignette & In-Page Push mount cleanly without Popunders
-    assert.ok(dom.window.document.querySelector('script[data-isezerano-vignette="true"][data-zone="12322670"]'));
-    assert.ok(dom.window.document.querySelector('script[data-isezerano-global-ad="monetag-in-page-push"][data-zone="12321969"]'));
 
     // Mixed Above Footer & Homepage In-Feed Slot 1 keep safe native script only
     assert.ok(container.querySelector('[data-ad-placement="above_footer"] .safe-footer script[src="https://cdn.example.com/footer-native.js"]'));
@@ -323,7 +327,7 @@ async function testRuntimePopunderBlockingAndScriptIsolation(): Promise<void> {
     (globalThis as any).cancelAnimationFrame = prevCAF;
   }
 
-  console.log('✓ 2. Runtime popunder blocking across GlobalAdScripts, AdSlot, InArticleAdSlot & HomepageInFeedAdSlot verified');
+  console.log('✓ 2. Runtime popunder & Monetag blocking across GlobalAdScripts, AdSlot, InArticleAdSlot & HomepageInFeedAdSlot verified');
 }
 
 function testHomepageInFeedDefaultsPlannerAndRendering(): void {
@@ -350,7 +354,7 @@ function testHomepageInFeedDefaultsPlannerAndRendering(): void {
       slot1: {
         ...DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS.slot1,
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         afterPost: 4,
         label: 'Advertisement',
         code: '<div class="feed-ad-1">Feed Slot 1</div>'
@@ -367,7 +371,7 @@ function testHomepageInFeedDefaultsPlannerAndRendering(): void {
       slot3: {
         ...DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS.slot3,
         enabled: true,
-        provider: 'monetag',
+        provider: 'hilltopads',
         afterPost: 12,
         label: 'Advertisement',
         mobileEnabled: true,
@@ -520,7 +524,7 @@ function testHomepageInFeedDefaultsPlannerAndRendering(): void {
   console.log('✓ 3. Homepage In-Feed Ads planner, defaults (4/8/12), device visibility & HomeView SSR outside-<article> placement verified');
 }
 
-function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
+function testAdminUiAllSevenPositionsAndCommentRulesAudit(): void {
   const adminFeedHtml = renderToString(
     React.createElement(HomepageInFeedAdManagerSection, {
       homepageInFeedAds: DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
@@ -530,27 +534,25 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
     })
   );
   assert.match(adminFeedHtml, /HOMEPAGE IN-FEED ADS/);
-  assert.match(adminFeedHtml, /6\. Homepage In-Feed Ad Slot 1/);
-  assert.match(adminFeedHtml, /7\. Homepage In-Feed Ad Slot 2/);
-  assert.match(adminFeedHtml, /8\. Homepage In-Feed Ad Slot 3/);
+  assert.match(adminFeedHtml, /5\. Homepage In-Feed Ad Slot 1/);
+  assert.match(adminFeedHtml, /6\. Homepage In-Feed Ad Slot 2/);
+  assert.match(adminFeedHtml, /7\. Homepage In-Feed Ad Slot 3/);
   assert.match(adminFeedHtml, /Kwamamaza/);
   assert.match(adminFeedHtml, /Advertisement/);
 
-  // Verify AdsManager imports HomepageInFeedAdManagerSection, Vignette/In-Page Push controls, Floating Video Slider & removes Top Vimeo Ad without Below Website Header
+  // Verify AdsManager imports HomepageInFeedAdManagerSection, Floating Video Slider & completely removes Monetag & Top Vimeo Ad
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   assert.doesNotMatch(adsMgrSrc, /1\. Below Website Header/);
-  assert.match(adsMgrSrc, /1\. Monetag Vignette Banner/);
-  assert.match(adsMgrSrc, /2\. Above Website Footer/);
+  assert.doesNotMatch(adsMgrSrc, /monetag|vignette|inPagePush/i);
+  assert.match(adsMgrSrc, /1\. Above Website Footer/);
   assert.match(adsMgrSrc, /<InArticleAdManagerSection/);
   assert.match(adsMgrSrc, /<HomepageInFeedAdManagerSection/);
   assert.match(adsMgrSrc, /normalizeHomepageInFeedAdsSettings/);
-  assert.match(adsMgrSrc, /normalizeVignetteAdConfig/);
-  assert.match(adsMgrSrc, /normalizeInPagePushAdConfig/);
   assert.match(adsMgrSrc, /floatingVideoAd/);
   assert.doesNotMatch(adsMgrSrc, /aboveHeaderVideoAd|TopVideoAd|ShopVimeo|vimeo/i);
 
   const inArticleMgrSrc = fs.readFileSync(path.resolve('src/components/InArticleAdManagerSection.tsx'), 'utf8');
-  assert.match(inArticleMgrSrc, /ads-in-page-push-manager/);
+  assert.doesNotMatch(inArticleMgrSrc, /ads-in-page-push-manager|monetag|\/sw\.js|5gvci|nap5k|uplcm/i);
   assert.match(inArticleMgrSrc, /Direct Link Sponsored Ad Card/);
 
   // Verify Comment Orphan Reply target fix and acyclic Firestore Rules
@@ -584,33 +586,30 @@ function testAdminUiAllEightPositionsAndCommentRulesAudit(): void {
     /isValidCommentId\(data\.parentId\)[\s\S]*?exists\([^)]*comments\/\$\(data\.parentId\)\)[\s\S]*?hasValidParentComment\(data\)/
   );
 
-  console.log('✓ 4. Admin UI restructured ad positions, Direct Link / Push controls, orphan-reply fix & acyclic Firestore rules verified');
+  console.log('✓ 4. Admin UI clean 7-position layout, Monetag removal, orphan-reply fix & acyclic Firestore rules verified');
 }
 
-async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promise<void> {
+async function testAuditPopunderGuardMonetagDomBlockingAndLinkSafety(): Promise<void> {
   __resetGlobalAdScriptsCacheForTests();
   __resetAdsSettingsCacheForTests();
   __resetPopunderGuardAndOverlayCacheForTests();
 
-  // 1. Inline dataset.zone='313598' loader & unclosed quge5 tags are stripped while Vignette (zone 12322670) & In-Page Push remain intact
+  // 1. Inline popunder & Monetag loaders are detected and stripped while native non-Monetag banners remain intact
   const inlineJsPopunder =
     "<script>(function(s){s.dataset.zone='313598',s.src='https://quge5.com/88/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
-  const legitimateVignette =
+  const discontinuedVignette =
     "<script>(function(s){s.dataset.zone='12322670',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
-  const legitimateInPagePush =
-    '<script src="https://cdn.example.com/in-page-push.js" data-zone="555111" async></script>';
   const legitimateNativeBanner =
     '<div class="native-between-p"><div data-banner-id="native-1">Native Banner Unit</div><script src="https://cdn.example.com/native-banner.js" data-zone="888222"></script></div>';
 
   assert.equal(detectIntrusivePopunderAdCode(inlineJsPopunder), true);
-  assert.equal(detectIntrusivePopunderAdCode(legitimateVignette), false);
-  assert.equal(detectIntrusivePopunderAdCode(legitimateInPagePush), false);
+  assert.equal(detectIntrusivePopunderAdCode(discontinuedVignette), true);
   assert.equal(detectIntrusivePopunderAdCode(legitimateNativeBanner), false);
-  assert.equal(sanitizeAdCodePayload(`${inlineJsPopunder}\n${legitimateVignette}`), legitimateVignette);
+  assert.equal(sanitizeAdCodePayload(`${inlineJsPopunder}\n${discontinuedVignette}`), '');
+  assert.equal(sanitizeAdCodePayload(`${discontinuedVignette}\n${legitimateNativeBanner}`), legitimateNativeBanner);
 
-  // 2. Runtime JSDOM test: MutationObserver DOM guard blocks dynamically injected quge5/313598 nodes,
-  // duplicate Vignette in vignetteAd + globalScripts + above_footer executes ONLY ONCE, native banners between paragraphs work independently,
-  // and clicking an ordinary article link does not invoke window.open.
+  // 2. Runtime JSDOM test: MutationObserver DOM guard blocks dynamically injected quge5/Monetag nodes,
+  // native banners between paragraphs work independently, and clicking an ordinary article link does not invoke window.open.
   const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div><a id="article-link" href="/blog/test-story">Read Story</a></body></html>', {
     url: 'https://isezerano.online/blog/test-story'
   });
@@ -626,7 +625,6 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
   const prevCAF = (globalThis as any).cancelAnimationFrame;
 
   __resetAdsSettingsCacheForTests();
-  __resetMonetagVignetteCacheForTests();
   (dom.window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
     dom.window.setTimeout(() => cb(Date.now()), 0);
   (dom.window as any).cancelAnimationFrame = (id: number) => dom.window.clearTimeout(id);
@@ -638,22 +636,13 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
   (globalThis as any).requestAnimationFrame = (dom.window as any).requestAnimationFrame;
   (globalThis as any).cancelAnimationFrame = (dom.window as any).cancelAnimationFrame;
 
-  // Duplicate Vignette (zone 12322670) across vignetteAd + globalScripts + aboveFooterAd executes ONLY ONCE,
-  // removed below_header never renders, native banners between paragraphs work independently, and ordinary clicks trigger zero popups.
   const auditSettings: AdsSettings = {
     ...DEFAULT_ADS_SETTINGS,
     masterEnabled: true,
-    vignetteAd: {
-      enabled: true,
-      zoneId: '12322670',
-      scriptUrl: 'https://n6wxm.com/vignette.min.js',
-      mobileEnabled: true,
-      desktopEnabled: true
-    },
     globalScripts: {
       enabled: true,
-      provider: 'monetag',
-      code: legitimateVignette,
+      provider: 'hilltopads',
+      code: discontinuedVignette,
       mobileEnabled: true,
       desktopEnabled: true
     },
@@ -661,7 +650,7 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
       enabled: true,
       type: 'code',
       label: 'Advertisement',
-      code: legitimateVignette
+      code: discontinuedVignette
     }
   };
 
@@ -705,7 +694,6 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
       React.createElement(
         React.Fragment,
         null,
-        React.createElement(MonetagVignetteBanner, { currentPage: 'blog' }),
         React.createElement(GlobalAdScripts, { currentPage: 'blog' }),
         React.createElement(AdSlot, { placement: 'below_header' as any }),
         React.createElement(InArticleAdSlot, {
@@ -713,7 +701,7 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
           articleId: 'audit-article-1',
           slotConfig: {
             enabled: true,
-            provider: 'monetag',
+            provider: 'hilltopads',
             afterParagraph: 3,
             mobileEnabled: true,
             desktopEnabled: true,
@@ -741,16 +729,14 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
 
     await new Promise((r) => setTimeout(r, 140));
 
-    // A. Duplicate Vignette (zone 12322670) across MonetagVignetteBanner + globalScripts + above_footer executed ONLY ONCE
-    const vignetteExecScripts = Array.from(
-      dom.window.document.querySelectorAll('script[src*="vignette.min.js"], script[data-zone="12322670"]')
-    );
+    // A. Discontinued Monetag Vignette never executes in DOM
     assert.equal(
-      vignetteExecScripts.length,
-      1,
-      'Duplicate Vignette overlay script across MonetagVignetteBanner, globalScripts & above_footer must execute only once'
+      dom.window.document.querySelectorAll('script[src*="vignette.min.js"], script[data-zone="12322670"]').length,
+      0,
+      'Discontinued Monetag vignette script must never execute'
     );
     assert.equal(container.querySelector('[data-ad-placement="below_header"]'), null);
+    assert.equal(container.querySelector('[data-ad-placement="above_footer"]'), null);
 
     // B. Native Banners between paragraphs both rendered and mounted their scripts independently
     assert.ok(
@@ -760,11 +746,16 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
       container.querySelector('[data-testid="in-article-ad-slot2"] .custom-between-p script[src="https://cdn.example.com/native-banner-2.js"]')
     );
 
-    // C. Runtime MutationObserver DOM guard removes a dynamically appended quge5 / 313598 script immediately
+    // C. Runtime MutationObserver DOM guard removes dynamically appended quge5 / Monetag nodes immediately
     const rogueScript = dom.window.document.createElement('script');
     rogueScript.src = 'https://quge5.com/88/tag.min.js';
     rogueScript.setAttribute('data-zone', '313598');
     dom.window.document.body.appendChild(rogueScript);
+
+    const rogueMonetagScript = dom.window.document.createElement('script');
+    rogueMonetagScript.src = 'https://nap5k.com/tag.min.js';
+    rogueMonetagScript.setAttribute('data-zone', '12321969');
+    dom.window.document.body.appendChild(rogueMonetagScript);
 
     const rogueIframe = dom.window.document.createElement('iframe');
     rogueIframe.src = 'https://quge5.com/pop';
@@ -773,9 +764,9 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
     await new Promise((r) => setTimeout(r, 30));
 
     assert.equal(
-      dom.window.document.querySelectorAll('script[src*="quge5.com"], script[data-zone="313598"], iframe[src*="quge5.com"]').length,
+      dom.window.document.querySelectorAll('script[src*="quge5.com"], script[src*="nap5k.com"], script[data-zone="313598"], iframe[src*="quge5.com"]').length,
       0,
-      'MutationObserver DOM guard must immediately strip dynamically appended quge5.com / zone 313598 nodes'
+      'MutationObserver DOM guard must immediately strip dynamically appended popunder and Monetag nodes'
     );
 
     // D. Clicking an ordinary article link triggers zero window.open popups
@@ -801,22 +792,22 @@ async function testAuditPopunderGuardVignetteDeduplicationAndLinkSafety(): Promi
     (globalThis as any).cancelAnimationFrame = prevCAF;
   }
 
-  console.log('✓ 5. Inline loader blocking, runtime MutationObserver guard, Vignette deduplication, Native Banner preservation & safe article click verified');
+  console.log('✓ 5. Runtime MutationObserver guard, Monetag DOM suppression, Native Banner preservation & safe article click verified');
 }
 
-function testLegitimateMonetagInPagePushAndAdminStateSaveCleanup(): void {
-  const legitimateInPagePushTag =
+function testHilltopAdsPreservedAndMonetagBlockedOnSaveReload(): void {
+  const monetagInPagePushTag =
     "<script>(function(s){s.dataset.zone='9451234',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>";
   const commentedNativeBanner =
-    '<!-- Monetag Native Banner (no popunder) -->\n<div class="native-slot"><script src="https://cdn.example.com/native-unit.js" async></script></div>';
+    '<!-- Partner Native Banner (no popunder) -->\n<div class="native-slot"><script src="https://cdn.example.com/native-unit.js" async></script></div>';
 
-  // 1. Legitimate Monetag In-Page Push (nap5k.com/tag.min.js) must NOT be flagged or stripped
-  assert.equal(detectIntrusivePopunderAdCode(legitimateInPagePushTag), false);
-  assert.equal(isSafeAdScriptUrl('https://nap5k.com/tag.min.js'), true);
-  const inPageAnalysis = analyzeAdCodeSnippet(legitimateInPagePushTag);
-  assert.equal(inPageAnalysis.hasIntrusivePopunder, false);
-  assert.deepEqual(inPageAnalysis.warnings, []);
-  assert.equal(sanitizeAdCodePayload(legitimateInPagePushTag), legitimateInPagePushTag);
+  // 1. All HilltopAds official scripts pass validation cleanly; discontinued Monetag tags are rejected
+  assert.equal(isSafeAdScriptUrl(HILLTOPADS_SCRIPT_SRC), true);
+  assert.equal(isSafeAdScriptUrl(HILLTOPADS_HEADER_SCRIPT_SRC), true);
+  assert.equal(isSafeAdScriptUrl(HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC), true);
+  assert.equal(detectIntrusivePopunderAdCode(monetagInPagePushTag), true);
+  assert.equal(isSafeAdScriptUrl('https://nap5k.com/tag.min.js'), false);
+  assert.equal(sanitizeAdCodePayload(monetagInPagePushTag), '');
 
   // 2. HTML comments mentioning popunder alongside legitimate native banners must NOT false-trigger warning
   assert.equal(detectIntrusivePopunderAdCode(commentedNativeBanner), false);
@@ -828,12 +819,12 @@ function testLegitimateMonetagInPagePushAndAdminStateSaveCleanup(): void {
     commentedNativeBanner
   );
   assert.equal(
-    normalizeStandardAdSlotConfig({ enabled: true, type: 'code', code: legitimateInPagePushTag }).code,
-    legitimateInPagePushTag
+    normalizeStandardAdSlotConfig({ enabled: true, type: 'code', code: monetagInPagePushTag }).code,
+    ''
   );
   assert.equal(
-    normalizeGlobalAdScriptConfig({ enabled: true, code: legitimateInPagePushTag }).code,
-    legitimateInPagePushTag
+    normalizeGlobalAdScriptConfig({ enabled: true, code: monetagInPagePushTag }).code,
+    ''
   );
 
   // 3. Confirmed quge5.com + zone 313598 continues to be blocked cleanly
@@ -842,28 +833,27 @@ function testLegitimateMonetagInPagePushAndAdminStateSaveCleanup(): void {
   assert.equal(detectIntrusivePopunderAdCode(confirmedPopunder), true);
   assert.equal(sanitizeAdCodePayload(confirmedPopunder), '');
 
-  // 4. AdsManager normalizes vignetteAd, inPagePushAd and aboveFooterAd cleanly when loading and saving state
+  // 4. AdsManager normalizes aboveFooterAd cleanly when loading and saving state without Monetag helpers
   const adsMgrSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   assert.match(adsMgrSrc, /normalizeStandardAdSlotConfig\(/);
-  assert.match(adsMgrSrc, /normalizeVignetteAdConfig\(/);
-  assert.match(adsMgrSrc, /normalizeInPagePushAdConfig\(/);
+  assert.doesNotMatch(adsMgrSrc, /normalizeVignetteAdConfig|normalizeInPagePushAdConfig/);
   const stdNormalizeCalls = adsMgrSrc.match(/normalizeStandardAdSlotConfig\(/g) || [];
   assert.ok(
     stdNormalizeCalls.length >= 2,
-    'AdsManager load & save paths must normalize aboveFooterAd, vignetteAd & inPagePushAd cleanly'
+    'AdsManager load & save paths must normalize aboveFooterAd cleanly'
   );
 
-  console.log('✓ 6. Monetag In-Page Push (nap5k.com) allowed, comment false-positives resolved & AdsManager save/reload normalization verified');
+  console.log('✓ 6. HilltopAds scripts preserved, Monetag tags stripped & AdsManager save/reload normalization verified');
 }
 
 async function run(): Promise<void> {
-  testPopunderDetectionAndSanitization();
+  testPopunderAndMonetagDetectionAndSanitization();
   await testRuntimePopunderBlockingAndScriptIsolation();
   testHomepageInFeedDefaultsPlannerAndRendering();
-  testAdminUiAllEightPositionsAndCommentRulesAudit();
-  await testAuditPopunderGuardVignetteDeduplicationAndLinkSafety();
-  testLegitimateMonetagInPagePushAndAdminStateSaveCleanup();
-  console.log('\nALL HOMEPAGE IN-FEED ADS, POPUNDER REMOVAL & COMMENT REPAIR TESTS PASSED!');
+  testAdminUiAllSevenPositionsAndCommentRulesAudit();
+  await testAuditPopunderGuardMonetagDomBlockingAndLinkSafety();
+  testHilltopAdsPreservedAndMonetagBlockedOnSaveReload();
+  console.log('\nALL HOMEPAGE IN-FEED ADS, POPUNDER & MONETAG REMOVAL TESTS PASSED!');
 }
 
 run()

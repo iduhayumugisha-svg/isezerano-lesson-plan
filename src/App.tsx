@@ -7,7 +7,6 @@ import { HomeView } from './views/HomeView';
 import { AdSlot } from './components/AdSlot';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { GlobalAdScripts } from './components/GlobalAdScripts';
-import { MonetagVignetteBanner } from './components/MonetagVignetteBanner';
 import { HilltopAdsHeaderBanner } from './components/HilltopAdsHeaderBanner';
 
 // Code-split Secondary Public Views & Modals
@@ -287,8 +286,7 @@ function AppContent() {
         color: 'var(--app-body-text)'
       }}
     >
-      {/* Site-Wide Monetag Vignette & Global Head Scripts (skipped on /admin) */}
-      <MonetagVignetteBanner currentPage={currentPage} />
+      {/* Site-Wide Global Head Scripts & HilltopAds MultiTag Video Slider (skipped on /admin) */}
       <GlobalAdScripts currentPage={currentPage} />
 
       {/* 1. Unified Sticky Top Area: Global Newspaper Header */}

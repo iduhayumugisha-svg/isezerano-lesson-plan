@@ -42,20 +42,17 @@ function flushTicks(ms = 25): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function testArticleOnlyPlacementAndMonetagPreservation(): void {
+function testArticleOnlyPlacementAndMonetagRemoval(): void {
   const blogViewSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
   const homeViewSrc = fs.readFileSync(path.resolve('src/views/HomeView.tsx'), 'utf8');
   const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
   const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const firebaseJson = fs.readFileSync(path.resolve('firebase.json'), 'utf8');
+  const adsManagerSrc = fs.readFileSync(path.resolve('src/components/AdsManager.tsx'), 'utf8');
   const globalAdScriptsSrc = fs.readFileSync(
     path.resolve('src/components/GlobalAdScripts.tsx'),
     'utf8'
   );
-  const monetagBannerSrc = fs.readFileSync(
-    path.resolve('src/components/MonetagVignetteBanner.tsx'),
-    'utf8'
-  );
-  const swSrc = fs.readFileSync(path.resolve('public/sw.js'), 'utf8');
 
   // Rendered strictly inside BlogView full article view, only once, between action bar and comments
   const matches = blogViewSrc.match(/<HilltopAdsArticleBanner\b/g) || [];
@@ -109,18 +106,25 @@ function testArticleOnlyPlacementAndMonetagPreservation(): void {
     'HomeView must not duplicate HilltopAdsHeaderBanner'
   );
 
-  // Existing Monetag integration and HilltopAds domain verification file remain intact
-  assert.match(appSrc, /<MonetagVignetteBanner currentPage=\{currentPage\} \/>/);
+  // Monetag integration permanently removed; HilltopAds domain verification file and non-Monetag slots intact
+  assert.equal(fs.existsSync(path.resolve('public/sw.js')), false, 'public/sw.js must be deleted');
+  assert.equal(
+    fs.existsSync(path.resolve('src/components/MonetagVignetteBanner.tsx')),
+    false,
+    'MonetagVignetteBanner.tsx must be deleted'
+  );
+  assert.doesNotMatch(firebaseJson, /"\/sw\.js"/);
+  assert.doesNotMatch(appSrc, /MonetagVignetteBanner|monetag/i);
+  assert.doesNotMatch(adsManagerSrc, /monetag|vignette|inPagePush/i);
+  assert.doesNotMatch(globalAdScriptsSrc, /monetag-in-page-push|inPagePushConfig/);
   assert.match(appSrc, /<GlobalAdScripts currentPage=\{currentPage\} \/>/);
   assert.match(appSrc, /<AdSlot placement="above_footer"/);
-  assert.match(monetagBannerSrc, /MonetagVignetteBanner/);
-  assert.match(swSrc, /zoneId/);
   assert.equal(
     fs.readFileSync(path.resolve('public/f5ed69878c42b4ed0e92.txt'), 'utf8').trim(),
     'f5ed69878c42b4ed0e92'
   );
 
-  console.log('✓ 1. Article 300x250 & Header 300x100 placement + Monetag preservation verified');
+  console.log('✓ 1. Article 300x250 & Header 300x100 placement + Monetag complete removal verified');
 }
 
 function testPopunderGuardCompatibility(): void {
@@ -686,7 +690,7 @@ async function testMultiTagVideoSliderRuntimeSingleLoadAndAdminGuard(): Promise<
 }
 
 async function runSuite(): Promise<void> {
-  testArticleOnlyPlacementAndMonetagPreservation();
+  testArticleOnlyPlacementAndMonetagRemoval();
   testPopunderGuardCompatibility();
   await testRuntimeScriptInjectionStrictModeAndResponsiveDimensions();
   await testAdminPathSafetyGuard();

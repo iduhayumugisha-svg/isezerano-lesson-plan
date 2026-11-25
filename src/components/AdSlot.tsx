@@ -225,7 +225,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
   const isAboveFooter = (placement as string) === 'above_footer';
   const slotConfig = isAboveFooter ? adsSettings.aboveFooterAd : undefined;
 
-  // Responsive mobile layout fit & proportional sizing for banner/code embeds (Monetag, AdSense, Adsterra, HTML)
+  // Responsive mobile layout fit & proportional sizing for banner/code embeds (HilltopAds, AdSense, Adsterra, HTML)
   const syncResponsiveEmbedLayout = useCallback(() => {
     const outer = outerWrapperRef.current;
     const container = codeContainerRef.current;
@@ -472,7 +472,7 @@ export const AdSlot: React.FC<AdSlotProps> = ({ placement, className = '' }) => 
             }
           });
         } else {
-          // Async container tags (e.g. Monetag/Adsterra Native Banner) inject immediately at exact DOM location without blocking other slots
+          // Async container tags (e.g. HilltopAds/Adsterra Native Banner) inject immediately at exact DOM location without blocking other slots
           scriptTargets.forEach(({ oldScript, placeholder }) => {
             if (cancelled || !container.isConnected) return;
             const newScript = buildExecutableScriptElement(oldScript);

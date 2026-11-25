@@ -750,7 +750,8 @@ async function testHeaderOnlyFixedAndNaturalAdScrolling() {
   assert.match(appSrc, /min-h-screen flex flex-col w-full antialiased overflow-x-clip/);
   assert.doesNotMatch(appSrc, /app-viewport-shell|app-main-scroll|MAIN_SCROLL_CONTAINER_ID/);
 
-  assert.match(appSrc, /<MonetagVignetteBanner currentPage=\{currentPage\} \/>/);
+  assert.doesNotMatch(appSrc, /MonetagVignetteBanner|monetag/i);
+  assert.match(appSrc, /<HilltopAdsHeaderBanner currentPage=\{currentPage\} \/>/);
   assert.doesNotMatch(appSrc, /<AdSlot placement="below_header"/);
 
   const headerPos = appSrc.indexOf('<WebsiteHeader');

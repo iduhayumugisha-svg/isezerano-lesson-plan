@@ -46,19 +46,19 @@ const SLOT_METADATA: ReadonlyArray<{
 }> = [
   {
     key: 'slot1',
-    title: '6. Homepage In-Feed Ad Slot 1',
+    title: '5. Homepage In-Feed Ad Slot 1',
     description:
       'Placed cleanly between published article cards near the top of your Homepage feed (default: after article 4).'
   },
   {
     key: 'slot2',
-    title: '7. Homepage In-Feed Ad Slot 2',
+    title: '6. Homepage In-Feed Ad Slot 2',
     description:
       'Independent middle feed placement positioned between article cards on desktop and mobile (default: after article 8).'
   },
   {
     key: 'slot3',
-    title: '8. Homepage In-Feed Ad Slot 3',
+    title: '7. Homepage In-Feed Ad Slot 3',
     description:
       'Deep homepage feed slot appearing further down between article cards (default: after article 12).'
   }

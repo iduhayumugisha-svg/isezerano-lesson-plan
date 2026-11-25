@@ -1,14 +1,18 @@
 import {
   AdsSettings,
   InArticleAdSlotConfig,
-  InArticleAdSlotKey
+  InArticleAdSlotKey,
+  InArticleVastVideoAdConfig
 } from '../types/platform';
 import {
   isInArticleSlotRenderable,
-  normalizeInArticleAdsSettings
+  normalizeInArticleAdsSettings,
+  normalizeInArticleVastVideoAdConfig
 } from './inArticleAdUtils';
+import { isSafeVastHttpsUrl } from './vastParser';
 
 export type AdDeviceScope = 'mobile' | 'desktop' | 'all';
+export type InArticleVastPlacementKey = 'vast1' | 'vast2';
 
 export type ArticleRenderSegment =
   | {
@@ -21,12 +25,20 @@ export type ArticleRenderSegment =
       key: string;
       slotId: InArticleAdSlotKey;
       slotConfig: InArticleAdSlotConfig;
+    }
+  | {
+      type: 'vast_video';
+      key: string;
+      placementKey: InArticleVastPlacementKey;
+      afterParagraph: number;
+      vastConfig: InArticleVastVideoAdConfig;
     };
 
 export interface ArticleAdInjectionResult {
   segments: ArticleRenderSegment[];
   totalParagraphs: number;
   placedSlots: InArticleAdSlotKey[];
+  placedVastPlacements: InArticleVastPlacementKey[];
   skippedSlots: Array<{ slotId: InArticleAdSlotKey; reason: string }>;
 }
 
@@ -395,9 +407,18 @@ const isSlotAllowedOnDevice = (
   return slot.mobileEnabled || slot.desktopEnabled;
 };
 
+const isVastAllowedOnDevice = (
+  vastConfig: InArticleVastVideoAdConfig,
+  deviceType: AdDeviceScope
+): boolean => {
+  if (deviceType === 'mobile') return vastConfig.mobileEnabled;
+  if (deviceType === 'desktop') return vastConfig.desktopEnabled;
+  return vastConfig.mobileEnabled || vastConfig.desktopEnabled;
+};
+
 /**
- * Dynamically inserts enabled In-Article Ad Slots 1, 2, 3 at safe block boundaries
- * during DOM rendering WITHOUT modifying stored article HTML or SEO metadata.
+ * Dynamically inserts enabled In-Article Ad Slots 1, 2, 3 and VAST 3.0 Video placements
+ * at safe paragraph boundaries during DOM rendering WITHOUT modifying stored article HTML or SEO metadata.
  */
 export function buildArticleRenderSegments(params: {
   html: string;
@@ -412,6 +433,7 @@ export function buildArticleRenderSegments(params: {
       segments: html ? [{ type: 'html', key: 'html-0', html }] : [],
       totalParagraphs: 0,
       placedSlots: [],
+      placedVastPlacements: [],
       skippedSlots: []
     };
   }
@@ -424,11 +446,18 @@ export function buildArticleRenderSegments(params: {
       segments: [{ type: 'html', key: 'html-all', html }],
       totalParagraphs,
       placedSlots: [],
+      placedVastPlacements: [],
       skippedSlots: []
     };
   }
 
   const inArticleAds = normalizeInArticleAdsSettings(adsSettings.inArticleAds);
+  const vastConfig = normalizeInArticleVastVideoAdConfig(adsSettings.inArticleVastVideoAd);
+  const isVastReady =
+    vastConfig.enabled &&
+    isSafeVastHttpsUrl(vastConfig.vastTagUrl) &&
+    isVastAllowedOnDevice(vastConfig, deviceType);
+
   const skippedSlots: Array<{ slotId: InArticleAdSlotKey; reason: string }> = [];
 
   const activeCandidates = SLOT_ORDER.map((slotId, orderIndex) => ({
@@ -446,13 +475,66 @@ export function buildArticleRenderSegments(params: {
     return true;
   });
 
-  if (activeCandidates.length === 0) {
+  if (activeCandidates.length === 0 && !isVastReady) {
     return {
       segments: [{ type: 'html', key: 'html-all', html }],
       totalParagraphs,
       placedSlots: [],
+      placedVastPlacements: [],
       skippedSlots
     };
+  }
+
+  type InjectedItem =
+    | {
+        kind: 'ad';
+        slotId: InArticleAdSlotKey;
+        config: InArticleAdSlotConfig;
+        afterParagraph: number;
+      }
+    | {
+        kind: 'vast_video';
+        placementKey: InArticleVastPlacementKey;
+        afterParagraph: number;
+        vastConfig: InArticleVastVideoAdConfig;
+      };
+
+  const blockIndexToInjection = new Map<number, InjectedItem>();
+  const placedVastPlacements: InArticleVastPlacementKey[] = [];
+  const occupiedParagraphs = new Set<number>();
+
+  // Schedule VAST 3.0 Video placements first at safe prose paragraph boundaries
+  if (isVastReady) {
+    const vastTargets: Array<{ key: InArticleVastPlacementKey; afterParagraph: number }> = [
+      { key: 'vast1', afterParagraph: vastConfig.afterParagraph }
+    ];
+    if (vastConfig.secondPlacementEnabled) {
+      vastTargets.push({
+        key: 'vast2',
+        afterParagraph: vastConfig.secondAfterParagraph
+      });
+    }
+
+    for (const target of vastTargets) {
+      if (totalParagraphs < 2 || target.afterParagraph >= totalParagraphs) {
+        continue;
+      }
+      if (occupiedParagraphs.has(target.afterParagraph)) {
+        continue;
+      }
+      const blockIndex = paragraphBlockIndices[target.afterParagraph - 1];
+      if (blockIndex === undefined || blockIndexToInjection.has(blockIndex)) {
+        continue;
+      }
+      blockIndexToInjection.set(blockIndex, {
+        kind: 'vast_video',
+        placementKey: target.key,
+        afterParagraph: target.afterParagraph,
+        vastConfig
+      });
+      occupiedParagraphs.add(target.afterParagraph);
+      placedVastPlacements.push(target.key);
+    }
   }
 
   // Order slots by configured paragraph number so spacing rules remain consistent
@@ -463,10 +545,6 @@ export function buildArticleRenderSegments(params: {
     return a.orderIndex - b.orderIndex;
   });
 
-  const blockIndexToSlot = new Map<
-    number,
-    { slotId: InArticleAdSlotKey; config: InArticleAdSlotConfig }
-  >();
   const placedSlots: InArticleAdSlotKey[] = [];
   let lastPlacedAfterParagraph: number | null = null;
 
@@ -483,7 +561,10 @@ export function buildArticleRenderSegments(params: {
     }
 
     // Anti-crowding guard: prevent two ads from appearing adjacent at the same boundary
-    if (lastPlacedAfterParagraph !== null && targetParagraph <= lastPlacedAfterParagraph) {
+    if (
+      (lastPlacedAfterParagraph !== null && targetParagraph <= lastPlacedAfterParagraph) ||
+      occupiedParagraphs.has(targetParagraph)
+    ) {
       skippedSlots.push({
         slotId: candidate.slotId,
         reason: 'adjacent_ad_prevented'
@@ -492,7 +573,7 @@ export function buildArticleRenderSegments(params: {
     }
 
     const blockIndex = paragraphBlockIndices[targetParagraph - 1];
-    if (blockIndex === undefined || blockIndexToSlot.has(blockIndex)) {
+    if (blockIndex === undefined || blockIndexToInjection.has(blockIndex)) {
       skippedSlots.push({
         slotId: candidate.slotId,
         reason: 'adjacent_ad_prevented'
@@ -500,19 +581,23 @@ export function buildArticleRenderSegments(params: {
       continue;
     }
 
-    blockIndexToSlot.set(blockIndex, {
+    blockIndexToInjection.set(blockIndex, {
+      kind: 'ad',
       slotId: candidate.slotId,
-      config: candidate.config
+      config: candidate.config,
+      afterParagraph: targetParagraph
     });
+    occupiedParagraphs.add(targetParagraph);
     placedSlots.push(candidate.slotId);
     lastPlacedAfterParagraph = targetParagraph;
   }
 
-  if (blockIndexToSlot.size === 0) {
+  if (blockIndexToInjection.size === 0) {
     return {
       segments: [{ type: 'html', key: 'html-all', html }],
       totalParagraphs,
       placedSlots: [],
+      placedVastPlacements: [],
       skippedSlots
     };
   }
@@ -533,15 +618,26 @@ export function buildArticleRenderSegments(params: {
 
   blocks.forEach((block, index) => {
     htmlBuffer += block;
-    const slotMatch = blockIndexToSlot.get(index);
-    if (slotMatch) {
-      flushHtmlBuffer(`before-${slotMatch.slotId}-${index}`);
-      segments.push({
-        type: 'ad',
-        key: `ad-${slotMatch.slotId}-p${slotMatch.config.afterParagraph}`,
-        slotId: slotMatch.slotId,
-        slotConfig: slotMatch.config
-      });
+    const match = blockIndexToInjection.get(index);
+    if (match) {
+      if (match.kind === 'vast_video') {
+        flushHtmlBuffer(`before-${match.placementKey}-${index}`);
+        segments.push({
+          type: 'vast_video',
+          key: `vast-${match.placementKey}-p${match.afterParagraph}`,
+          placementKey: match.placementKey,
+          afterParagraph: match.afterParagraph,
+          vastConfig: match.vastConfig
+        });
+      } else {
+        flushHtmlBuffer(`before-${match.slotId}-${index}`);
+        segments.push({
+          type: 'ad',
+          key: `ad-${match.slotId}-p${match.afterParagraph}`,
+          slotId: match.slotId,
+          slotConfig: match.config
+        });
+      }
     }
   });
 
@@ -551,6 +647,7 @@ export function buildArticleRenderSegments(params: {
     segments,
     totalParagraphs,
     placedSlots,
+    placedVastPlacements,
     skippedSlots
   };
 }

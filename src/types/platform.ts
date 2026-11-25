@@ -9,7 +9,7 @@ export { DEFAULT_ADS_DISPLAY_SETTINGS };
 // ==================== ADS TYPES ====================
 export type AdPlacement = 'above_footer';
 export type AdType = 'code' | 'banner';
-export type AdProviderId = 'monetag' | 'adscod' | 'other';
+export type AdProviderId = 'hilltopads' | 'adscod' | 'other';
 export type InArticleAdSlotKey = 'slot1' | 'slot2' | 'slot3';
 export type InArticleAdFormat = 'code' | 'direct_link';
 export type HomepageInFeedAdSlotKey = 'slot1' | 'slot2' | 'slot3';
@@ -75,7 +75,7 @@ export interface GlobalAdScriptConfig {
   enabled: boolean;
   provider: AdProviderId;
   providerLabel?: string;
-  code: string; // Single-execution site-wide head tags (e.g., Monetag verification meta, in-page/non-popup native tags)
+  code: string; // Single-execution site-wide head tags (e.g., verification meta tags, approved non-popup native tags)
   mobileEnabled: boolean;
   desktopEnabled: boolean;
   updatedAt?: string;
@@ -103,24 +103,6 @@ export const DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS: Record<HomepageInFeedAdSlo
   slot3: 12
 };
 
-export interface MonetagVignetteConfig {
-  enabled: boolean;
-  zoneId: string;
-  scriptUrl: string;
-  mobileEnabled: boolean;
-  desktopEnabled: boolean;
-  updatedAt?: string;
-}
-
-export interface MonetagInPagePushConfig {
-  enabled: boolean;
-  zoneId: string;
-  scriptUrl: string;
-  mobileEnabled: boolean;
-  desktopEnabled: boolean;
-  updatedAt?: string;
-}
-
 export const createDefaultInArticleDirectLinkCardConfig = (): InArticleDirectLinkCardConfig => ({
   directLinkUrl: '',
   headline: '',
@@ -134,7 +116,7 @@ export const createDefaultInArticleSlotConfig = (
   slotKey: InArticleAdSlotKey
 ): InArticleAdSlotConfig => ({
   enabled: false,
-  provider: 'monetag',
+  provider: 'hilltopads',
   providerLabel: '',
   adFormat: 'code',
   code: '',
@@ -155,7 +137,7 @@ export const createDefaultHomepageInFeedSlotConfig = (
   slotKey: HomepageInFeedAdSlotKey
 ): HomepageInFeedAdSlotConfig => ({
   enabled: false,
-  provider: 'monetag',
+  provider: 'hilltopads',
   providerLabel: '',
   code: '',
   afterPost: DEFAULT_HOMEPAGE_IN_FEED_SLOT_POSITIONS[slotKey],
@@ -172,31 +154,18 @@ export const DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS: HomepageInFeedAdsSettings = 
 
 export const DEFAULT_GLOBAL_AD_SCRIPT_CONFIG: GlobalAdScriptConfig = {
   enabled: false,
-  provider: 'monetag',
+  provider: 'hilltopads',
   providerLabel: '',
   code: '',
   mobileEnabled: true,
   desktopEnabled: true
 };
 
-export const DEFAULT_MONETAG_VIGNETTE_CONFIG: MonetagVignetteConfig = {
-  enabled: false,
-  zoneId: '',
-  scriptUrl: '',
-  mobileEnabled: true,
-  desktopEnabled: true
-};
-
-export const DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG: MonetagInPagePushConfig = {
-  enabled: false,
-  zoneId: '',
-  scriptUrl: '',
-  mobileEnabled: true,
-  desktopEnabled: true
-};
-
 export const HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC =
   '//conventionalresponse.com/bAXuVDs/d.GjlE0NYvWHcM/pe/m_9OuoZNUQlTkfP/Tocs2jNKTXcy4tObT/MPtQN-zEYB1kNBzvgz5DNBwP';
+
+export const HILLTOPADS_IN_ARTICLE_VAST_TAG_URL =
+  'https://sadpicture.com/dUmpF.zwdDGrNEv/Z/GsUo/yebmr9guvZiUPl/kHPJTxc_2BNFTakQxaMszhM/t/NjzCYv1oO_TcE_zwNjwm';
 
 export interface FloatingVideoAdConfig {
   enabled: boolean;
@@ -213,17 +182,43 @@ export const DEFAULT_FLOATING_VIDEO_AD_CONFIG: FloatingVideoAdConfig = {
   scriptUrl: HILLTOPADS_MULTITAG_VIDEO_SLIDER_SCRIPT_SRC
 };
 
+export interface InArticleVastVideoAdConfig {
+  enabled: boolean;
+  provider: 'hilltopads';
+  vastTagUrl: string;
+  afterParagraph: number;
+  secondPlacementEnabled: boolean;
+  secondAfterParagraph: number;
+  autoplayMuted: boolean;
+  mobileEnabled: boolean;
+  desktopEnabled: boolean;
+  label?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG: InArticleVastVideoAdConfig = {
+  enabled: false,
+  provider: 'hilltopads',
+  vastTagUrl: HILLTOPADS_IN_ARTICLE_VAST_TAG_URL,
+  afterParagraph: 3,
+  secondPlacementEnabled: false,
+  secondAfterParagraph: 8,
+  autoplayMuted: true,
+  mobileEnabled: true,
+  desktopEnabled: true,
+  label: 'Sponsored Video'
+};
+
 export interface AdsSettings {
   masterEnabled: boolean; // Master toggle: false by default
   /** @deprecated Removed from UI & layout; kept optional only for legacy Firestore migration */
   belowHeaderAd?: AdSlotConfig;
   aboveFooterAd: AdSlotConfig;
-  vignetteAd?: MonetagVignetteConfig;
-  inPagePushAd?: MonetagInPagePushConfig;
   inArticleAds?: InArticleAdsSettings;
   homepageInFeedAds?: HomepageInFeedAdsSettings;
   globalScripts?: GlobalAdScriptConfig;
   floatingVideoAd?: FloatingVideoAdConfig;
+  inArticleVastVideoAd?: InArticleVastVideoAdConfig;
   displaySettings?: AdsDisplaySettings;
   updatedAt?: string;
   updatedBy?: string;
@@ -249,12 +244,11 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
     altText: 'Advertisement',
     label: 'Advertisement'
   },
-  vignetteAd: DEFAULT_MONETAG_VIGNETTE_CONFIG,
-  inPagePushAd: DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
   inArticleAds: DEFAULT_IN_ARTICLE_ADS_SETTINGS,
   homepageInFeedAds: DEFAULT_HOMEPAGE_IN_FEED_ADS_SETTINGS,
   globalScripts: DEFAULT_GLOBAL_AD_SCRIPT_CONFIG,
   floatingVideoAd: DEFAULT_FLOATING_VIDEO_AD_CONFIG,
+  inArticleVastVideoAd: DEFAULT_IN_ARTICLE_VAST_VIDEO_AD_CONFIG,
   displaySettings: DEFAULT_ADS_DISPLAY_SETTINGS
 };
 

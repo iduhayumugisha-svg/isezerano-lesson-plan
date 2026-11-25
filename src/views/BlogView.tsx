@@ -30,6 +30,7 @@ import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import { ArticleShareButton } from '../components/ArticleShareButton';
 import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
 import { InArticleAdSlot } from '../components/InArticleAdSlot';
+import { VastInArticleVideoAd } from '../components/VastInArticleVideoAd';
 import { HilltopAdsArticleBanner } from '../components/HilltopAdsArticleBanner';
 import { buildArticleRenderSegments } from '../utils/articleAdInjector';
 import {
@@ -424,6 +425,14 @@ export const BlogView: React.FC<BlogViewProps> = ({
                 key={segment.key}
                 className="space-y-5"
                 dangerouslySetInnerHTML={{ __html: segment.html }}
+              />
+            ) : segment.type === 'vast_video' ? (
+              <VastInArticleVideoAd
+                key={segment.key}
+                articleId={activePost.id}
+                placementKey={segment.placementKey}
+                afterParagraph={segment.afterParagraph}
+                config={segment.vastConfig}
               />
             ) : (
               <InArticleAdSlot

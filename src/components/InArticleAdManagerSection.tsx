@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  BellRing,
   CheckCircle2,
   Code,
   ExternalLink,
@@ -20,15 +19,13 @@ import {
 import {
   AdProviderId,
   DEFAULT_IN_ARTICLE_SLOT_PARAGRAPHS,
-  DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
   GlobalAdScriptConfig,
   IN_ARTICLE_PARAGRAPH_LIMITS,
   InArticleAdFormat,
   InArticleAdSlotConfig,
   InArticleAdSlotKey,
   InArticleAdsSettings,
-  InArticleDirectLinkCardConfig,
-  MonetagInPagePushConfig
+  InArticleDirectLinkCardConfig
 } from '../types/platform';
 import {
   AD_DISCLOSURE_LABEL_OPTIONS,
@@ -41,7 +38,6 @@ import {
   hasRenderableAdCode,
   isInArticleSlotRenderable,
   isSafeAdAssetOrClickUrl,
-  isSafeAdScriptUrl,
   isSafeDirectLinkUrl,
   normalizeDisclosureLabel,
   normalizeInArticleAdSlotConfig
@@ -50,12 +46,9 @@ import {
 interface InArticleAdManagerSectionProps {
   inArticleAds: InArticleAdsSettings;
   globalScripts: GlobalAdScriptConfig;
-  inPagePushAd?: MonetagInPagePushConfig;
   isSaving: boolean;
   onUpdateSlot: (slotKey: InArticleAdSlotKey, patch: Partial<InArticleAdSlotConfig>) => void;
   onSaveSlot: (slotKey: InArticleAdSlotKey) => Promise<void> | void;
-  onUpdateInPagePush?: (patch: Partial<MonetagInPagePushConfig>) => void;
-  onSaveInPagePush?: () => Promise<void> | void;
   onUpdateGlobalScripts: (patch: Partial<GlobalAdScriptConfig>) => void;
   onSaveGlobalScripts: () => Promise<void> | void;
 }
@@ -68,22 +61,22 @@ const SLOT_METADATA: ReadonlyArray<{
 }> = [
   {
     key: 'slot1',
-    positionNumber: 3,
-    title: '3. In-Article Ad Slot 1 (After Paragraph 3)',
+    positionNumber: 2,
+    title: '2. In-Article Ad Slot 1 (After Paragraph 3)',
     description:
       'Appears inside published news articles immediately after paragraph 3 using either a responsive Sponsored Direct Link Card or HTML/JS Native Banner code.'
   },
   {
     key: 'slot2',
-    positionNumber: 4,
-    title: '4. In-Article Ad Slot 2 (After Paragraph 7)',
+    positionNumber: 3,
+    title: '3. In-Article Ad Slot 2 (After Paragraph 7)',
     description:
       'Appears deeper inside medium and long-form articles after paragraph 7. Automatically skipped cleanly on shorter stories.'
   },
   {
     key: 'slot3',
-    positionNumber: 5,
-    title: '5. In-Article Ad Slot 3 (After Paragraph 11)',
+    positionNumber: 4,
+    title: '4. In-Article Ad Slot 3 (After Paragraph 11)',
     description:
       'Appears toward the lower third of long-form articles after paragraph 11 without ever placing two ads adjacent to each other.'
   }
@@ -92,48 +85,16 @@ const SLOT_METADATA: ReadonlyArray<{
 export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps> = ({
   inArticleAds,
   globalScripts,
-  inPagePushAd = DEFAULT_MONETAG_IN_PAGE_PUSH_CONFIG,
   isSaving,
   onUpdateSlot,
   onSaveSlot,
-  onUpdateInPagePush,
-  onSaveInPagePush,
   onUpdateGlobalScripts,
   onSaveGlobalScripts
 }) => {
-  const [swStatus, setSwStatus] = useState<'checking' | 'present' | 'missing'>('checking');
-
-  useEffect(() => {
-    if (typeof fetch !== 'function' || typeof window === 'undefined') {
-      setSwStatus('missing');
-      return;
-    }
-    let active = true;
-    fetch('/sw.js', { method: 'HEAD', cache: 'no-store' })
-      .then((res) => {
-        if (!active) return;
-        setSwStatus(res.ok ? 'present' : 'missing');
-      })
-      .catch(() => {
-        if (active) setSwStatus('missing');
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const globalAnalysis = useMemo(
     () => analyzeAdCodeSnippet(globalScripts.code),
     [globalScripts.code]
   );
-
-  const inPagePushReady = Boolean(
-    inPagePushAd.enabled &&
-      inPagePushAd.scriptUrl &&
-      isSafeAdScriptUrl(inPagePushAd.scriptUrl) &&
-      (inPagePushAd.desktopEnabled || inPagePushAd.mobileEnabled)
-  );
-  const inPagePushNeedsConfig = inPagePushAd.enabled && !inPagePushReady;
 
   return (
     <div className="space-y-6" data-testid="ads-multi-provider-section">
@@ -155,153 +116,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
         );
       })}
 
-      {/* Dedicated Monetag In-Page Push Control Card */}
-      {onUpdateInPagePush && (
-        <div
-          data-testid="ads-in-page-push-manager"
-          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-teal-700 uppercase tracking-wider">
-                <BellRing className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Monetag Floating Push Integration</span>
-              </div>
-              <h4 className="text-base font-extrabold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>Monetag In-Page Push Banner</span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                    inPagePushReady
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : inPagePushNeedsConfig
-                      ? 'bg-amber-100 text-amber-900'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {inPagePushReady
-                    ? 'ACTIVE SITE-WIDE'
-                    : inPagePushNeedsConfig
-                    ? 'ENABLED · NEEDS SCRIPT URL'
-                    : 'DISABLED'}
-                </span>
-              </h4>
-              <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
-                Runs non-intrusive floating In-Page Push notifications once globally on public pages instead of crowding the header area. Never runs inside <code className="font-mono text-slate-700">/admin</code> and automatically blocks Popunder scripts.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onUpdateInPagePush({ enabled: !inPagePushAd.enabled })}
-              data-testid="ads-in-page-push-enable-toggle"
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center space-x-1.5 transition-all cursor-pointer self-start sm:self-center shrink-0 ${
-                inPagePushAd.enabled
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-              }`}
-            >
-              {inPagePushAd.enabled ? (
-                <>
-                  <ToggleRight className="w-4 h-4" aria-hidden="true" />
-                  <span>In-Page Push Enabled</span>
-                </>
-              ) : (
-                <>
-                  <ToggleLeft className="w-4 h-4" aria-hidden="true" />
-                  <span>In-Page Push Disabled</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {inPagePushNeedsConfig && (
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-              <span>
-                In-Page Push is enabled, but requires a valid HTTPS Monetag script URL (e.g. <code className="font-mono">https://nap5k.com/tag.min.js</code>) before activating on public pages.
-              </span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="space-y-1.5">
-              <label htmlFor="ads-inpagepush-zone" className="block text-xs font-bold text-slate-700">
-                Monetag Zone ID
-              </label>
-              <input
-                id="ads-inpagepush-zone"
-                data-testid="ads-in-page-push-zone-input"
-                type="text"
-                inputMode="numeric"
-                value={inPagePushAd.zoneId}
-                onChange={(e) =>
-                  onUpdateInPagePush({ zoneId: e.target.value.replace(/\D/g, '').slice(0, 20) })
-                }
-                placeholder="e.g. 12321969"
-                className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div className="space-y-1.5 md:col-span-2">
-              <label htmlFor="ads-inpagepush-url" className="block text-xs font-bold text-slate-700">
-                Monetag In-Page Push Script URL (HTTPS)
-              </label>
-              <input
-                id="ads-inpagepush-url"
-                data-testid="ads-in-page-push-script-input"
-                type="url"
-                value={inPagePushAd.scriptUrl}
-                onChange={(e) => onUpdateInPagePush({ scriptUrl: e.target.value })}
-                placeholder="https://nap5k.com/tag.min.js"
-                className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div className="md:col-span-3 flex flex-wrap items-center justify-between gap-3 pt-1">
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={inPagePushAd.desktopEnabled}
-                    onChange={(e) => onUpdateInPagePush({ desktopEnabled: e.target.checked })}
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                  <span>Desktop</span>
-                </label>
-
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={inPagePushAd.mobileEnabled}
-                    onChange={(e) => onUpdateInPagePush({ mobileEnabled: e.target.checked })}
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                  <span>Mobile</span>
-                </label>
-
-                <span className="text-[11px] text-slate-500">
-                  {formatDeviceVisibilitySummary(inPagePushAd.mobileEnabled, inPagePushAd.desktopEnabled)}
-                </span>
-              </div>
-
-              {onSaveInPagePush && (
-                <button
-                  type="button"
-                  onClick={onSaveInPagePush}
-                  disabled={isSaving}
-                  data-testid="ads-in-page-push-save"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-teal-700 hover:bg-teal-600 text-white shadow-xs cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  <Save className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Save In-Page Push</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Site-Wide Global Head & Verification Scripts */}
 
       {/* Site-Wide Global Head & Verification Scripts */}
       <div
@@ -333,7 +148,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
               </span>
             </h4>
             <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
-              Use this panel for Monetag site ownership <code className="font-mono text-slate-700">&lt;meta name=&quot;monetag&quot; ...&gt;</code> verification tags or non-intrusive <code className="font-mono text-slate-700">&lt;head&gt;</code> tags. Vignette Banner and In-Page Push now have their own dedicated controls above. Popunder / OnClick scripts remain blocked.
+              Use this panel for approved site-wide <code className="font-mono text-slate-700">&lt;head&gt;</code> scripts or verification meta tags. Intrusive popunder and blocked third-party ad network scripts remain blocked.
             </p>
           </div>
 
@@ -365,69 +180,43 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
             <span>
-              Global scripts are switched <strong>ON</strong>, but no valid script or verification meta tag is currently entered. Add your <code className="font-mono">&lt;meta name=&quot;monetag&quot; ...&gt;</code> verification tag or site-wide tag below, or disable if unused.
+              Global scripts are switched <strong>ON</strong>, but no valid script or verification meta tag is currently entered. Add your site verification <code className="font-mono">&lt;meta ...&gt;</code> tag or approved site-wide tag below, or disable if unused.
             </span>
           </div>
         )}
 
-        {/* Service Worker & Supported Format Status Strip */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-            <div className="font-bold text-slate-900 flex items-center justify-between gap-2">
-              <span>Root Service Worker (/sw.js · Zone 12145119)</span>
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                  swStatus === 'present'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : swStatus === 'checking'
-                    ? 'bg-slate-100 text-slate-600'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {swStatus === 'present'
-                  ? 'AVAILABLE AT /sw.js'
-                  : swStatus === 'checking'
-                  ? 'CHECKING...'
-                  : 'NOT DETECTED'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Push notification worker lives at root <code className="font-mono">/sw.js</code> (<code className="font-mono">5gvci.com</code>) on production HTTPS hosting and is never duplicated inside individual articles.
-            </p>
-          </div>
+        {/* Device Targeting */}
+        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+          <div className="font-bold text-slate-900">Device Scope for Global Tag</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={globalScripts.desktopEnabled}
+                onChange={(e) => onUpdateGlobalScripts({ desktopEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              <span>Desktop</span>
+            </label>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="font-bold text-slate-900">Device Scope for Global Tag</div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={globalScripts.desktopEnabled}
-                  onChange={(e) => onUpdateGlobalScripts({ desktopEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <Monitor className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                <span>Desktop</span>
-              </label>
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={globalScripts.mobileEnabled}
+                onChange={(e) => onUpdateGlobalScripts({ mobileEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              <span>Mobile</span>
+            </label>
 
-              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={globalScripts.mobileEnabled}
-                  onChange={(e) => onUpdateGlobalScripts({ mobileEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                <span>Mobile</span>
-              </label>
-
-              <span className="text-[11px] text-slate-500 ml-auto font-medium">
-                {formatDeviceVisibilitySummary(
-                  globalScripts.mobileEnabled,
-                  globalScripts.desktopEnabled
-                )}
-              </span>
-            </div>
+            <span className="text-[11px] text-slate-500 ml-auto font-medium">
+              {formatDeviceVisibilitySummary(
+                globalScripts.mobileEnabled,
+                globalScripts.desktopEnabled
+              )}
+            </span>
           </div>
         </div>
 
@@ -471,7 +260,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
                   maxLength={40}
                   value={globalScripts.providerLabel || ''}
                   onChange={(e) => onUpdateGlobalScripts({ providerLabel: e.target.value })}
-                  placeholder="e.g. Monetag / Adsterra / Custom"
+                  placeholder="e.g. Google AdSense / Adsterra / Custom"
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
                 />
               </div>
@@ -496,7 +285,7 @@ export const InArticleAdManagerSection: React.FC<InArticleAdManagerSectionProps>
               rows={4}
               value={globalScripts.code}
               onChange={(e) => onUpdateGlobalScripts({ code: e.target.value })}
-              placeholder={`<!-- Paste Monetag <meta name="monetag" ...> verification tag or approved head script here -->`}
+              placeholder={`<!-- Paste approved site verification <meta ...> tag or <head> script here -->`}
               className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg bg-slate-900 text-teal-300 focus:ring-2 focus:ring-teal-500"
             />
           </div>
@@ -885,7 +674,7 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
               <Link2 className="w-3.5 h-3.5 text-teal-700" aria-hidden="true" />
-              <span>Monetag Direct Link Ad Card Details ({providerDisplay})</span>
+              <span>Direct Link Sponsored Ad Card Details ({providerDisplay})</span>
             </span>
             <span className="text-[11px] font-mono text-slate-500">
               Responsive Card · rel=&quot;noopener noreferrer sponsored&quot;
@@ -895,7 +684,7 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div className="space-y-1.5 md:col-span-2">
               <label htmlFor={`ads-${slotKey}-direct-url`} className="block text-xs font-semibold text-slate-700">
-                Monetag Direct Link URL (HTTPS Required) *
+                Direct Link Destination URL (HTTPS Required) *
               </label>
               <input
                 id={`ads-${slotKey}-direct-url`}
@@ -903,7 +692,7 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
                 type="url"
                 value={directCard.directLinkUrl}
                 onChange={(e) => updateDirectCard({ directLinkUrl: e.target.value })}
-                placeholder="https://uplcm.com/4/..."
+                placeholder="https://partner.example.com/..."
                 className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
               />
             </div>
@@ -1030,7 +819,7 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
             <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
               <span>
-                This looks like a Monetag Direct Link URL (<code className="font-mono">{bareUrlInCodeBox}</code>). Switch to <strong>Direct Link Sponsored Ad Card</strong> mode above to display it as a clean clickable card instead of raw text.
+                This looks like a Direct Link URL (<code className="font-mono">{bareUrlInCodeBox}</code>). Switch to <strong>Direct Link Sponsored Ad Card</strong> mode above to display it as a clean clickable card instead of raw text.
               </span>
             </div>
           )}
@@ -1039,7 +828,7 @@ const InArticleSlotCard: React.FC<InArticleSlotCardProps> = ({
             <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
               <span>
-                This snippet looks like a global site-wide/head tag. Use the dedicated Vignette Banner, In-Page Push, or Global Site-Wide Scripts controls instead of embedding page overlays inside article text.
+                This snippet looks like a global site-wide/head tag. Use the dedicated Global Site-Wide Scripts controls instead of embedding page overlays inside article text.
               </span>
             </div>
           )}
