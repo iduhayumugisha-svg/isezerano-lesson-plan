@@ -91,16 +91,16 @@ function testHtmlAndFirebaseConfig(): void {
     /<script type="application\/ld\+json">[\s\S]*?<\/script>\s*<!-- Anti-FOUC Theme Hydration Script/i,
     'index.html JSON-LD script must be cleanly closed before the Anti-FOUC script'
   );
-  assert.equal(indexHtml.includes('https://isezerano.online/og-default.jpg'), true);
+  assert.equal(indexHtml.includes('og-default.jpg'), false, 'index.html must not reference og-default.jpg');
+  assert.equal(indexHtml.includes('property="og:image"'), false, 'index.html must not force a generic og:image');
+  assert.equal(indexHtml.includes('name="twitter:image"'), false, 'index.html must not force a generic twitter:image');
 
   const ogDefaultPath = path.resolve('public/og-default.jpg');
-  assert.equal(fs.existsSync(ogDefaultPath), true, 'public/og-default.jpg must exist');
-  const buf = fs.readFileSync(ogDefaultPath);
-  assert.equal(sniffImageMimeFromBuffer(buf)?.mimeType, 'image/jpeg');
-  const dims = readImageDimensionsFromBuffer(buf, 'image/jpeg');
-  assert.ok((dims.width || 0) >= 1200 && (dims.height || 0) >= 630, 'Fallback image must be >= 1200x630');
+  assert.equal(fs.existsSync(ogDefaultPath), false, 'public/og-default.jpg must be permanently deleted');
 
-  const firebaseJson = JSON.parse(fs.readFileSync(path.resolve('firebase.json'), 'utf8'));
+  const firebaseJsonRaw = fs.readFileSync(path.resolve('firebase.json'), 'utf8');
+  assert.equal(firebaseJsonRaw.includes('og-default.jpg'), false, 'firebase.json must not reference og-default.jpg');
+  const firebaseJson = JSON.parse(firebaseJsonRaw);
   const headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> =
     firebaseJson?.hosting?.headers || [];
   const blogGlobRule = headers.find((h) => h.source === '/blog/**');
@@ -112,7 +112,7 @@ function testHtmlAndFirebaseConfig(): void {
     true
   );
 
-  console.log('✓ 1. index.html script closure, fallback 1376x768 JPEG & firebase.json /blog/** headers verified');
+  console.log('✓ 1. Permanent deletion of public/og-default.jpg, index.html cleanup & firebase.json /blog/** headers verified');
 }
 
 async function testThreeDistinctArticlesWithCrawlerUserAgents(): Promise<void> {
@@ -186,7 +186,6 @@ async function testThreeDistinctArticlesWithCrawlerUserAgents(): Promise<void> {
 
   try {
     fs.writeFileSync(path.join(tempDistDir, 'index.html'), fs.readFileSync('index.html', 'utf8'), 'utf8');
-    fs.copyFileSync(path.resolve('public/og-default.jpg'), path.join(tempDistDir, 'og-default.jpg'));
 
     await prerenderStaticBlogDist({
       distDir: tempDistDir,
@@ -302,7 +301,6 @@ async function testThreeDistinctArticlesWithCrawlerUserAgents(): Promise<void> {
       const liveTempDist = fs.mkdtempSync(path.join(os.tmpdir(), 'isezerano-live-og-'));
       try {
         fs.writeFileSync(path.join(liveTempDist, 'index.html'), fs.readFileSync('index.html', 'utf8'), 'utf8');
-        fs.copyFileSync(path.resolve('public/og-default.jpg'), path.join(liveTempDist, 'og-default.jpg'));
         const res = await prerenderStaticBlogDist({
           distDir: liveTempDist,
           origin: 'https://isezerano.online',
@@ -454,9 +452,14 @@ async function testCanonicalDomainEnforcementAcrossShareCopySeoAndSsr(): Promise
 
         assert.equal(canonicalEl?.getAttribute('href'), expectedUrl);
         assert.equal(ogUrlEl?.getAttribute('content'), expectedUrl);
-        assert.ok(ogImageEl?.getAttribute('content')?.startsWith('https://'));
-        assert.equal(ogImageEl?.getAttribute('content')?.includes('firebaseapp.com'), false);
-        assert.equal(ogImageEl?.getAttribute('content')?.includes('web.app'), false);
+        if (post.thumbnailUrl) {
+          assert.ok(ogImageEl?.getAttribute('content')?.startsWith('https://'));
+          assert.equal(ogImageEl?.getAttribute('content')?.includes('firebaseapp.com'), false);
+          assert.equal(ogImageEl?.getAttribute('content')?.includes('web.app'), false);
+          assert.equal(ogImageEl?.getAttribute('content')?.includes('og-default.jpg'), false);
+        } else {
+          assert.equal(ogImageEl, null, 'Image-free article must not receive a deleted default og:image');
+        }
         assert.ok(jsonLdEl?.textContent?.includes(expectedUrl));
 
         // Render ArticleShareButton, open menu, inspect social links & click Copy article link

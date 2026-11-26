@@ -9,10 +9,6 @@ export const DEFAULT_PUBLIC_ORIGIN = 'https://isezerano.online';
 export const DEFAULT_SITE_TITLE = 'ISEZERANO ONLINE';
 export const DEFAULT_SITE_DESCRIPTION =
   'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
-export const DEFAULT_OG_IMAGE_PATH = '/og-default.jpg';
-export const DEFAULT_OG_IMAGE_WIDTH = 1376;
-export const DEFAULT_OG_IMAGE_HEIGHT = 768;
-export const DEFAULT_OG_IMAGE_MIME = 'image/jpeg';
 
 export interface DecodedImageAsset {
   buffer: Buffer;
@@ -783,15 +779,7 @@ export function renderBlogArticleHtml(
   }
 
   const hasArticleImage = Boolean(imageUrl);
-  const resolvedImageUrl = hasArticleImage
-    ? imageUrl
-    : `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
-  const resolvedImageWidth = hasArticleImage ? imageWidth : DEFAULT_OG_IMAGE_WIDTH;
-  const resolvedImageHeight = hasArticleImage ? imageHeight : DEFAULT_OG_IMAGE_HEIGHT;
-  const resolvedImageMime = hasArticleImage ? imageMime : DEFAULT_OG_IMAGE_MIME;
-  const imageAlt = hasArticleImage
-    ? (post.thumbnailAlt || articleTitle).trim()
-    : `${articleTitle} – ${siteName}`;
+  const imageAlt = hasArticleImage ? (post.thumbnailAlt || articleTitle).trim() : '';
   const authorName = post.author?.name || 'ISEZERANO Editorial Team';
   const authorRole = post.author?.role || 'Editor';
 
@@ -804,7 +792,7 @@ export function renderBlogArticleHtml(
     },
     headline: articleTitle,
     description,
-    image: [resolvedImageUrl],
+    ...(hasArticleImage ? { image: [imageUrl] } : {}),
     datePublished: post.publishedAt || post.updatedAt || '',
     dateModified: post.updatedAt || post.publishedAt || '',
     author: {
@@ -818,16 +806,19 @@ export function renderBlogArticleHtml(
     }
   };
 
-  const optionalDimTags = [
-    resolvedImageMime
-      ? `    <meta property="og:image:type" content="${escapeHtml(resolvedImageMime)}" />`
-      : '',
-    resolvedImageWidth && resolvedImageHeight
-      ? `    <meta property="og:image:width" content="${resolvedImageWidth}" />\n    <meta property="og:image:height" content="${resolvedImageHeight}" />`
-      : ''
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const optionalDimTags =
+    hasArticleImage
+      ? [
+          imageMime
+            ? `    <meta property="og:image:type" content="${escapeHtml(imageMime)}" />`
+            : '',
+          imageWidth && imageHeight
+            ? `    <meta property="og:image:width" content="${imageWidth}" />\n    <meta property="og:image:height" content="${imageHeight}" />`
+            : ''
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '';
 
   const articleTags = [
     `    <title>${escapeHtml(pageTitle)}</title>`,
@@ -837,10 +828,10 @@ export function renderBlogArticleHtml(
     `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
     `    <meta property="og:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(description)}" />`,
-    `    <meta property="og:image" content="${escapeHtml(resolvedImageUrl)}" />`,
-    `    <meta property="og:image:secure_url" content="${escapeHtml(resolvedImageUrl)}" />`,
+    hasArticleImage ? `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />` : '',
+    hasArticleImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />` : '',
     optionalDimTags,
-    `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
+    hasArticleImage ? `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
     `    <meta property="og:url" content="${escapeHtml(articleUrl)}" />`,
     post.publishedAt
       ? `    <meta property="article:published_time" content="${escapeHtml(post.publishedAt)}" />`
@@ -854,8 +845,8 @@ export function renderBlogArticleHtml(
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(description)}" />`,
-    `    <meta name="twitter:image" content="${escapeHtml(resolvedImageUrl)}" />`,
-    `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />`,
+    hasArticleImage ? `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />` : '',
+    hasArticleImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ]
     .filter(Boolean)
@@ -879,7 +870,6 @@ export function renderWebsiteDefaultHtml(
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const normalizedPath = pagePath.startsWith('/') ? pagePath : `/${pagePath}`;
   const canonicalUrl = `${cleanOrigin}${normalizedPath}`;
-  const defaultImageUrl = `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -902,18 +892,10 @@ export function renderWebsiteDefaultHtml(
     `    <meta property="og:site_name" content="${escapeHtml(fullTitle)}" />`,
     `    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(siteDescription)}" />`,
-    `    <meta property="og:image" content="${escapeHtml(defaultImageUrl)}" />`,
-    `    <meta property="og:image:secure_url" content="${escapeHtml(defaultImageUrl)}" />`,
-    `    <meta property="og:image:type" content="${DEFAULT_OG_IMAGE_MIME}" />`,
-    `    <meta property="og:image:width" content="${DEFAULT_OG_IMAGE_WIDTH}" />`,
-    `    <meta property="og:image:height" content="${DEFAULT_OG_IMAGE_HEIGHT}" />`,
-    `    <meta property="og:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(siteDescription)}" />`,
-    `    <meta name="twitter:image" content="${escapeHtml(defaultImageUrl)}" />`,
-    `    <meta name="twitter:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ].join('\n');
 

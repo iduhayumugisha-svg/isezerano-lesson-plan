@@ -86,19 +86,6 @@
         ]
       },
       {
-        "source": "/og-default.jpg",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=3600"
-          },
-          {
-            "key": "Access-Control-Allow-Origin",
-            "value": "*"
-          }
-        ]
-      },
-      {
         "source": "/sitemap.xml",
         "headers": [
           {

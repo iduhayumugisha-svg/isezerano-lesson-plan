@@ -12,10 +12,6 @@ export const DEFAULT_SEO_TITLE = 'ISEZERANO ONLINE';
 export const DEFAULT_SEO_DESCRIPTION =
   'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
 export const DEFAULT_CANONICAL_ORIGIN = 'https://isezerano.online';
-export const DEFAULT_OG_IMAGE_PATH = '/og-default.jpg';
-export const DEFAULT_OG_IMAGE_WIDTH = 1376;
-export const DEFAULT_OG_IMAGE_HEIGHT = 768;
-export const DEFAULT_OG_IMAGE_MIME = 'image/jpeg';
 
 const FIREBASE_DEFAULT_HOSTNAMES = new Set([
   'isezerano-news.firebaseapp.com',
@@ -141,7 +137,6 @@ export const updateWebsiteBrandingSeo = (
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const pageUrl = `${BASE_URL}/`;
   const customLogo = isValidHttpsImageUrl(siteLogoUrl) ? normalizePublicImageUrl(siteLogoUrl!) : '';
-  const resolvedSiteImage = customLogo || `${BASE_URL}${DEFAULT_OG_IMAGE_PATH}`;
 
   document.title = resolvedTitle;
   setMetaTag('name', 'description', siteDescription);
@@ -152,18 +147,18 @@ export const updateWebsiteBrandingSeo = (
   setMetaTag('property', 'og:title', resolvedTitle);
   setMetaTag('property', 'og:description', siteDescription);
   setMetaTag('property', 'og:url', pageUrl);
-  setMetaTag('property', 'og:image', resolvedSiteImage);
-  setMetaTag('property', 'og:image:secure_url', resolvedSiteImage);
-  setMetaTag('property', 'og:image:type', customLogo ? '' : DEFAULT_OG_IMAGE_MIME);
-  setMetaTag('property', 'og:image:width', customLogo ? '' : String(DEFAULT_OG_IMAGE_WIDTH));
-  setMetaTag('property', 'og:image:height', customLogo ? '' : String(DEFAULT_OG_IMAGE_HEIGHT));
-  setMetaTag('property', 'og:image:alt', siteDescription);
+  setMetaTag('property', 'og:image', customLogo);
+  setMetaTag('property', 'og:image:secure_url', customLogo);
+  setMetaTag('property', 'og:image:type', '');
+  setMetaTag('property', 'og:image:width', '');
+  setMetaTag('property', 'og:image:height', '');
+  setMetaTag('property', 'og:image:alt', customLogo ? siteDescription : '');
 
   setMetaTag('name', 'twitter:card', 'summary_large_image');
   setMetaTag('name', 'twitter:title', resolvedTitle);
   setMetaTag('name', 'twitter:description', siteDescription);
-  setMetaTag('name', 'twitter:image', resolvedSiteImage);
-  setMetaTag('name', 'twitter:image:alt', siteDescription);
+  setMetaTag('name', 'twitter:image', customLogo);
+  setMetaTag('name', 'twitter:image:alt', customLogo ? siteDescription : '');
 
   const scriptTag = document.getElementById('blog-post-schema-jsonld');
   if (scriptTag) {
@@ -212,10 +207,8 @@ export const updateBlogPostSeo = (
     : thumb.startsWith('/') && !thumb.startsWith('//') && !/\.svg(?:$|\?)/i.test(thumb)
     ? `${BASE_URL}${thumb}`
     : '';
-  const hasArticleImage = Boolean(articleHttpsImage);
-  const ogHttpsImage = hasArticleImage
-    ? articleHttpsImage
-    : `${BASE_URL}${DEFAULT_OG_IMAGE_PATH}`;
+  const ogHttpsImage = articleHttpsImage;
+  const hasArticleImage = Boolean(ogHttpsImage);
   const description =
     (post.excerpt || '').trim() ||
     extractPlainTextExcerpt(post.content || '', 160) ||
@@ -232,16 +225,16 @@ export const updateBlogPostSeo = (
   setMetaTag('property', 'og:url', postUrl);
   setMetaTag('property', 'og:image', ogHttpsImage);
   setMetaTag('property', 'og:image:secure_url', ogHttpsImage);
-  setMetaTag('property', 'og:image:alt', hasArticleImage ? post.title : `${post.title} – ${fullTitle}`);
-  setMetaTag('property', 'og:image:type', hasArticleImage ? '' : DEFAULT_OG_IMAGE_MIME);
-  setMetaTag('property', 'og:image:width', hasArticleImage ? '' : String(DEFAULT_OG_IMAGE_WIDTH));
-  setMetaTag('property', 'og:image:height', hasArticleImage ? '' : String(DEFAULT_OG_IMAGE_HEIGHT));
+  setMetaTag('property', 'og:image:alt', hasArticleImage ? (post.thumbnailAlt || post.title) : '');
+  setMetaTag('property', 'og:image:type', '');
+  setMetaTag('property', 'og:image:width', '');
+  setMetaTag('property', 'og:image:height', '');
 
   setMetaTag('name', 'twitter:card', 'summary_large_image');
   setMetaTag('name', 'twitter:title', post.title);
   setMetaTag('name', 'twitter:description', description);
   setMetaTag('name', 'twitter:image', ogHttpsImage);
-  setMetaTag('name', 'twitter:image:alt', hasArticleImage ? post.title : `${post.title} – ${fullTitle}`);
+  setMetaTag('name', 'twitter:image:alt', hasArticleImage ? (post.thumbnailAlt || post.title) : '');
 
   let scriptTag = document.getElementById('blog-post-schema-jsonld') as HTMLScriptElement | null;
   if (!scriptTag) {

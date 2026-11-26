@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import type { BlogPost } from '../src/types/blog.ts';
 import type { WebsiteBrandingSettings } from '../src/types/websiteDesign.ts';
 import {
-  DEFAULT_OG_IMAGE_PATH,
   DEFAULT_PUBLIC_ORIGIN,
   computeBytesHash8,
   decodeImageDataUri,
@@ -268,7 +267,7 @@ export async function prerenderStaticBlogDist(
       imageMimeType
     });
 
-    const resolvedOgImageUrl = staticImageUrl || `${origin}${DEFAULT_OG_IMAGE_PATH}`;
+    const resolvedOgImageUrl = staticImageUrl || '';
     const safeRouteSlug = rawSlug.length <= 200 ? rawSlug : fileSlug;
 
     const articleDir = path.join(blogOutDir, safeRouteSlug);
