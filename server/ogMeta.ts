@@ -9,6 +9,10 @@ export const DEFAULT_PUBLIC_ORIGIN = 'https://isezerano.online';
 export const DEFAULT_SITE_TITLE = 'ISEZERANO ONLINE';
 export const DEFAULT_SITE_DESCRIPTION =
   'ISEZERANO ONLINE – Independent digital news, breaking updates, features, and community information.';
+export const DEFAULT_OG_IMAGE_PATH = '/og-default.jpg';
+export const DEFAULT_OG_IMAGE_WIDTH = 1376;
+export const DEFAULT_OG_IMAGE_HEIGHT = 768;
+export const DEFAULT_OG_IMAGE_MIME = 'image/jpeg';
 
 export interface DecodedImageAsset {
   buffer: Buffer;
@@ -378,7 +382,10 @@ export function safeFileSlug(rawSlug: string): string {
     .trim()
     .replace(/[^a-zA-Z0-9._-]/g, '-')
     .replace(/^-+|-+$/g, '');
-  return cleaned || 'article';
+  if (!cleaned) return 'article';
+  if (cleaned.length <= 140) return cleaned;
+  const suffix = computeBytesHash8(new TextEncoder().encode(cleaned));
+  return `${cleaned.slice(0, 130).replace(/-+$/g, '')}-${suffix}`;
 }
 
 export function computeBytesHash8(bytes: Uint8Array): string {
@@ -603,12 +610,27 @@ export async function fetchWebsiteBrandingFromFirestore(
 
 /**
  * Resolves a public HTTPS origin for canonical `og:url` and `og:image` tags.
- * Never outputs `http://localhost`, `127.0.0.1`, or authenticated `ais-dev-*` preview proxy hostnames.
+ * Strictly enforces `https://isezerano.online` and never leaks `.firebaseapp.com`,
+ * `.web.app`, `localhost`, `127.0.0.1`, or preview proxy hostnames.
  */
 export function resolvePublicOrigin(req?: Request): string {
   const configured = (process.env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
   if (configured.startsWith('https://')) {
-    return configured;
+    try {
+      const parsed = new URL(configured);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        !host.endsWith('.firebaseapp.com') &&
+        !host.endsWith('.web.app') &&
+        !host.startsWith('ais-') &&
+        host !== 'localhost' &&
+        host !== '127.0.0.1'
+      ) {
+        return configured;
+      }
+    } catch {
+      // ignore malformed configured URL
+    }
   }
 
   if (req) {
@@ -618,16 +640,12 @@ export function resolvePublicOrigin(req?: Request): string {
       .toLowerCase();
     const fwdHostRaw = String(req.headers['x-forwarded-host'] || req.headers.host || '')
       .split(',')[0]
-      .trim();
+      .trim()
+      .toLowerCase()
+      .replace(/:\d+$/, '');
 
-    if (
-      fwdProtoRaw === 'https' &&
-      fwdHostRaw &&
-      !fwdHostRaw.includes('localhost') &&
-      !fwdHostRaw.includes('127.0.0.1') &&
-      !fwdHostRaw.startsWith('ais-dev-')
-    ) {
-      return `https://${fwdHostRaw}`;
+    if (fwdProtoRaw === 'https' && fwdHostRaw === 'isezerano.online') {
+      return DEFAULT_PUBLIC_ORIGIN;
     }
   }
 
@@ -764,8 +782,16 @@ export function renderBlogArticleHtml(
     }
   }
 
-  const hasImage = Boolean(imageUrl);
-  const imageAlt = (post.thumbnailAlt || articleTitle).trim();
+  const hasArticleImage = Boolean(imageUrl);
+  const resolvedImageUrl = hasArticleImage
+    ? imageUrl
+    : `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
+  const resolvedImageWidth = hasArticleImage ? imageWidth : DEFAULT_OG_IMAGE_WIDTH;
+  const resolvedImageHeight = hasArticleImage ? imageHeight : DEFAULT_OG_IMAGE_HEIGHT;
+  const resolvedImageMime = hasArticleImage ? imageMime : DEFAULT_OG_IMAGE_MIME;
+  const imageAlt = hasArticleImage
+    ? (post.thumbnailAlt || articleTitle).trim()
+    : `${articleTitle} – ${siteName}`;
   const authorName = post.author?.name || 'ISEZERANO Editorial Team';
   const authorRole = post.author?.role || 'Editor';
 
@@ -778,7 +804,7 @@ export function renderBlogArticleHtml(
     },
     headline: articleTitle,
     description,
-    ...(hasImage ? { image: [imageUrl] } : {}),
+    image: [resolvedImageUrl],
     datePublished: post.publishedAt || post.updatedAt || '',
     dateModified: post.updatedAt || post.publishedAt || '',
     author: {
@@ -793,9 +819,11 @@ export function renderBlogArticleHtml(
   };
 
   const optionalDimTags = [
-    hasImage && imageMime ? `    <meta property="og:image:type" content="${escapeHtml(imageMime)}" />` : '',
-    hasImage && imageWidth && imageHeight
-      ? `    <meta property="og:image:width" content="${imageWidth}" />\n    <meta property="og:image:height" content="${imageHeight}" />`
+    resolvedImageMime
+      ? `    <meta property="og:image:type" content="${escapeHtml(resolvedImageMime)}" />`
+      : '',
+    resolvedImageWidth && resolvedImageHeight
+      ? `    <meta property="og:image:width" content="${resolvedImageWidth}" />\n    <meta property="og:image:height" content="${resolvedImageHeight}" />`
       : ''
   ]
     .filter(Boolean)
@@ -809,10 +837,10 @@ export function renderBlogArticleHtml(
     `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
     `    <meta property="og:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(description)}" />`,
-    hasImage ? `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />` : '',
-    hasImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />` : '',
+    `    <meta property="og:image" content="${escapeHtml(resolvedImageUrl)}" />`,
+    `    <meta property="og:image:secure_url" content="${escapeHtml(resolvedImageUrl)}" />`,
     optionalDimTags,
-    hasImage ? `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
+    `    <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
     `    <meta property="og:url" content="${escapeHtml(articleUrl)}" />`,
     post.publishedAt
       ? `    <meta property="article:published_time" content="${escapeHtml(post.publishedAt)}" />`
@@ -823,11 +851,11 @@ export function renderBlogArticleHtml(
     post.category
       ? `    <meta property="article:section" content="${escapeHtml(post.category)}" />`
       : '',
-    `    <meta name="twitter:card" content="${hasImage ? 'summary_large_image' : 'summary'}" />`,
+    `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(articleTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(description)}" />`,
-    hasImage ? `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />` : '',
-    hasImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
+    `    <meta name="twitter:image" content="${escapeHtml(resolvedImageUrl)}" />`,
+    `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />`,
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ]
     .filter(Boolean)
@@ -851,6 +879,7 @@ export function renderWebsiteDefaultHtml(
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const normalizedPath = pagePath.startsWith('/') ? pagePath : `/${pagePath}`;
   const canonicalUrl = `${cleanOrigin}${normalizedPath}`;
+  const defaultImageUrl = `${cleanOrigin}${DEFAULT_OG_IMAGE_PATH}`;
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -873,10 +902,18 @@ export function renderWebsiteDefaultHtml(
     `    <meta property="og:site_name" content="${escapeHtml(fullTitle)}" />`,
     `    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(siteDescription)}" />`,
+    `    <meta property="og:image" content="${escapeHtml(defaultImageUrl)}" />`,
+    `    <meta property="og:image:secure_url" content="${escapeHtml(defaultImageUrl)}" />`,
+    `    <meta property="og:image:type" content="${DEFAULT_OG_IMAGE_MIME}" />`,
+    `    <meta property="og:image:width" content="${DEFAULT_OG_IMAGE_WIDTH}" />`,
+    `    <meta property="og:image:height" content="${DEFAULT_OG_IMAGE_HEIGHT}" />`,
+    `    <meta property="og:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(siteDescription)}" />`,
+    `    <meta name="twitter:image" content="${escapeHtml(defaultImageUrl)}" />`,
+    `    <meta name="twitter:image:alt" content="${escapeHtml(siteDescription)}" />`,
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ].join('\n');
 

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { BlogPost } from '../src/types/blog.ts';
 import type { WebsiteBrandingSettings } from '../src/types/websiteDesign.ts';
 import {
+  DEFAULT_OG_IMAGE_PATH,
   DEFAULT_PUBLIC_ORIGIN,
   computeBytesHash8,
   decodeImageDataUri,
@@ -120,12 +121,30 @@ export async function prerenderStaticBlogDist(
   }
 
   const templateHtml = fs.readFileSync(distIndexPath, 'utf-8');
-  const origin =
-    options.origin && options.origin.startsWith('https://')
-      ? options.origin.replace(/\/+$/, '')
-      : (process.env.PUBLIC_SITE_URL || '').trim().startsWith('https://')
-      ? (process.env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '')
-      : DEFAULT_PUBLIC_ORIGIN;
+  const rawOriginCandidate =
+    (options.origin && options.origin.startsWith('https://') ? options.origin : '') ||
+    ((process.env.PUBLIC_SITE_URL || '').trim().startsWith('https://')
+      ? (process.env.PUBLIC_SITE_URL || '').trim()
+      : '');
+  let origin = DEFAULT_PUBLIC_ORIGIN;
+  if (rawOriginCandidate) {
+    try {
+      const parsed = new URL(rawOriginCandidate);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        parsed.protocol === 'https:' &&
+        !host.endsWith('.firebaseapp.com') &&
+        !host.endsWith('.web.app') &&
+        !host.startsWith('ais-') &&
+        host !== 'localhost' &&
+        host !== '127.0.0.1'
+      ) {
+        origin = parsed.origin;
+      }
+    } catch {
+      origin = DEFAULT_PUBLIC_ORIGIN;
+    }
+  }
 
   const [posts, branding] = await Promise.all([
     options.posts !== undefined ? Promise.resolve(options.posts) : fetchPublishedBlogPostsFromFirestore(),
@@ -166,7 +185,22 @@ export async function prerenderStaticBlogDist(
   });
   fs.writeFileSync(sitemapOutPath, sitemapData.xml, 'utf-8');
 
+  const manifestOutPath = path.join(distDir, 'blog-og-manifest.json');
+
   if (publishedPosts.length === 0) {
+    fs.writeFileSync(
+      manifestOutPath,
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          count: 0,
+          posts: []
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
     console.log(
       `[prerenderBlogMeta] 0 published posts found; dist/index.html, dist/blog/index.html, and dist/sitemap.xml (${sitemapData.urlCount} URLs) written cleanly.`
     );
@@ -234,16 +268,26 @@ export async function prerenderStaticBlogDist(
       imageMimeType
     });
 
-    const articleDir = path.join(blogOutDir, rawSlug);
+    const resolvedOgImageUrl = staticImageUrl || `${origin}${DEFAULT_OG_IMAGE_PATH}`;
+    const safeRouteSlug = rawSlug.length <= 200 ? rawSlug : fileSlug;
+
+    const articleDir = path.join(blogOutDir, safeRouteSlug);
     const articleHtmlPath = path.join(articleDir, 'index.html');
-    const cleanHtmlPath = path.join(blogOutDir, `${rawSlug}.html`);
+    const cleanHtmlPath = path.join(blogOutDir, `${safeRouteSlug}.html`);
     fs.mkdirSync(articleDir, { recursive: true });
     fs.writeFileSync(articleHtmlPath, articleHtml, 'utf-8');
     fs.writeFileSync(cleanHtmlPath, articleHtml, 'utf-8');
 
     // Also pre-render by post.id if distinct from post.slug so /blog/<id> shares also resolve statically
     const rawId = (post.id || '').trim();
-    if (rawId && rawId !== rawSlug && !rawId.includes('..') && !rawId.includes('/') && !rawId.includes('\\')) {
+    if (
+      rawId &&
+      rawId !== safeRouteSlug &&
+      rawId.length <= 200 &&
+      !rawId.includes('..') &&
+      !rawId.includes('/') &&
+      !rawId.includes('\\')
+    ) {
       const idDir = path.join(blogOutDir, rawId);
       fs.mkdirSync(idDir, { recursive: true });
       fs.writeFileSync(path.join(idDir, 'index.html'), articleHtml, 'utf-8');
@@ -255,9 +299,27 @@ export async function prerenderStaticBlogDist(
       htmlPath: articleHtmlPath,
       cleanHtmlPath,
       imagePath: writtenImagePath,
-      ogImageUrl: staticImageUrl
+      ogImageUrl: resolvedOgImageUrl
     });
   }
+
+  fs.writeFileSync(
+    manifestOutPath,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        count: generatedFiles.length,
+        posts: publishedPosts.map((p) => ({
+          id: p.id,
+          slug: p.slug || p.id,
+          updatedAt: p.updatedAt || p.publishedAt || ''
+        }))
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  );
 
   console.log(
     `[prerenderBlogMeta] Pre-rendered ${generatedFiles.length} published blog article page(s), thumbnails, and dist/sitemap.xml (${sitemapData.urlCount} URLs).`

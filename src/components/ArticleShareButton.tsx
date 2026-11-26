@@ -10,19 +10,24 @@ export interface ArticleShareLinks {
   telegramUrl: string;
 }
 
-export const getPublicShareOrigin = (): string => {
-  if (
-    typeof window !== 'undefined' &&
-    window.location.protocol === 'https:' &&
-    !window.location.hostname.startsWith('ais-dev-')
-  ) {
-    return window.location.origin;
+export const getPublicShareOrigin = (): string => DEFAULT_CANONICAL_ORIGIN;
+
+export const normalizePublicShareOrigin = (origin?: string): string => {
+  const candidate = (origin || '').trim().replace(/\/+$/, '');
+  if (!candidate) return DEFAULT_CANONICAL_ORIGIN;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol === 'https:' && parsed.hostname.toLowerCase() === 'isezerano.online') {
+      return DEFAULT_CANONICAL_ORIGIN;
+    }
+  } catch {
+    // fallback to canonical origin
   }
   return DEFAULT_CANONICAL_ORIGIN;
 };
 
 export const getCanonicalArticleUrl = (slugOrId: string, origin?: string): string => {
-  const base = (origin || getPublicShareOrigin()).replace(/\/+$/, '');
+  const base = normalizePublicShareOrigin(origin);
   const cleanSlug = encodeURIComponent((slugOrId || '').trim());
   return `${base}/blog/${cleanSlug}`;
 };

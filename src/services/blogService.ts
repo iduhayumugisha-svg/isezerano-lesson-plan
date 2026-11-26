@@ -99,12 +99,15 @@ export const purgeLocalBlogPosts = (): void => {
  * Generates an SEO-friendly URL slug from an article title.
  */
 export const generateSlug = (title: string): string => {
-  const cleaned = title
+  let cleaned = title
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  if (cleaned.length > 120) {
+    cleaned = cleaned.slice(0, 120).replace(/-+[^-]*$/, '').replace(/-+$/g, '') || cleaned.slice(0, 120);
+  }
   return cleaned || `article-${Date.now()}`;
 };
 
@@ -568,11 +571,33 @@ export const compressImageToPersistentDataUri = async (
   const img = await loadImageFromFile(file);
   const dimensionSteps = [1200, 1080, 900, 720, 560, 420];
   const qualitySteps = [0.84, 0.72, 0.6, 0.48, 0.36];
-  const hasTransparency =
+  const mightHaveAlpha =
     !preferJpeg &&
-    (file.type === 'image/png' ||
-      file.type === 'image/webp' ||
-      /\.(png|webp)$/i.test(file.name));
+    (file.type === 'image/png' || /\.png$/i.test(file.name));
+
+  let hasTransparency = false;
+  if (mightHaveAlpha) {
+    try {
+      const probeCanvas = document.createElement('canvas');
+      const pw = Math.min(64, Math.max(1, img.naturalWidth || img.width || 64));
+      const ph = Math.min(64, Math.max(1, img.naturalHeight || img.height || 64));
+      probeCanvas.width = pw;
+      probeCanvas.height = ph;
+      const pCtx = probeCanvas.getContext('2d');
+      if (pCtx) {
+        pCtx.drawImage(img, 0, 0, pw, ph);
+        const data = pCtx.getImageData(0, 0, pw, ph).data;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 245) {
+            hasTransparency = true;
+            break;
+          }
+        }
+      }
+    } catch {
+      hasTransparency = false;
+    }
+  }
 
   let bestUri = '';
   let bestBytes = Infinity;
@@ -588,6 +613,11 @@ export const compressImageToPersistentDataUri = async (
         width = Math.max(1, Math.round((width * maxDim) / height));
         height = maxDim;
       }
+    } else if (maxDim === 1200 && width > 0 && height > 0 && (width < 600 || height < 315)) {
+      // Ensure tiny source photos meet WhatsApp/Facebook crawler minimum preview dimensions (e.g. >= 600px wide)
+      const scale = Math.min(3, Math.max(600 / width, 315 / height));
+      width = Math.min(1200, Math.round(width * scale));
+      height = Math.min(1200, Math.round(height * scale));
     }
 
     const canvas = document.createElement('canvas');
@@ -606,11 +636,9 @@ export const compressImageToPersistentDataUri = async (
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, width, height);
 
-    // For thumbnails / social cards, prefer JPEG so WhatsApp, Facebook, and Telegram always render previews
-    const mimeCandidates = preferJpeg
-      ? ['image/jpeg', 'image/webp']
-      : hasTransparency
-      ? ['image/webp', 'image/jpeg']
+    // Always prefer JPEG for opaque news photos & thumbnails so WhatsApp, Facebook, and Telegram render previews reliably
+    const mimeCandidates = hasTransparency
+      ? ['image/png', 'image/jpeg']
       : ['image/jpeg', 'image/webp'];
 
     for (const mime of mimeCandidates) {

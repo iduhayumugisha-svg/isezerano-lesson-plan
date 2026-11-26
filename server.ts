@@ -112,6 +112,29 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
     else res.send(content);
   });
 
+  app.all('/og-default.jpg', (req: Request, res: Response) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(405).type('text/plain').send('Method Not Allowed');
+      return;
+    }
+    const candidates = isProd
+      ? [path.join(distDir, 'og-default.jpg'), path.join(publicDir, 'og-default.jpg')]
+      : [path.join(publicDir, 'og-default.jpg'), path.join(distDir, 'og-default.jpg')];
+    const matched = candidates.find((p) => fs.existsSync(p));
+    if (!matched) {
+      res.status(404).type('text/plain').send('Default OG image not found.');
+      return;
+    }
+    const buf = fs.readFileSync(matched);
+    res.status(200);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Length', String(buf.length));
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'HEAD') res.end();
+    else res.send(buf);
+  });
+
   // 1. Public Blog Thumbnail Image Endpoints (/og-blog/ static-aligned + legacy /api/blog-og-image/)
   app.all(
     ['/og-blog/:slugOrFile', '/api/blog-og-image/:slugOrFile'],

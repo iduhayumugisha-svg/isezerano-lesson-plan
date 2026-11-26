@@ -707,8 +707,8 @@ function testDynamicSeoMetadataUpdates() {
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Custom news portal description managed by Admin.');
     assert.equal(metaMap.get('property=og:site_name')?.attrs.content, 'ISEZERANO NEWS PORTAL – DIGITAL DESK');
     assert.equal(metaMap.get('property=og:description')?.attrs.content, 'Custom news portal description managed by Admin.');
-    assert.equal(metaMap.has('property=og:image'), false);
-    assert.equal(metaMap.has('name=twitter:image'), false);
+    assert.equal(metaMap.get('property=og:image')?.attrs.content, 'https://isezerano.online/og-default.jpg');
+    assert.equal(metaMap.get('name=twitter:image')?.attrs.content, 'https://isezerano.online/og-default.jpg');
     assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
 
     updateBlogPostSeo(
@@ -728,9 +728,9 @@ function testDynamicSeoMetadataUpdates() {
     );
     assert.equal(mockDocument.title, 'National Summit Opens – ISEZERANO NEWS PORTAL – DIGITAL DESK');
     assert.equal(metaMap.get('name=description')?.attrs.content, 'Delegates gather in Kigali.');
-    assert.equal(metaMap.has('property=og:image'), false);
-    assert.equal(metaMap.has('name=twitter:image'), false);
-    assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary');
+    assert.equal(metaMap.get('property=og:image')?.attrs.content, 'https://isezerano.online/og-default.jpg');
+    assert.equal(metaMap.get('name=twitter:image')?.attrs.content, 'https://isezerano.online/og-default.jpg');
+    assert.equal(metaMap.get('name=twitter:card')?.attrs.content, 'summary_large_image');
 
     updateBlogPostSeo(
       {
@@ -1254,14 +1254,14 @@ async function testSocialCrawlersAndAllPostThumbnails(): Promise<void> {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    // 1. Homepage preserves site metadata without deleted og-isezerano-online.jpg
+    // 1. Homepage preserves site metadata with reliable fallback /og-default.jpg and without deleted og-isezerano-online.jpg
     const homeRes = await fetch(`${baseUrl}/`, { headers: { 'User-Agent': 'WhatsApp/2.23.20.0' } });
     assert.equal(homeRes.status, 200);
     const homeHtml = await homeRes.text();
     assert.equal(homeHtml.includes('<meta property="og:type" content="website" />'), true);
     assert.equal(homeHtml.includes('<meta property="og:title" content="ISEZERANO ONLINE" />'), true);
     assert.equal(homeHtml.includes('og-isezerano-online.jpg'), false);
-    assert.equal(homeHtml.includes('property="og:image"'), false);
+    assert.equal(homeHtml.includes('<meta property="og:image" content="https://isezerano.online/og-default.jpg" />'), true);
     assert.equal(homeHtml.includes('Rwanda CBC Term 1 Lesson Guide'), false);
 
     // 2. Article A: first real content image overrides stale thumbnailUrl & skips decorative icons
@@ -1323,11 +1323,14 @@ async function testSocialCrawlersAndAllPostThumbnails(): Promise<void> {
 
     const articleEHtml = await (await fetch(`${baseUrl}/blog/text-only-educational-notice`)).text();
     assert.equal(articleEHtml.includes('og-isezerano-online.jpg'), false);
-    assert.equal(articleEHtml.includes('property="og:image"'), false);
-    assert.equal(articleEHtml.includes('property="og:image:secure_url"'), false);
-    assert.equal(articleEHtml.includes('name="twitter:image"'), false);
-    assert.equal(articleEHtml.includes('<meta name="twitter:card" content="summary" />'), true);
+    assert.equal(articleEHtml.includes('<meta property="og:image" content="https://isezerano.online/og-default.jpg" />'), true);
+    assert.equal(articleEHtml.includes('<meta property="og:image:secure_url" content="https://isezerano.online/og-default.jpg" />'), true);
+    assert.equal(articleEHtml.includes('<meta name="twitter:image" content="https://isezerano.online/og-default.jpg" />'), true);
+    assert.equal(articleEHtml.includes('<meta name="twitter:card" content="summary_large_image" />'), true);
     assert.equal((await fetch(`${baseUrl}/og-blog/text-only-educational-notice.jpg`)).status, 404);
+    const fallbackImgRes = await fetch(`${baseUrl}/og-default.jpg`);
+    assert.equal(fallbackImgRes.status, 200);
+    assert.equal(fallbackImgRes.headers.get('content-type'), 'image/jpeg');
 
     // 6. Query-string route + draft/missing protection
     const queryRouteHtml = await (await fetch(`${baseUrl}/blog?post=nursery-report-card-term-updates`)).text();
