@@ -75,7 +75,24 @@ export function isPublicHttpsImageUrl(url: string | null | undefined): boolean {
 }
 
 const GENERIC_BRANDING_ASSET_REGEX =
-  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+
+export function safeDecodeURIComponent(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+export function normalizeLookupSlugOrId(raw: string | null | undefined): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return safeDecodeURIComponent(raw)
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.html$/i, '')
+    .toLowerCase();
+}
 
 export function isGenericBrandingAssetUrl(
   url: string | null | undefined,
@@ -507,8 +524,12 @@ function parseFirestoreDocument(docJson: { name?: string; fields?: Record<string
   for (const [k, v] of Object.entries(fields)) {
     out[k] = parseFirestoreRestValue(v);
   }
-  if (!out.id && docJson.name) {
-    out.id = docJson.name.split('/').pop() || '';
+  const docId = docJson.name ? docJson.name.split('/').pop() || '' : '';
+  if (docId) {
+    out._docId = docId;
+  }
+  if (!out.id && docId) {
+    out.id = docId;
   }
   return out;
 }
@@ -516,17 +537,20 @@ function parseFirestoreDocument(docJson: { name?: string; fields?: Record<string
 // Short TTL cache so rapid crawler bursts (WhatsApp + Facebook fetching HTML + image within 1s)
 // avoid redundant Firestore REST calls while still reflecting updates promptly.
 let postsCache: { data: BlogPost[]; fetchedAt: number } | null = null;
-let brandingCache: { data: Partial<WebsiteBrandingSettings> | null; fetchedAt: number } | null = null;
+let designMetaCache: {
+  data: { branding: Partial<WebsiteBrandingSettings> | null; logoUrl: string };
+  fetchedAt: number;
+} | null = null;
 const CACHE_TTL_MS = 10_000;
 
 export function clearOgMetaCache(): void {
   postsCache = null;
-  brandingCache = null;
+  designMetaCache = null;
 }
 
 /**
  * Fetches published Blog posts from public Cloud Firestore REST API (no secret credentials required).
- * Uses compact page sizes (25) with per-page retries and 15s timeout so large embedded-image posts never time out or drop trailing pages.
+ * Retries transient errors with adaptive page sizing and never caches partial/failed fetches.
  */
 export async function fetchPublishedBlogPostsFromFirestore(
   projectId: string = FIREBASE_PROJECT_ID,
@@ -538,20 +562,25 @@ export async function fetchPublishedBlogPostsFromFirestore(
 
   const allPosts: BlogPost[] = [];
   let pageToken = '';
+  let currentPageSize = 25;
+  let completedAllPages = false;
 
-  const fetchPageWithRetry = async (token: string): Promise<{
+  const fetchPageWithRetry = async (
+    token: string,
+    pageSize: number
+  ): Promise<{
     documents?: Array<{ name?: string; fields?: Record<string, any> }>;
     nextPageToken?: string;
   } | null> => {
     const url = new URL(
       `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/posts`
     );
-    url.searchParams.set('pageSize', '25');
+    url.searchParams.set('pageSize', String(pageSize));
     if (token) {
       url.searchParams.set('pageToken', token);
     }
 
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -561,9 +590,13 @@ export async function fetchPublishedBlogPostsFromFirestore(
         });
         clearTimeout(timer);
         if (!res.ok) {
-          console.warn(`[SEO/OG] Firestore REST page fetch HTTP ${res.status} (attempt ${attempt}).`);
-          if (attempt < 2 && res.status >= 500) {
-            await new Promise((r) => setTimeout(r, 400));
+          console.warn(`[SEO/OG] Firestore REST page fetch HTTP ${res.status} (attempt ${attempt}, pageSize=${pageSize}).`);
+          if (attempt < 3 && (res.status >= 500 || res.status === 429 || res.status === 413)) {
+            if (res.status === 413 && currentPageSize > 10) {
+              currentPageSize = 10;
+              url.searchParams.set('pageSize', '10');
+            }
+            await new Promise((r) => setTimeout(r, 350 * attempt));
             continue;
           }
           return null;
@@ -574,8 +607,12 @@ export async function fetchPublishedBlogPostsFromFirestore(
         };
       } catch (err) {
         clearTimeout(timer);
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 400));
+        if (attempt < 3) {
+          if (currentPageSize > 10) {
+            currentPageSize = 10;
+            url.searchParams.set('pageSize', '10');
+          }
+          await new Promise((r) => setTimeout(r, 350 * attempt));
           continue;
         }
         throw err;
@@ -585,9 +622,13 @@ export async function fetchPublishedBlogPostsFromFirestore(
   };
 
   try {
+    let pageFailed = false;
     do {
-      const json = await fetchPageWithRetry(pageToken);
-      if (!json) break;
+      const json = await fetchPageWithRetry(pageToken, currentPageSize);
+      if (!json) {
+        pageFailed = true;
+        break;
+      }
 
       for (const docItem of json.documents || []) {
         const parsed = parseFirestoreDocument(docItem) as BlogPost;
@@ -599,17 +640,94 @@ export async function fetchPublishedBlogPostsFromFirestore(
       pageToken = json.nextPageToken || '';
     } while (pageToken);
 
+    completedAllPages = !pageFailed;
+
     allPosts.sort((a, b) => {
       const tA = Date.parse(a.publishedAt || a.updatedAt || '') || 0;
       const tB = Date.parse(b.publishedAt || b.updatedAt || '') || 0;
       return tB - tA;
     });
 
-    postsCache = { data: allPosts, fetchedAt: Date.now() };
-    return allPosts;
+    if (completedAllPages) {
+      postsCache = { data: allPosts, fetchedAt: Date.now() };
+      return allPosts;
+    }
+
+    return postsCache?.data && postsCache.data.length >= allPosts.length ? postsCache.data : allPosts;
   } catch (err) {
     console.warn('[SEO/OG] Could not query Firestore posts via REST:', err);
     return postsCache?.data || allPosts;
+  }
+}
+
+/**
+ * Direct single-document Firestore REST fallback lookup by document ID
+ * when a freshly published article is not yet present in the short-lived list cache.
+ */
+export async function fetchSinglePublishedPostByIdFromFirestore(
+  docId: string,
+  projectId: string = FIREBASE_PROJECT_ID,
+  timeoutMs: number = 2500
+): Promise<BlogPost | null> {
+  const cleanedId = safeDecodeURIComponent(String(docId || '')).trim();
+  if (!cleanedId || cleanedId.includes('/') || cleanedId.includes('..') || cleanedId.length > 180) {
+    return null;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/posts/${encodeURIComponent(cleanedId)}`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' }
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { name?: string; fields?: Record<string, any> };
+    const parsed = parseFirestoreDocument(json) as BlogPost;
+    if (String(parsed.status || '').trim().toLowerCase() !== 'published') {
+      return null;
+    }
+    return { ...parsed, status: 'published' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches website branding and real logo URL from Cloud Firestore REST API (`appSettings/website_design`).
+ */
+export async function fetchWebsiteDesignMetadataFromFirestore(
+  projectId: string = FIREBASE_PROJECT_ID,
+  timeoutMs: number = 3500
+): Promise<{ branding: Partial<WebsiteBrandingSettings> | null; logoUrl: string }> {
+  if (designMetaCache && Date.now() - designMetaCache.fetchedAt < CACHE_TTL_MS) {
+    return designMetaCache.data;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const url =
+      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/appSettings/website_design` +
+      `?mask.fieldPaths=branding&mask.fieldPaths=logo`;
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' }
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return designMetaCache?.data || { branding: null, logoUrl: '' };
+    const json = (await res.json()) as { name?: string; fields?: Record<string, any> };
+    const parsed = parseFirestoreDocument(json);
+    const branding = (parsed.branding || null) as Partial<WebsiteBrandingSettings> | null;
+    const logoUrl = normalizePersistentImageSrc(extractRawImageField(parsed.logo?.logoUrl));
+    const result = { branding, logoUrl };
+    designMetaCache = { data: result, fetchedAt: Date.now() };
+    return result;
+  } catch {
+    return designMetaCache?.data || { branding: null, logoUrl: '' };
   }
 }
 
@@ -620,30 +738,43 @@ export async function fetchWebsiteBrandingFromFirestore(
   projectId: string = FIREBASE_PROJECT_ID,
   timeoutMs: number = 3500
 ): Promise<Partial<WebsiteBrandingSettings> | null> {
-  if (brandingCache && Date.now() - brandingCache.fetchedAt < CACHE_TTL_MS) {
-    return brandingCache.data;
+  const meta = await fetchWebsiteDesignMetadataFromFirestore(projectId, timeoutMs);
+  return meta.branding;
+}
+
+/**
+ * Resolves the homepage's own real branding image (HTTPS or raster Data URI -> `/og-blog/site-logo-<hash8>.<ext>`).
+ * Never returns SVG or unwanted generic placeholder files (`og-default.*`, `og-isezerano-online.*`).
+ */
+export function resolveHomepageSocialImageUrl(
+  logoUrl: string | null | undefined,
+  origin: string
+): { publicUrl: string; decodedAsset: DecodedImageAsset | null; fileName: string | null } {
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  const normalized = normalizePersistentImageSrc(logoUrl);
+  if (!normalized || /\.svg(?:[?#]|$)/i.test(normalized)) {
+    return { publicUrl: '', decodedAsset: null, fileName: null };
   }
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/appSettings/website_design`;
-
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' }
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) return null;
-    const json = (await res.json()) as { name?: string; fields?: Record<string, any> };
-    const parsed = parseFirestoreDocument(json);
-    const branding = (parsed.branding || null) as Partial<WebsiteBrandingSettings> | null;
-    brandingCache = { data: branding, fetchedAt: Date.now() };
-    return branding;
-  } catch {
-    return brandingCache?.data || null;
+  if (/(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(normalized)) {
+    return { publicUrl: '', decodedAsset: null, fileName: null };
   }
+  if (normalized.startsWith('data:image/')) {
+    const decoded = decodeImageDataUri(normalized);
+    if (!decoded) {
+      return { publicUrl: '', decodedAsset: null, fileName: null };
+    }
+    const hash8 = computeBytesHash8(decoded.buffer);
+    const fileName = `site-logo-${hash8}.${decoded.ext}`;
+    return {
+      publicUrl: `${cleanOrigin}/og-blog/${encodeURIComponent(fileName)}`,
+      decodedAsset: decoded,
+      fileName
+    };
+  }
+  if (isPublicHttpsImageUrl(normalized)) {
+    return { publicUrl: normalized, decodedAsset: null, fileName: null };
+  }
+  return { publicUrl: '', decodedAsset: null, fileName: null };
 }
 
 /**
@@ -710,6 +841,7 @@ export function resolveBrandingTitleAndDesc(
 /**
  * Resolves whether an incoming request URL targets a specific Blog article (`/blog/:slug`,
  * `/blog?post=:slug`, or `/?post=:slug`) or the Blog index (`/blog`).
+ * Safely handles malformed percent-encoding, trailing slashes, and `.html` cleanUrl variants.
  */
 export function parseBlogRoute(rawUrl: string): {
   isBlogArticle: boolean;
@@ -721,14 +853,24 @@ export function parseBlogRoute(rawUrl: string): {
     const pathname = parsed.pathname;
     const lowerPath = pathname.toLowerCase();
 
+    if (lowerPath === '/blog.html') {
+      return { isBlogArticle: false, isBlogIndex: true, slugOrId: null };
+    }
+
     if (lowerPath.startsWith('/blog/')) {
-      const slug = decodeURIComponent(pathname.slice('/blog/'.length)).replace(/\/+$/, '');
+      const slug = safeDecodeURIComponent(pathname.slice('/blog/'.length))
+        .trim()
+        .replace(/\/+$/, '')
+        .replace(/\.html$/i, '');
       if (slug) {
         return { isBlogArticle: true, isBlogIndex: false, slugOrId: slug };
       }
     }
 
-    const postQuery = (parsed.searchParams.get('post') || '').trim();
+    const postQuery = safeDecodeURIComponent(parsed.searchParams.get('post') || '')
+      .trim()
+      .replace(/\/+$/, '')
+      .replace(/\.html$/i, '');
     if (postQuery && (lowerPath === '/' || lowerPath === '/blog' || lowerPath === '/blog/')) {
       return { isBlogArticle: true, isBlogIndex: false, slugOrId: postQuery };
     }
@@ -737,7 +879,17 @@ export function parseBlogRoute(rawUrl: string): {
       return { isBlogArticle: false, isBlogIndex: true, slugOrId: null };
     }
   } catch {
-    // ignore malformed URL
+    // Fallback regex parsing when request URL contains invalid URL characters
+    const cleanPath = String(rawUrl || '').split('?')[0].split('#')[0];
+    if (/^\/blog\/.+/i.test(cleanPath)) {
+      const slug = safeDecodeURIComponent(cleanPath.replace(/^\/blog\//i, ''))
+        .trim()
+        .replace(/\/+$/, '')
+        .replace(/\.html$/i, '');
+      if (slug) {
+        return { isBlogArticle: true, isBlogIndex: false, slugOrId: slug };
+      }
+    }
   }
   return { isBlogArticle: false, isBlogIndex: false, slugOrId: null };
 }
@@ -765,6 +917,30 @@ function injectHeadBlock(templateHtml: string, headBlock: string): string {
   return `${cleaned.slice(0, headCloseIdx)}${headBlock}\n  ${cleaned.slice(headCloseIdx)}`;
 }
 
+function resolveArticleDescription(
+  post: BlogPost,
+  branding?: Partial<WebsiteBrandingSettings> | null
+): string {
+  const genericSiteDesc = (branding?.websiteDescription || '').trim().toLowerCase();
+  const defaultSiteDesc = DEFAULT_SITE_DESCRIPTION.trim().toLowerCase();
+  const rawExcerpt = (post.excerpt || '').trim();
+  const isGenericExcerpt =
+    !rawExcerpt ||
+    rawExcerpt.toLowerCase() === defaultSiteDesc ||
+    (genericSiteDesc !== '' && rawExcerpt.toLowerCase() === genericSiteDesc);
+
+  if (!isGenericExcerpt) {
+    return rawExcerpt;
+  }
+
+  const contentExcerpt = extractPlainText(post.content || '', 160);
+  if (contentExcerpt) {
+    return contentExcerpt;
+  }
+
+  return (post.title || 'Article').trim();
+}
+
 /**
  * Builds complete initial HTML containing article-specific Open Graph, Twitter Card,
  * and Schema.org JSON-LD metadata readable without JavaScript.
@@ -786,10 +962,7 @@ export function renderBlogArticleHtml(
 
   const articleTitle = (post.title || 'Article').trim();
   const pageTitle = `${articleTitle} – ${siteName}`;
-  const description =
-    (post.excerpt || '').trim() ||
-    extractPlainText(post.content || '', 160) ||
-    articleTitle;
+  const description = resolveArticleDescription(post, branding);
   const articleUrl = `${cleanOrigin}/blog/${encodeURIComponent(post.slug || post.id)}`;
 
   const rawThumb = resolvePostThumbnailSource(post);
@@ -924,7 +1097,9 @@ export function renderWebsiteDefaultHtml(
   const resolvedHomepageImage =
     normalizedPath === '/' &&
     isPublicHttpsImageUrl(homepageImageUrl) &&
-    !isGenericBrandingAssetUrl(homepageImageUrl) &&
+    !/(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(
+      homepageImageUrl!
+    ) &&
     !/\.svg(?:[?#]|$)/i.test(homepageImageUrl!)
       ? homepageImageUrl!.trim()
       : '';
@@ -968,29 +1143,75 @@ export function renderWebsiteDefaultHtml(
 }
 
 /**
- * Matches a published blog post by slug (preferred) or ID. Never returns drafts or unpublished posts.
+ * Renders neutral non-homepage HTML when an article route cannot be resolved
+ * (missing, unpublished, or lookup failed), ensuring article URLs never silently receive homepage metadata.
+ */
+export function renderMissingArticleHtml(
+  templateHtml: string,
+  origin: string,
+  slugOrId: string,
+  branding?: Partial<WebsiteBrandingSettings> | null
+): string {
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  const { fullTitle: siteName } = resolveBrandingTitleAndDesc(branding);
+  const cleanedSlug = safeDecodeURIComponent(String(slugOrId || ''))
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.html$/i, '');
+  const articleUrl = cleanedSlug
+    ? `${cleanOrigin}/blog/${encodeURIComponent(cleanedSlug)}`
+    : `${cleanOrigin}/blog`;
+  const title = `Article Not Available – ${siteName}`;
+  const description = `This article is currently unavailable or unpublished on ${siteName}.`;
+
+  const headBlock = [
+    `    <title>${escapeHtml(title)}</title>`,
+    `    <meta name="robots" content="noindex, nofollow" />`,
+    `    <meta name="description" content="${escapeHtml(description)}" />`,
+    `    <link rel="canonical" href="${escapeHtml(articleUrl)}" />`,
+    `    <meta property="og:type" content="article" />`,
+    `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
+    `    <meta property="og:title" content="${escapeHtml(title)}" />`,
+    `    <meta property="og:description" content="${escapeHtml(description)}" />`,
+    `    <meta property="og:url" content="${escapeHtml(articleUrl)}" />`,
+    `    <meta name="twitter:card" content="summary" />`,
+    `    <meta name="twitter:title" content="${escapeHtml(title)}" />`,
+    `    <meta name="twitter:description" content="${escapeHtml(description)}" />`
+  ].join('\n');
+
+  return injectHeadBlock(templateHtml, headBlock);
+}
+
+/**
+ * Matches a published blog post by slug (preferred), ID, Firestore `_docId`, or sanitized slug.
+ * Never returns drafts or unpublished posts.
  */
 export function findPublishedPostBySlugOrId(
   posts: BlogPost[],
   slugOrId: string | null | undefined
 ): BlogPost | null {
-  if (!slugOrId) return null;
-  const target = slugOrId.trim().toLowerCase();
+  const target = normalizeLookupSlugOrId(slugOrId);
   if (!target) return null;
+
   return (
-    posts.find(
-      (p) =>
-        String(p.status || '').trim().toLowerCase() === 'published' &&
-        ((p.slug || '').trim().toLowerCase() === target ||
-          (p.id || '').trim().toLowerCase() === target ||
-          safeFileSlug(p.slug || p.id).toLowerCase() === target)
-    ) || null
+    posts.find((p) => {
+      if (String(p.status || '').trim().toLowerCase() !== 'published') {
+        return false;
+      }
+      const docId = (p as BlogPost & { _docId?: string })._docId;
+      return (
+        normalizeLookupSlugOrId(p.slug) === target ||
+        normalizeLookupSlugOrId(p.id) === target ||
+        normalizeLookupSlugOrId(docId) === target ||
+        normalizeLookupSlugOrId(safeFileSlug(p.slug || p.id || docId || '')) === target
+      );
+    }) || null
   );
 }
 
 /**
  * Route handler serving public HTTPS/HTTP binary thumbnails for published Blog articles
- * at `/og-blog/:slugOrFile` without requiring login, cookies, or JavaScript.
+ * and the homepage site logo (`/og-blog/site-logo-*`) without requiring login or cookies.
  */
 export async function handleBlogOgImageRequest(
   req: Request,
@@ -998,7 +1219,7 @@ export async function handleBlogOgImageRequest(
   providers: OgDataProviders = {}
 ): Promise<void> {
   const rawParam = String(req.params.slugOrFile || '');
-  const decodedParam = decodeURIComponent(rawParam).trim();
+  const decodedParam = safeDecodeURIComponent(rawParam).trim();
   const baseWithoutExt = decodedParam.replace(/\.(jpg|jpeg|png|webp|gif)$/i, '').trim();
   const baseWithoutHashAndExt = decodedParam
     .replace(/-[0-9a-f]{8}\.(jpg|jpeg|png|webp|gif)$/i, '')
@@ -1006,6 +1227,27 @@ export async function handleBlogOgImageRequest(
 
   if (!baseWithoutExt) {
     res.status(404).type('text/plain').send('Article image not found.');
+    return;
+  }
+
+  // Homepage real logo asset route (`/og-blog/site-logo-<hash8>.<ext>`)
+  if (/^site-logo(?:-[0-9a-f]{8})?$/i.test(baseWithoutExt)) {
+    const designMeta = await fetchWebsiteDesignMetadataFromFirestore();
+    const decodedLogo = designMeta.logoUrl.startsWith('data:image/')
+      ? decodeImageDataUri(designMeta.logoUrl)
+      : null;
+    if (decodedLogo) {
+      res.status(200);
+      res.setHeader('Content-Type', decodedLogo.mimeType);
+      res.setHeader('Content-Length', String(decodedLogo.buffer.length));
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (req.method === 'HEAD') res.end();
+      else res.send(decodedLogo.buffer);
+      return;
+    }
+    res.status(404).type('text/plain').send('Site logo asset not available.');
     return;
   }
 

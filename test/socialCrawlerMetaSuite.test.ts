@@ -10,11 +10,16 @@ import { JSDOM } from 'jsdom';
 import { createServerApp } from '../server.ts';
 import { prerenderStaticBlogDist } from '../scripts/prerenderBlogMeta.ts';
 import {
+  clearOgMetaCache,
   fetchPublishedBlogPostsFromFirestore,
+  findPublishedPostBySlugOrId,
   isGenericBrandingAssetUrl,
+  parseBlogRoute,
   readImageDimensionsFromBuffer,
   renderBlogArticleHtml,
+  renderMissingArticleHtml,
   renderWebsiteDefaultHtml,
+  resolveHomepageSocialImageUrl,
   resolvePostThumbnailSource,
   sniffImageMimeFromBuffer
 } from '../server/ogMeta.ts';
@@ -26,11 +31,13 @@ import {
 } from '../src/components/ArticleShareButton.tsx';
 import {
   DEFAULT_CANONICAL_ORIGIN,
+  DEFAULT_SEO_DESCRIPTION,
   getCanonicalPublicOrigin,
   isGenericBrandingImageUrl,
   resolveCanonicalDomainRedirectUrl,
   setRegisteredWebsiteLogoUrl,
   updateBlogPostSeo,
+  updateMissingArticleSeo,
   updateWebsiteBrandingSeo
 } from '../src/services/seoService.ts';
 import type { BlogPost } from '../src/types/blog.ts';
@@ -792,11 +799,12 @@ async function testBrandingIsolationAndArticleSafety(): Promise<void> {
   }
 
   // 5. Verify BlogView loading-race guard prevents overwriting prerendered article tags while isLoading === true
+  // and missing articles use updateMissingArticleSeo instead of resetDefaultSeo
   const blogViewSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
   assert.match(
     blogViewSrc,
-    /else\s+if\s*\(\s*!activeSlug\s*\|\|\s*!isLoading\s*\)\s*\{\s*resetDefaultSeo\(branding\);/m,
-    'BlogView must guard resetDefaultSeo so loading /blog/<slug> never overwrites prerendered article SEO'
+    /else\s+if\s*\(\s*!activeSlug\s*\)\s*\{\s*resetDefaultSeo\(branding\);\s*\}\s*else\s+if\s*\(\s*!isLoading\s*\)\s*\{\s*updateMissingArticleSeo\(activeSlug,\s*branding\);/m,
+    'BlogView must guard resetDefaultSeo and isolate missing article URLs from homepage metadata'
   );
 
   const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
@@ -809,11 +817,257 @@ async function testBrandingIsolationAndArticleSafety(): Promise<void> {
   console.log('✓ 5. Generic branding elimination, homepage vs article isolation, duplicate meta cleanup & BlogView loading guard verified');
 }
 
+async function testGlobalSeoReliabilityAndProtection(): Promise<void> {
+  const olderJpg = buildMinimalJpegDataUri(1200, 630, 0x19);
+  const newJpg = buildMinimalJpegDataUri(1280, 720, 0x2a);
+  const updatedNewJpg = buildMinimalJpegDataUri(1280, 720, 0x3b);
+  const realSiteLogo = buildMinimalJpegDataUri(512, 512, 0x4c);
+
+  const olderPost: BlogPost & { _docId?: string } = {
+    id: 'old_post_101',
+    _docId: 'doc_old_101',
+    title: 'Older Archive Report: Rural Schools Expand Libraries',
+    slug: 'older-archive-report-libraries',
+    excerpt: DEFAULT_SEO_DESCRIPTION, // accidentally polluted with generic homepage description
+    content: `<p>Detailed archive reporting on library access.</p><img src="${olderJpg.dataUri}" alt="Library" />`,
+    thumbnailUrl: olderJpg.dataUri,
+    category: 'Education',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2025-05-10T08:00:00Z',
+    updatedAt: '2025-05-10T08:00:00Z',
+    status: 'Published' as any // legacy mixed-case status
+  };
+
+  const newerPost: BlogPost & { _docId?: string } = {
+    id: 'new_post_202',
+    _docId: 'doc_new_202',
+    title: 'Breaking Update: Kigali Digital Bus Cards Launch',
+    slug: 'breaking-kigali-digital-bus-cards',
+    excerpt: 'Commuters begin using contactless cards citywide.',
+    content: `<p>Commuters tap contactless cards across Kigali buses.</p><img src="blob:https://isezerano.online/temp-blob-id" alt="Temp"/><img src="${newJpg.dataUri}" alt="Bus Card" />`,
+    thumbnailUrl: 'blob:https://isezerano.online/temp-blob-id',
+    category: 'National',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T16:00:00Z',
+    updatedAt: '2026-11-26T16:00:00Z',
+    status: 'published'
+  };
+
+  const missingImagePost: BlogPost = {
+    id: 'missing_img_303',
+    title: 'Public Advisory Without Image',
+    slug: 'public-advisory-without-image',
+    excerpt: 'Official advisory regarding weekend schedule.',
+    content: '<p>Schedule notice with zero images.</p><img src="data:image/svg+xml;base64,PHN2Zy8+" alt="svg"/>',
+    thumbnailUrl: 'https://isezerano.online/og-blog/site-logo-12345678.jpg',
+    category: 'Announcements',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T15:00:00Z',
+    status: 'published'
+  };
+
+  const draftPost: BlogPost = {
+    id: 'draft_404',
+    title: 'Unpublished Draft Story',
+    slug: 'unpublished-draft-story',
+    excerpt: 'Should never be indexed or returned.',
+    content: '<p>Draft body.</p>',
+    thumbnailUrl: olderJpg.dataUri,
+    category: 'National',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '',
+    status: 'draft'
+  };
+
+  const allPosts = [olderPost, newerPost, missingImagePost, draftPost];
+
+  // 1. Slug, ID, _docId, trailing slash, .html, mixed-case, and malformed URL decoding checks
+  assert.equal(parseBlogRoute('/blog/older-archive-report-libraries/').slugOrId, 'older-archive-report-libraries');
+  assert.equal(parseBlogRoute('/blog/older-archive-report-libraries.html').slugOrId, 'older-archive-report-libraries');
+  assert.equal(parseBlogRoute('/blog/100%-safe-article').isBlogArticle, true);
+  assert.equal(parseBlogRoute('/blog/100%-safe-article').slugOrId, '100%-safe-article');
+
+  assert.equal(findPublishedPostBySlugOrId(allPosts, 'older-archive-report-libraries')?.id, 'old_post_101');
+  assert.equal(findPublishedPostBySlugOrId(allPosts, 'OLDER-ARCHIVE-REPORT-LIBRARIES.html')?.id, 'old_post_101');
+  assert.equal(findPublishedPostBySlugOrId(allPosts, 'old_post_101')?.id, 'old_post_101');
+  assert.equal(findPublishedPostBySlugOrId(allPosts, 'doc_old_101')?.id, 'old_post_101');
+  assert.equal(findPublishedPostBySlugOrId(allPosts, 'unpublished-draft-story'), null);
+
+  // 2. Older post with accidentally polluted homepage description uses real article body text instead
+  const templateHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const olderHtml = renderBlogArticleHtml(templateHtml, olderPost, 'https://isezerano.online', {
+    platformTitle: 'ISEZERANO',
+    websiteDescription: DEFAULT_SEO_DESCRIPTION
+  });
+  assert.equal(extractMeta(olderHtml, 'property', 'og:description')?.includes('Detailed archive reporting on library access.'), true);
+  assert.equal(extractMeta(olderHtml, 'property', 'og:description')?.includes('Independent digital news, breaking updates'), false);
+
+  // 3. Homepage preserves real logo branding (data:image/jpeg -> /og-blog/site-logo-<hash>.jpg) while articles never inherit it
+  const homepageResolved = resolveHomepageSocialImageUrl(realSiteLogo.dataUri, 'https://isezerano.online');
+  assert.ok(homepageResolved.publicUrl.startsWith('https://isezerano.online/og-blog/site-logo-'));
+  assert.equal(isGenericBrandingImageUrl(homepageResolved.publicUrl), true);
+  assert.equal(isGenericBrandingAssetUrl(homepageResolved.publicUrl), true);
+
+  const missingImgHtml = renderBlogArticleHtml(templateHtml, missingImagePost, 'https://isezerano.online', null);
+  assert.equal(extractMeta(missingImgHtml, 'property', 'og:image'), null);
+  assert.equal(extractMeta(missingImgHtml, 'name', 'twitter:image'), null);
+
+  // 4. Static prerender includes old + new + site-logo, writes slug + id + _docId HTML, and refreshes on update
+  const tempDist = fs.mkdtempSync(path.join(os.tmpdir(), 'isezerano-global-seo-'));
+  try {
+    fs.writeFileSync(path.join(tempDist, 'index.html'), templateHtml, 'utf8');
+    // Plant unwanted stale og-default.jpg inside tempDist to prove build purges it
+    fs.writeFileSync(path.join(tempDist, 'og-default.jpg'), 'stale');
+
+    const res1 = await prerenderStaticBlogDist({
+      distDir: tempDist,
+      origin: 'https://isezerano.online',
+      posts: allPosts,
+      branding: { platformTitle: 'ISEZERANO' },
+      homepageLogoUrl: realSiteLogo.dataUri
+    });
+
+    assert.equal(res1.prerenderedCount, 3);
+    assert.equal(fs.existsSync(path.join(tempDist, 'og-default.jpg')), false);
+
+    // Homepage keeps its real site-logo og:image & twitter:image
+    const builtHome = fs.readFileSync(path.join(tempDist, 'index.html'), 'utf8');
+    assert.equal(extractMeta(builtHome, 'property', 'og:image'), homepageResolved.publicUrl);
+    assert.equal(extractMeta(builtHome, 'name', 'twitter:image'), homepageResolved.publicUrl);
+    assert.equal(
+      fs.existsSync(path.join(tempDist, 'og-blog', homepageResolved.fileName!)),
+      true,
+      'Homepage real site logo file must exist in dist/og-blog/'
+    );
+
+    // Old article accessible by slug, id, and _docId; blob: URL skipped cleanly in new post
+    assert.equal(fs.existsSync(path.join(tempDist, 'blog', 'older-archive-report-libraries', 'index.html')), true);
+    assert.equal(fs.existsSync(path.join(tempDist, 'blog', 'old_post_101', 'index.html')), true);
+    assert.equal(fs.existsSync(path.join(tempDist, 'blog', 'doc_old_101', 'index.html')), true);
+
+    const newHtml1 = fs.readFileSync(
+      path.join(tempDist, 'blog', 'breaking-kigali-digital-bus-cards', 'index.html'),
+      'utf8'
+    );
+    const ogImg1 = extractMeta(newHtml1, 'property', 'og:image');
+    assert.ok(ogImg1 && !ogImg1.includes('blob:') && ogImg1.startsWith('https://isezerano.online/og-blog/'));
+
+    // Subsequent deployment after updating new post image deletes old image and generates fresh hash
+    const updatedPosts = allPosts.map((p) =>
+      p.id === 'new_post_202'
+        ? { ...p, content: `<p>Updated photo.</p><img src="${updatedNewJpg.dataUri}" alt="Updated"/>`, updatedAt: '2026-11-26T17:00:00Z' }
+        : p
+    );
+    await prerenderStaticBlogDist({
+      distDir: tempDist,
+      origin: 'https://isezerano.online',
+      posts: updatedPosts,
+      branding: { platformTitle: 'ISEZERANO' },
+      homepageLogoUrl: realSiteLogo.dataUri
+    });
+
+    const newHtml2 = fs.readFileSync(
+      path.join(tempDist, 'blog', 'breaking-kigali-digital-bus-cards', 'index.html'),
+      'utf8'
+    );
+    const ogImg2 = extractMeta(newHtml2, 'property', 'og:image');
+    assert.ok(ogImg2 && ogImg2 !== ogImg1);
+    const oldFileRel = decodeURIComponent(new URL(ogImg1).pathname).replace(/^\/+/, '');
+    assert.equal(fs.existsSync(path.join(tempDist, oldFileRel)), false, 'Old image asset must be purged on rebuild');
+  } finally {
+    fs.rmSync(tempDist, { recursive: true, force: true });
+  }
+
+  // 5. Missing/unresolved article URL NEVER silently gets homepage metadata (SSR + client)
+  const missingSsrHtml = renderMissingArticleHtml(templateHtml, 'https://isezerano.online', 'non-existent-slug', {
+    platformTitle: 'ISEZERANO'
+  });
+  assert.equal(extractMeta(missingSsrHtml, 'property', 'og:type'), 'article');
+  assert.equal(extractMeta(missingSsrHtml, 'property', 'og:url'), 'https://isezerano.online/blog/non-existent-slug');
+  assert.equal(extractMeta(missingSsrHtml, 'name', 'robots'), 'noindex, nofollow');
+  assert.equal(extractMeta(missingSsrHtml, 'property', 'og:image'), null);
+  assert.equal(missingSsrHtml.includes('Independent digital news, breaking updates'), false);
+
+  const serverApp = createServerApp({
+    isProd: false,
+    providers: {
+      fetchPosts: async () => allPosts.filter((p) => String(p.status).toLowerCase() === 'published'),
+      fetchBranding: async () => ({ platformTitle: 'ISEZERANO' })
+    }
+  });
+  const srv = http.createServer(serverApp);
+  await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  const srvBase = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+  try {
+    const missingHttpRes = await fetch(`${srvBase}/blog/does-not-exist-anywhere`, {
+      headers: { 'User-Agent': 'WhatsApp/2.23.20.0' }
+    });
+    const missingHttpHtml = await missingHttpRes.text();
+    assert.equal(extractMeta(missingHttpHtml, 'property', 'og:url'), 'https://isezerano.online/blog/does-not-exist-anywhere');
+    assert.equal(extractMeta(missingHttpHtml, 'property', 'og:type'), 'article');
+    assert.equal(extractMeta(missingHttpHtml, 'property', 'og:image'), null);
+    assert.equal(missingHttpHtml.includes('"@type": "WebSite"'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => srv.close((err) => (err ? reject(err) : resolve())));
+  }
+
+  // 6. Client-side generic description guard + missing article SEO + data-URI homepage logo resolution
+  const dom2 = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
+    url: 'https://isezerano.online/'
+  });
+  const prevW = (globalThis as any).window;
+  const prevD = (globalThis as any).document;
+  (globalThis as any).window = dom2.window;
+  (globalThis as any).document = dom2.window.document;
+  try {
+    updateWebsiteBrandingSeo({ platformTitle: 'ISEZERANO' }, undefined, realSiteLogo.dataUri);
+    assert.equal(
+      dom2.window.document.querySelector('meta[property="og:image"]')?.getAttribute('content'),
+      homepageResolved.publicUrl
+    );
+    updateBlogPostSeo(olderPost, { platformTitle: 'ISEZERANO' });
+    assert.equal(
+      dom2.window.document.querySelector('meta[property="og:description"]')?.getAttribute('content')?.includes('Detailed archive reporting'),
+      true
+    );
+    updateMissingArticleSeo('missing-slug-client', { platformTitle: 'ISEZERANO' });
+    assert.equal(
+      dom2.window.document.querySelector('meta[property="og:url"]')?.getAttribute('content'),
+      'https://isezerano.online/blog/missing-slug-client'
+    );
+    assert.equal(dom2.window.document.querySelector('meta[property="og:image"]'), null);
+  } finally {
+    dom2.window.close();
+    (globalThis as any).window = prevW;
+    (globalThis as any).document = prevD;
+  }
+
+  // 7. Pagination resilience check: failed Firestore fetch must never crash or poison posts cache
+  clearOgMetaCache();
+  const realFetch = globalThis.fetch;
+  try {
+    let callCount = 0;
+    globalThis.fetch = (async () => {
+      callCount++;
+      return new Response('Service Unavailable', { status: 503 });
+    }) as typeof fetch;
+    const failedPosts = await fetchPublishedBlogPostsFromFirestore('isezerano-news', 1000);
+    assert.deepEqual(failedPosts, []);
+    assert.ok(callCount >= 1);
+  } finally {
+    globalThis.fetch = realFetch;
+    clearOgMetaCache();
+  }
+
+  console.log('✓ 6. Global SEO protection: old/new/missing/draft posts, slug/ID/docId lookup, cache resilience & homepage real logo verified');
+}
+
 async function run(): Promise<void> {
   testHtmlAndFirebaseConfig();
   await testThreeDistinctArticlesWithCrawlerUserAgents();
   await testCanonicalDomainEnforcementAcrossShareCopySeoAndSsr();
   await testBrandingIsolationAndArticleSafety();
+  await testGlobalSeoReliabilityAndProtection();
   console.log('\nALL SOCIAL CRAWLER METADATA TESTS PASSED!');
 }
 

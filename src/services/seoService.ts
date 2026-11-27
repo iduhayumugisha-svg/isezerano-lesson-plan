@@ -66,11 +66,29 @@ const normalizePublicImageUrl = (rawUrl: string): string => {
 };
 
 const GENERIC_BRANDING_IMAGE_PATTERN =
-  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
 
 const isSvgImageSource = (url: string): boolean => {
   const lower = url.trim().toLowerCase();
   return lower.startsWith('data:image/svg+xml') || /\.svg(?:[?#]|$)/i.test(lower);
+};
+
+const resolveHomepageDataUriLogoUrl = (rawUrl?: string): string => {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed.startsWith('data:image/') || isSvgImageSource(trimmed) || !trimmed.includes(';base64,')) {
+    return '';
+  }
+  const ext = trimmed.startsWith('data:image/png')
+    ? 'png'
+    : trimmed.startsWith('data:image/webp')
+    ? 'webp'
+    : trimmed.startsWith('data:image/gif')
+    ? 'gif'
+    : 'jpg';
+  return `${DEFAULT_CANONICAL_ORIGIN}/og-blog/${encodeURIComponent(
+    `site-logo-${computeImageDataUriHash8(trimmed)}.${ext}`
+  )}`;
 };
 
 /**
@@ -210,8 +228,8 @@ export const updateWebsiteBrandingSeo = (
   const rawLogo =
     isValidHttpsImageUrl(siteLogoUrl) && !isSvgImageSource(siteLogoUrl!)
       ? normalizePublicImageUrl(siteLogoUrl!)
-      : '';
-  const customLogo = isGenericBrandingImageUrl(rawLogo) ? '' : rawLogo;
+      : resolveHomepageDataUriLogoUrl(siteLogoUrl);
+  const customLogo = isGenericBrandingImageUrl(rawLogo) && !/\/og-blog\/site-logo-/i.test(rawLogo) ? '' : rawLogo;
 
   document.title = resolvedTitle;
   setMetaTag('name', 'description', siteDescription);
@@ -311,8 +329,14 @@ export const updateBlogPostSeo = (
       ? candidateArticleImage
       : '';
   const hasArticleImage = Boolean(ogHttpsImage);
+  const { siteDescription } = resolveSiteBrandingSeo(branding);
+  const rawExcerpt = (post.excerpt || '').trim();
+  const isGenericExcerpt =
+    !rawExcerpt ||
+    rawExcerpt.toLowerCase() === DEFAULT_SEO_DESCRIPTION.toLowerCase() ||
+    rawExcerpt.toLowerCase() === siteDescription.toLowerCase();
   const description =
-    (post.excerpt || '').trim() ||
+    (!isGenericExcerpt ? rawExcerpt : '') ||
     extractPlainTextExcerpt(post.content || '', 160) ||
     post.title;
 
@@ -370,6 +394,42 @@ export const updateBlogPostSeo = (
   };
 
   scriptTag.textContent = JSON.stringify(structuredData, null, 2);
+};
+
+export const updateMissingArticleSeo = (
+  slugOrId: string,
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput
+): void => {
+  if (typeof document === 'undefined') return;
+  const { fullTitle } = resolveSiteBrandingSeo(branding);
+  const cleaned = String(slugOrId || '').trim().replace(/\/+$/, '').replace(/\.html$/i, '');
+  const articleUrl = cleaned ? `${BASE_URL}/blog/${encodeURIComponent(cleaned)}` : `${BASE_URL}/blog`;
+  const title = `Article Not Available – ${fullTitle}`;
+  const description = `This article is currently unavailable or unpublished on ${fullTitle}.`;
+
+  document.title = title;
+  setMetaTag('name', 'description', description);
+  setLinkTag('canonical', articleUrl);
+
+  setMetaTag('property', 'og:type', 'article');
+  setMetaTag('property', 'og:site_name', fullTitle);
+  setMetaTag('property', 'og:title', title);
+  setMetaTag('property', 'og:description', description);
+  setMetaTag('property', 'og:url', articleUrl);
+  setMetaTag('property', 'og:image', '');
+  setMetaTag('property', 'og:image:secure_url', '');
+  setMetaTag('property', 'og:image:alt', '');
+
+  setMetaTag('name', 'twitter:card', 'summary');
+  setMetaTag('name', 'twitter:title', title);
+  setMetaTag('name', 'twitter:description', description);
+  setMetaTag('name', 'twitter:image', '');
+  setMetaTag('name', 'twitter:image:alt', '');
+
+  const scriptTag = document.getElementById('blog-post-schema-jsonld');
+  if (scriptTag) {
+    scriptTag.remove();
+  }
 };
 
 export const resetDefaultSeo = (

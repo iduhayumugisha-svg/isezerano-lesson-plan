@@ -26,6 +26,7 @@ import {
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
 import {
   updateBlogPostSeo,
+  updateMissingArticleSeo,
   resetDefaultSeo,
   setRegisteredWebsiteLogoUrl
 } from '../services/seoService';
@@ -175,8 +176,23 @@ export const BlogView: React.FC<BlogViewProps> = ({
     }
   }, [selectedCategory, categoryTabs]);
 
+  const normalizeLookupKey = (raw: string | null | undefined): string => {
+    if (!raw) return '';
+    try {
+      return decodeURIComponent(raw).trim().replace(/\/+$/, '').replace(/\.html$/i, '').toLowerCase();
+    } catch {
+      return raw.trim().replace(/\/+$/, '').replace(/\.html$/i, '').toLowerCase();
+    }
+  };
+
   const activePost = activeSlug
-    ? posts.find((p) => p.slug === activeSlug || p.id === activeSlug) || null
+    ? posts.find((p) => {
+        const target = normalizeLookupKey(activeSlug);
+        return (
+          normalizeLookupKey(p.slug) === target ||
+          normalizeLookupKey(p.id) === target
+        );
+      }) || null
     : null;
 
   const articleRenderPlan = useMemo(
@@ -199,7 +215,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
   };
 
   // Update SEO metadata and increment views once when opening a published article.
-  // Never overwrite prerendered article tags with homepage metadata while the post is still loading.
+  // Never overwrite prerendered article tags with homepage metadata while the post is still loading
+  // or when a specific article slug cannot be resolved.
   useEffect(() => {
     setRegisteredWebsiteLogoUrl(logoUrl);
     if (activePost) {
@@ -208,8 +225,10 @@ export const BlogView: React.FC<BlogViewProps> = ({
         incrementedPostIdsRef.current.add(activePost.id);
         incrementPostViews(activePost.id);
       }
-    } else if (!activeSlug || !isLoading) {
+    } else if (!activeSlug) {
       resetDefaultSeo(branding);
+    } else if (!isLoading) {
+      updateMissingArticleSeo(activeSlug, branding);
     }
   }, [activePost?.id, activeSlug, isLoading, branding, logoUrl]);
 

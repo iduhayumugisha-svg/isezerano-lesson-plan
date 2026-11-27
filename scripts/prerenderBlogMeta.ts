@@ -10,11 +10,13 @@ import {
   computeBytesHash8,
   decodeImageDataUri,
   fetchPublishedBlogPostsFromFirestore,
-  fetchWebsiteBrandingFromFirestore,
+  fetchWebsiteDesignMetadataFromFirestore,
+  isGenericBrandingAssetUrl,
   isPublicHttpsImageUrl,
   readImageDimensionsFromBuffer,
   renderBlogArticleHtml,
   renderWebsiteDefaultHtml,
+  resolveHomepageSocialImageUrl,
   resolvePostThumbnailSource,
   safeFileSlug,
   sniffImageMimeFromBuffer
@@ -26,6 +28,7 @@ export interface PrerenderStaticOptions {
   origin?: string;
   posts?: BlogPost[];
   branding?: Partial<WebsiteBrandingSettings> | null;
+  homepageLogoUrl?: string;
 }
 
 export interface PrerenderStaticResult {
@@ -62,7 +65,7 @@ async function downloadExternalImageToBuffer(
     if (!res.ok) return null;
 
     const rawMime = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (rawMime === 'image/svg+xml') return null;
+    if (rawMime === 'image/svg+xml' || /\.svg(?:[?#]|$)/i.test(imageUrl)) return null;
 
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.length === 0) return null;
@@ -71,7 +74,16 @@ async function downloadExternalImageToBuffer(
     let mimeType = '';
     let ext = 'jpg';
 
-    if (rawMime.startsWith('image/')) {
+    if (sniffed) {
+      mimeType = sniffed.mimeType;
+      ext = sniffed.ext;
+    } else if (
+      rawMime === 'image/jpeg' ||
+      rawMime === 'image/jpg' ||
+      rawMime === 'image/png' ||
+      rawMime === 'image/webp' ||
+      rawMime === 'image/gif'
+    ) {
       mimeType = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
       ext =
         mimeType === 'image/png'
@@ -81,9 +93,6 @@ async function downloadExternalImageToBuffer(
           : mimeType === 'image/gif'
           ? 'gif'
           : 'jpg';
-    } else if (sniffed) {
-      mimeType = sniffed.mimeType;
-      ext = sniffed.ext;
     } else {
       return null;
     }
@@ -145,20 +154,47 @@ export async function prerenderStaticBlogDist(
     }
   }
 
-  const [posts, branding] = await Promise.all([
+  const [posts, designMeta] = await Promise.all([
     options.posts !== undefined ? Promise.resolve(options.posts) : fetchPublishedBlogPostsFromFirestore(),
-    options.branding !== undefined ? Promise.resolve(options.branding) : fetchWebsiteBrandingFromFirestore()
+    options.branding !== undefined
+      ? Promise.resolve({ branding: options.branding, logoUrl: options.homepageLogoUrl || '' })
+      : fetchWebsiteDesignMetadataFromFirestore()
   ]);
+  const branding = designMeta.branding;
+  const resolvedLogoInput =
+    options.homepageLogoUrl !== undefined ? options.homepageLogoUrl : designMeta.logoUrl;
 
-  // Remove stale pre-rendered blog artifacts so deleted or updated articles never serve old images/HTML across builds
+  // Remove stale pre-rendered blog artifacts and any unwanted legacy generic OG assets in dist/
   const blogOutDir = path.join(distDir, 'blog');
   const ogImagesDir = path.join(distDir, 'og-blog');
   fs.rmSync(blogOutDir, { recursive: true, force: true });
   fs.rmSync(ogImagesDir, { recursive: true, force: true });
   fs.rmSync(path.join(distDir, 'blog.html'), { force: true });
+  for (const staleGeneric of [
+    'og-default.jpg',
+    'og-isezerano-online.jpg',
+    'isezerano-online-logo.jpg',
+    'og-branding.jpg'
+  ]) {
+    fs.rmSync(path.join(distDir, staleGeneric), { force: true });
+  }
+
+  // Resolve and emit homepage's own real branding image (never shared with articles)
+  const homepageLogo = resolveHomepageSocialImageUrl(resolvedLogoInput, origin);
+  if (homepageLogo.decodedAsset && homepageLogo.fileName) {
+    fs.mkdirSync(ogImagesDir, { recursive: true });
+    fs.writeFileSync(path.join(ogImagesDir, homepageLogo.fileName), homepageLogo.decodedAsset.buffer);
+  }
 
   // Update root dist/index.html and static /blog index page cleanly
-  const updatedRootHtml = renderWebsiteDefaultHtml(templateHtml, origin, branding, '/');
+  const updatedRootHtml = renderWebsiteDefaultHtml(
+    templateHtml,
+    origin,
+    branding,
+    '/',
+    undefined,
+    homepageLogo.publicUrl || undefined
+  );
   fs.writeFileSync(distIndexPath, updatedRootHtml, 'utf-8');
 
   const blogIndexHtml = renderWebsiteDefaultHtml(
@@ -238,7 +274,7 @@ export async function prerenderStaticBlogDist(
         imageHeight = decoded.height;
         imageMimeType = decoded.mimeType;
       }
-    } else if (isPublicHttpsImageUrl(thumbSrc)) {
+    } else if (isPublicHttpsImageUrl(thumbSrc) && !/\.svg(?:[?#]|$)/i.test(thumbSrc) && !isGenericBrandingAssetUrl(thumbSrc)) {
       const downloaded = await downloadExternalImageToBuffer(thumbSrc);
       if (downloaded) {
         fs.mkdirSync(ogImagesDir, { recursive: true });
@@ -256,7 +292,12 @@ export async function prerenderStaticBlogDist(
         imageHeight = undefined;
         imageMimeType = undefined;
       }
-    } else if (thumbSrc.startsWith('/') && !thumbSrc.startsWith('//') && !/\.svg(?:$|\?)/i.test(thumbSrc)) {
+    } else if (
+      thumbSrc.startsWith('/') &&
+      !thumbSrc.startsWith('//') &&
+      !/\.svg(?:[?#]|$)/i.test(thumbSrc) &&
+      !isGenericBrandingAssetUrl(thumbSrc)
+    ) {
       staticImageUrl = `${origin}${thumbSrc}`;
     }
 
@@ -268,7 +309,7 @@ export async function prerenderStaticBlogDist(
     });
 
     const resolvedOgImageUrl = staticImageUrl || '';
-    const safeRouteSlug = rawSlug.length <= 200 ? rawSlug : fileSlug;
+    const safeRouteSlug = rawSlug.length <= 240 ? rawSlug : fileSlug;
 
     const articleDir = path.join(blogOutDir, safeRouteSlug);
     const articleHtmlPath = path.join(articleDir, 'index.html');
@@ -277,20 +318,25 @@ export async function prerenderStaticBlogDist(
     fs.writeFileSync(articleHtmlPath, articleHtml, 'utf-8');
     fs.writeFileSync(cleanHtmlPath, articleHtml, 'utf-8');
 
-    // Also pre-render by post.id if distinct from post.slug so /blog/<id> shares also resolve statically
-    const rawId = (post.id || '').trim();
-    if (
-      rawId &&
-      rawId !== safeRouteSlug &&
-      rawId.length <= 200 &&
-      !rawId.includes('..') &&
-      !rawId.includes('/') &&
-      !rawId.includes('\\')
-    ) {
-      const idDir = path.join(blogOutDir, rawId);
-      fs.mkdirSync(idDir, { recursive: true });
-      fs.writeFileSync(path.join(idDir, 'index.html'), articleHtml, 'utf-8');
-      fs.writeFileSync(path.join(blogOutDir, `${rawId}.html`), articleHtml, 'utf-8');
+    // Also pre-render by post.id and Firestore _docId if distinct from post.slug so ID links resolve statically
+    const idCandidates = [
+      (post.id || '').trim(),
+      ((post as BlogPost & { _docId?: string })._docId || '').trim()
+    ];
+    for (const rawId of idCandidates) {
+      if (
+        rawId &&
+        rawId !== safeRouteSlug &&
+        rawId.length <= 240 &&
+        !rawId.includes('..') &&
+        !rawId.includes('/') &&
+        !rawId.includes('\\')
+      ) {
+        const idDir = path.join(blogOutDir, rawId);
+        fs.mkdirSync(idDir, { recursive: true });
+        fs.writeFileSync(path.join(idDir, 'index.html'), articleHtml, 'utf-8');
+        fs.writeFileSync(path.join(blogOutDir, `${rawId}.html`), articleHtml, 'utf-8');
+      }
     }
 
     generatedFiles.push({

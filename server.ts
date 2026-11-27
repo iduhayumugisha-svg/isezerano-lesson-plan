@@ -6,12 +6,15 @@ import express from 'express';
 import type { Express, Request, Response, NextFunction } from 'express';
 import {
   fetchPublishedBlogPostsFromFirestore,
-  fetchWebsiteBrandingFromFirestore,
+  fetchSinglePublishedPostByIdFromFirestore,
+  fetchWebsiteDesignMetadataFromFirestore,
   findPublishedPostBySlugOrId,
   handleBlogOgImageRequest,
   parseBlogRoute,
   renderBlogArticleHtml,
+  renderMissingArticleHtml,
   renderWebsiteDefaultHtml,
+  resolveHomepageSocialImageUrl,
   resolvePublicOrigin
 } from './server/ogMeta.ts';
 import type { OgDataProviders } from './server/ogMeta.ts';
@@ -206,34 +209,51 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
       const origin = resolvePublicOrigin(req);
       const route = parseBlogRoute(req.originalUrl);
 
-      const loadBranding =
-        providers.fetchBranding ||
-        (() => fetchWebsiteBrandingFromFirestore(undefined, isProd ? 3500 : 1200));
+      const loadDesignMeta = async () => {
+        if (providers.fetchBranding) {
+          return { branding: await providers.fetchBranding(), logoUrl: '' };
+        }
+        return fetchWebsiteDesignMetadataFromFirestore(undefined, isProd ? 3500 : 1200);
+      };
       const loadPosts =
         providers.fetchPosts || (() => fetchPublishedBlogPostsFromFirestore());
 
       if (route.isBlogArticle && route.slugOrId) {
-        const [posts, branding] = await Promise.all([loadPosts(), loadBranding()]);
-        const post = findPublishedPostBySlugOrId(posts, route.slugOrId);
+        const [posts, designMeta] = await Promise.all([loadPosts(), loadDesignMeta()]);
+        let post = findPublishedPostBySlugOrId(posts, route.slugOrId);
+        if (!post && !providers.fetchPosts) {
+          post = await fetchSinglePublishedPostByIdFromFirestore(route.slugOrId);
+        }
 
         if (post) {
-          html = renderBlogArticleHtml(html, post, origin, branding);
+          html = renderBlogArticleHtml(html, post, origin, designMeta.branding);
         } else {
-          // Never expose unpublished/draft/deleted articles; safely render site metadata
-          html = renderWebsiteDefaultHtml(html, origin, branding, '/');
+          // Never expose unpublished/draft articles and never silently render homepage metadata on an article URL
+          html = renderMissingArticleHtml(html, origin, route.slugOrId, designMeta.branding);
         }
       } else if (route.isBlogIndex) {
-        const branding = await loadBranding();
+        const designMeta = await loadDesignMeta();
         html = renderWebsiteDefaultHtml(
           html,
           origin,
-          branding,
+          designMeta.branding,
           '/blog',
           'News & Editorial Articles'
         );
       } else {
-        const branding = await loadBranding();
-        html = renderWebsiteDefaultHtml(html, origin, branding, reqPath);
+        const designMeta = await loadDesignMeta();
+        const homepageImage =
+          reqPath === '/'
+            ? resolveHomepageSocialImageUrl(designMeta.logoUrl, origin).publicUrl
+            : '';
+        html = renderWebsiteDefaultHtml(
+          html,
+          origin,
+          designMeta.branding,
+          reqPath,
+          undefined,
+          homepageImage || undefined
+        );
       }
 
       res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8');
