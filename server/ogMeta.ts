@@ -77,8 +77,19 @@ export function isPublicHttpsImageUrl(url: string | null | undefined): boolean {
 const GENERIC_BRANDING_ASSET_REGEX =
   /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
 
-const GENERIC_SITE_DESC_CORE =
-  'independent digital news breaking updates features and community information';
+const GENERIC_HOMEPAGE_DISALLOWED_BANNER_REGEX =
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
+
+const GENERIC_SITE_DESC_CORES = [
+  'independent digital news breaking updates features and community information',
+  'independent digital news and updates',
+  'independent digital news updates'
+];
+
+const FIREBASE_DEFAULT_HOSTS = new Set([
+  'isezerano-news.firebaseapp.com',
+  'isezerano-news.web.app'
+]);
 
 function normalizeDescForMatch(raw: string): string {
   return String(raw || '')
@@ -87,6 +98,24 @@ function normalizeDescForMatch(raw: string): string {
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+export function normalizePublicSiteUrl(rawUrl: string): string {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (FIREBASE_DEFAULT_HOSTS.has(host)) {
+      return `${DEFAULT_PUBLIC_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    if (parsed.protocol === 'http:' && host === 'isezerano.online') {
+      return `${DEFAULT_PUBLIC_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    // ignore non-absolute URLs
+  }
+  return trimmed;
 }
 
 export function isGenericSiteDescriptionText(
@@ -99,13 +128,15 @@ export function isGenericSiteDescriptionText(
   const normalized = normalizeDescForMatch(trimmed);
   if (!normalized) return false;
 
-  if (
-    normalized === GENERIC_SITE_DESC_CORE ||
-    normalized === `isezerano online ${GENERIC_SITE_DESC_CORE}` ||
-    normalized === `isezerano ${GENERIC_SITE_DESC_CORE}` ||
-    normalized.includes(GENERIC_SITE_DESC_CORE)
-  ) {
-    return true;
+  for (const core of GENERIC_SITE_DESC_CORES) {
+    if (
+      normalized === core ||
+      normalized === `isezerano online ${core}` ||
+      normalized === `isezerano ${core}` ||
+      normalized.includes(core)
+    ) {
+      return true;
+    }
   }
 
   const customSiteDesc = (branding?.websiteDescription || '').trim();
@@ -143,11 +174,28 @@ export function isGenericBrandingAssetUrl(
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
   if (!trimmed) return false;
-  if (GENERIC_BRANDING_ASSET_REGEX.test(trimmed)) {
+  const normalized = normalizePublicSiteUrl(trimmed);
+  const decoded = safeDecodeURIComponent(trimmed);
+  const decodedNorm = safeDecodeURIComponent(normalized);
+
+  if (
+    GENERIC_BRANDING_ASSET_REGEX.test(trimmed) ||
+    GENERIC_BRANDING_ASSET_REGEX.test(decoded) ||
+    GENERIC_BRANDING_ASSET_REGEX.test(normalized) ||
+    GENERIC_BRANDING_ASSET_REGEX.test(decodedNorm)
+  ) {
     return true;
   }
   for (const blocked of disallowedUrls) {
-    if (typeof blocked === 'string' && blocked.trim() && blocked.trim() === trimmed) {
+    if (typeof blocked !== 'string' || !blocked.trim()) continue;
+    const blockedTrimmed = blocked.trim();
+    const blockedNorm = normalizePublicSiteUrl(blockedTrimmed);
+    if (
+      trimmed === blockedTrimmed ||
+      normalized === blockedTrimmed ||
+      trimmed === blockedNorm ||
+      normalized === blockedNorm
+    ) {
       return true;
     }
   }
@@ -801,7 +849,11 @@ export function resolveHomepageSocialImageUrl(
   if (!normalized || /\.svg(?:[?#]|$)/i.test(normalized)) {
     return { publicUrl: '', decodedAsset: null, fileName: null };
   }
-  if (/(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(normalized)) {
+  const decoded = safeDecodeURIComponent(normalized);
+  if (
+    GENERIC_HOMEPAGE_DISALLOWED_BANNER_REGEX.test(normalized) ||
+    GENERIC_HOMEPAGE_DISALLOWED_BANNER_REGEX.test(decoded)
+  ) {
     return { publicUrl: '', decodedAsset: null, fileName: null };
   }
   if (normalized.startsWith('data:image/')) {
@@ -818,7 +870,7 @@ export function resolveHomepageSocialImageUrl(
     };
   }
   if (isPublicHttpsImageUrl(normalized)) {
-    return { publicUrl: normalized, decodedAsset: null, fileName: null };
+    return { publicUrl: normalizePublicSiteUrl(normalized), decodedAsset: null, fileName: null };
   }
   return { publicUrl: '', decodedAsset: null, fileName: null };
 }
@@ -1016,7 +1068,7 @@ export function renderBlogArticleHtml(
 
   if (!imageUrl) {
     if (isPublicHttpsImageUrl(rawThumb)) {
-      imageUrl = rawThumb;
+      imageUrl = normalizePublicSiteUrl(rawThumb);
     } else if (decodedData) {
       const fileSlug = safeFileSlug(post.slug || post.id);
       const hash8 = computeBytesHash8(decodedData.buffer);
@@ -1148,11 +1200,10 @@ export function renderWebsiteDefaultHtml(
   const resolvedHomepageImage =
     normalizedPath === '/' &&
     isPublicHttpsImageUrl(homepageImageUrl) &&
-    !/(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(
-      homepageImageUrl!
-    ) &&
+    !GENERIC_HOMEPAGE_DISALLOWED_BANNER_REGEX.test(homepageImageUrl!) &&
+    !GENERIC_HOMEPAGE_DISALLOWED_BANNER_REGEX.test(safeDecodeURIComponent(homepageImageUrl!)) &&
     !/\.svg(?:[?#]|$)/i.test(homepageImageUrl!)
-      ? homepageImageUrl!.trim()
+      ? normalizePublicSiteUrl(homepageImageUrl!)
       : '';
 
   const structuredData: Record<string, unknown> = {
@@ -1293,7 +1344,8 @@ export function findPublishedPostBySlugOrId(
 export async function handleBlogOgImageRequest(
   req: Request,
   res: Response,
-  providers: OgDataProviders = {}
+  providers: OgDataProviders = {},
+  handlerOptions: { articleOnly?: boolean } = {}
 ): Promise<void> {
   const rawParam = String(req.params.slugOrFile || '');
   const decodedParam = safeDecodeURIComponent(rawParam).trim();
@@ -1307,8 +1359,22 @@ export async function handleBlogOgImageRequest(
     return;
   }
 
-  // Homepage real logo asset route (`/og-blog/site-logo-<hash8>.<ext>`)
+  // Never serve legacy generic banners or "default" fallback images
+  if (
+    /^(?:default|og-default|og-isezerano-online|isezerano-online-logo|og-branding|isezerano[-_ ]+online[-_ ]+logo)$/i.test(
+      baseWithoutExt
+    )
+  ) {
+    res.status(404).type('text/plain').send('Article image not found.');
+    return;
+  }
+
+  // Homepage real logo asset route (`/og-blog/site-logo-<hash8>.<ext>` only; rejected on `/og-image/`)
   if (/^site-logo(?:-[0-9a-f]{8})?$/i.test(baseWithoutExt)) {
+    if (handlerOptions.articleOnly) {
+      res.status(404).type('text/plain').send('Published article not found.');
+      return;
+    }
     const designMeta = await fetchWebsiteDesignMetadataFromFirestore();
     const decodedLogo = designMeta.logoUrl.startsWith('data:image/')
       ? decodeImageDataUri(designMeta.logoUrl)
@@ -1339,7 +1405,17 @@ export async function handleBlogOgImageRequest(
     return;
   }
 
-  const thumbSrc = resolvePostThumbnailSource(post);
+  const disallowedUrls: string[] = [];
+  if (!providers.fetchPosts) {
+    try {
+      const designMeta = await fetchWebsiteDesignMetadataFromFirestore(undefined, 1500);
+      if (designMeta.logoUrl) disallowedUrls.push(designMeta.logoUrl);
+    } catch {
+      // ignore non-fatal branding lookup failure
+    }
+  }
+
+  const thumbSrc = resolvePostThumbnailSource(post, disallowedUrls);
 
   // Case 1: Embedded Data URI stored in Firestore (Spark free tier)
   if (thumbSrc.startsWith('data:image/')) {

@@ -13,6 +13,7 @@ import {
   fetchWebsiteDesignMetadataFromFirestore,
   isGenericBrandingAssetUrl,
   isPublicHttpsImageUrl,
+  normalizePublicSiteUrl,
   readImageDimensionsFromBuffer,
   renderBlogArticleHtml,
   renderBlogFallbackShellHtml,
@@ -173,9 +174,18 @@ export async function prerenderStaticBlogDist(
   fs.rmSync(path.join(distDir, 'blog.html'), { force: true });
   for (const staleGeneric of [
     'og-default.jpg',
+    'og-default.png',
+    'og-default.webp',
     'og-isezerano-online.jpg',
+    'og-isezerano-online.png',
+    'og-isezerano-online.webp',
     'isezerano-online-logo.jpg',
-    'og-branding.jpg'
+    'isezerano-online-logo.png',
+    'isezerano-online-logo.webp',
+    'og-branding.jpg',
+    'og-branding.png',
+    'og-branding.webp',
+    'ISEZERANO Online  Logo.png'
   ]) {
     fs.rmSync(path.join(distDir, staleGeneric), { force: true });
   }
@@ -298,7 +308,7 @@ export async function prerenderStaticBlogDist(
         imageHeight = downloaded.height;
         imageMimeType = downloaded.mimeType;
       } else {
-        staticImageUrl = thumbSrc;
+        staticImageUrl = normalizePublicSiteUrl(thumbSrc);
         imageWidth = undefined;
         imageHeight = undefined;
         imageMimeType = undefined;

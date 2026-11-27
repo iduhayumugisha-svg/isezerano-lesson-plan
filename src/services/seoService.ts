@@ -93,6 +93,14 @@ const resolveHomepageDataUriLogoUrl = (rawUrl?: string): string => {
   )}`;
 };
 
+const safeDecodeUrlForBranding = (raw: string): string => {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
+
 /**
  * Identifies unwanted generic website branding assets or an explicit homepage logo URL
  * so they can never be emitted as an individual article's social preview thumbnail.
@@ -105,10 +113,14 @@ export const isGenericBrandingImageUrl = (
   const trimmed = url.trim();
   if (!trimmed) return false;
   const normalized = normalizePublicImageUrl(trimmed);
+  const decoded = safeDecodeUrlForBranding(trimmed);
+  const decodedNorm = safeDecodeUrlForBranding(normalized);
 
   if (
     GENERIC_BRANDING_IMAGE_PATTERN.test(trimmed) ||
+    GENERIC_BRANDING_IMAGE_PATTERN.test(decoded) ||
     GENERIC_BRANDING_IMAGE_PATTERN.test(normalized) ||
+    GENERIC_BRANDING_IMAGE_PATTERN.test(decodedNorm) ||
     isGenericBrandingThumbnailUrl(trimmed, disallowedUrls) ||
     isGenericBrandingThumbnailUrl(normalized, disallowedUrls)
   ) {
@@ -233,16 +245,23 @@ export const updateWebsiteBrandingSeo = (
       (branding as SiteBrandingSeoInput | undefined)?.siteDescription ||
       '')
   ).trim();
-  const effectiveDescription = pageTitlePrefix
+  const isHomepageContext =
+    !pageTitlePrefix &&
+    (typeof window === 'undefined' ||
+      !window.location?.pathname ||
+      window.location.pathname === '/');
+  const effectiveDescription = !isHomepageContext
     ? isGenericWebsiteDescriptionText(rawCustomDesc)
       ? ''
       : rawCustomDesc
     : siteDescription;
   const pageUrl = `${BASE_URL}/`;
   const rawLogo =
-    isValidHttpsImageUrl(siteLogoUrl) && !isSvgImageSource(siteLogoUrl!)
+    isHomepageContext && isValidHttpsImageUrl(siteLogoUrl) && !isSvgImageSource(siteLogoUrl!)
       ? normalizePublicImageUrl(siteLogoUrl!)
-      : resolveHomepageDataUriLogoUrl(siteLogoUrl);
+      : isHomepageContext
+      ? resolveHomepageDataUriLogoUrl(siteLogoUrl)
+      : '';
   const customLogo = isGenericBrandingImageUrl(rawLogo) && !/\/og-blog\/site-logo-/i.test(rawLogo) ? '' : rawLogo;
 
   document.title = resolvedTitle;

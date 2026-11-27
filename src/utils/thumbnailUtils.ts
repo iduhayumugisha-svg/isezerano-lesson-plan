@@ -3,8 +3,16 @@ import { BlogPost } from '../types/blog';
 const GENERIC_BRANDING_THUMBNAIL_PATTERN =
   /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
 
-const GENERIC_WEBSITE_DESC_CORE =
-  'independent digital news breaking updates features and community information';
+const GENERIC_WEBSITE_DESC_CORES = [
+  'independent digital news breaking updates features and community information',
+  'independent digital news and updates',
+  'independent digital news updates'
+];
+
+const FIREBASE_DEFAULT_HOSTS = new Set([
+  'isezerano-news.firebaseapp.com',
+  'isezerano-news.web.app'
+]);
 
 let registeredDisallowedBrandingUrls: string[] = [];
 let registeredDisallowedSiteDescriptions: string[] = [];
@@ -34,6 +42,32 @@ function normalizeDescriptionForMatch(raw: string): string {
     .trim();
 }
 
+function safeDecodeUrlText(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function normalizeUrlForBrandingComparison(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (FIREBASE_DEFAULT_HOSTS.has(host)) {
+      return `https://isezerano.online${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    if (parsed.protocol === 'http:' && host === 'isezerano.online') {
+      return `https://isezerano.online${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    // ignore non-absolute URLs
+  }
+  return trimmed;
+}
+
 /**
  * Detects whether text is the generic website description (with or without site-name prefix,
  * commas, dashes, or trailing period) or matches an explicitly configured site description.
@@ -49,13 +83,15 @@ export function isGenericWebsiteDescriptionText(
   const normalized = normalizeDescriptionForMatch(trimmed);
   if (!normalized) return false;
 
-  if (
-    normalized === GENERIC_WEBSITE_DESC_CORE ||
-    normalized === `isezerano online ${GENERIC_WEBSITE_DESC_CORE}` ||
-    normalized === `isezerano ${GENERIC_WEBSITE_DESC_CORE}` ||
-    normalized.includes(GENERIC_WEBSITE_DESC_CORE)
-  ) {
-    return true;
+  for (const core of GENERIC_WEBSITE_DESC_CORES) {
+    if (
+      normalized === core ||
+      normalized === `isezerano online ${core}` ||
+      normalized === `isezerano ${core}` ||
+      normalized.includes(core)
+    ) {
+      return true;
+    }
   }
 
   for (const cand of [...registeredDisallowedSiteDescriptions, ...extraSiteDescriptions]) {
@@ -79,11 +115,29 @@ export function isGenericBrandingThumbnailUrl(
   if (!src || typeof src !== 'string') return false;
   const trimmed = src.trim();
   if (!trimmed) return false;
-  if (GENERIC_BRANDING_THUMBNAIL_PATTERN.test(trimmed)) {
+  const decoded = safeDecodeUrlText(trimmed);
+  const normalized = normalizeUrlForBrandingComparison(trimmed);
+  const decodedNormalized = safeDecodeUrlText(normalized);
+
+  if (
+    GENERIC_BRANDING_THUMBNAIL_PATTERN.test(trimmed) ||
+    GENERIC_BRANDING_THUMBNAIL_PATTERN.test(decoded) ||
+    GENERIC_BRANDING_THUMBNAIL_PATTERN.test(normalized) ||
+    GENERIC_BRANDING_THUMBNAIL_PATTERN.test(decodedNormalized)
+  ) {
     return true;
   }
+
   for (const blocked of [...registeredDisallowedBrandingUrls, ...extraDisallowedUrls]) {
-    if (typeof blocked === 'string' && blocked.trim() && blocked.trim() === trimmed) {
+    if (typeof blocked !== 'string' || !blocked.trim()) continue;
+    const blockedTrimmed = blocked.trim();
+    const blockedNorm = normalizeUrlForBrandingComparison(blockedTrimmed);
+    if (
+      trimmed === blockedTrimmed ||
+      normalized === blockedTrimmed ||
+      trimmed === blockedNorm ||
+      normalized === blockedNorm
+    ) {
       return true;
     }
   }

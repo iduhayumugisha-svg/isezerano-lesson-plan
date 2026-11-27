@@ -115,7 +115,7 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
     else res.send(content);
   });
 
-  // 1. Public Blog Thumbnail Image Endpoints (/og-blog/ static-aligned + legacy /api/blog-og-image/)
+  // 1. Public Blog Thumbnail Image Endpoints (/og-blog/ static-aligned + /og-image/ article-only + /api/blog-og-image/)
   app.all(
     ['/og-blog/:slugOrFile', '/api/blog-og-image/:slugOrFile'],
     async (req: Request, res: Response, next: NextFunction) => {
@@ -130,6 +130,18 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
       }
     }
   );
+
+  app.all('/og-image/:slugOrFile', async (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(405).type('text/plain').send('Method Not Allowed');
+      return;
+    }
+    try {
+      await handleBlogOgImageRequest(req, res, providers, { articleOnly: true });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   // 1b. Trusted Comment & Discussion API (HttpOnly signed author sessions + Admin JWT)
   mountCommentsApi(app, options.commentsApiOptions);
@@ -184,6 +196,7 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
       reqPath.startsWith('/node_modules/') ||
       reqPath.startsWith('/assets/') ||
       reqPath.startsWith('/og-blog/') ||
+      reqPath.startsWith('/og-image/') ||
       /\.[a-zA-Z0-9]{1,8}$/.test(reqPath);
 
     if (isAssetOrInternal) {

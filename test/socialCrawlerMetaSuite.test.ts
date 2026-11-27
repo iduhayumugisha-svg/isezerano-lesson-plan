@@ -1215,6 +1215,179 @@ async function testGenericArticleDescriptionAndImagePermanentRemoval(): Promise<
   console.log('✓ 7. Permanent removal of generic article description & branding image verified across cards, SSR, client SEO, and /blog/** fallback');
 }
 
+async function testOldBannerAndPhraseCannotLeakIntoArticles(): Promise<void> {
+  const templateHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const genuineCover = buildMinimalJpegDataUri(1200, 630, 0x91);
+  const bodyPhoto = buildMinimalJpegDataUri(1200, 630, 0x92);
+  const currentLogo = buildMinimalJpegDataUri(400, 400, 0x93);
+
+  const oldBannerUrls = [
+    'https://isezerano.online/ISEZERANO%20Online%20%20Logo.png',
+    'https://isezerano.online/ISEZERANO Online  Logo.png',
+    'https://isezerano-news.firebaseapp.com/ISEZERANO%20Online%20%20Logo.png',
+    'https://isezerano-news.web.app/og-isezerano-online.jpg',
+    'https://isezerano.online/og-default.jpg',
+    'https://isezerano.online/isezerano-online-logo.jpg',
+    'https://isezerano.online/og-branding.png'
+  ];
+
+  for (const bad of oldBannerUrls) {
+    assert.equal(isGenericBrandingImageUrl(bad), true, `Client filter must block ${bad}`);
+    assert.equal(isGenericBrandingAssetUrl(bad), true, `Server filter must block ${bad}`);
+    assert.equal(resolveHomepageSocialImageUrl(bad, 'https://isezerano.online').publicUrl, '');
+  }
+
+  // Exact shorter banner phrases reported in bug must be rejected on articles & non-home pages
+  const oldBannerPhrases = [
+    'ISEZERANO ONLINE – Independent Digital News and Updates',
+    'Independent Digital News and Updates',
+    'ISEZERANO ONLINE - Independent Digital News & Updates'
+  ];
+  for (const phrase of oldBannerPhrases) {
+    assert.equal(isGenericWebsiteDescriptionText(phrase), true, `Client must reject "${phrase}"`);
+  }
+
+  // 1. Article with NO image and polluted with old banner + old banner text omits all image & generic desc tags
+  const noImagePollutedPost: BlogPost = {
+    id: 'art_old_banner_no_img',
+    title: 'Official Community Notice',
+    slug: 'official-community-notice',
+    excerpt: 'ISEZERANO ONLINE – Independent Digital News and Updates',
+    content: '<p>Notice without photos.</p><img src="https://isezerano.online/ISEZERANO%20Online%20%20Logo.png" alt="Old Banner" />',
+    thumbnailUrl: 'https://isezerano.online/ISEZERANO%20Online%20%20Logo.png',
+    thumbnailIsCustomOverride: true,
+    category: 'Announcements',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T18:00:00Z',
+    status: 'published'
+  };
+
+  assert.equal(resolvePostThumbnailSource(noImagePollutedPost, [currentLogo.dataUri]), '');
+  assert.equal(getSingleArticleThumbnailUrl(noImagePollutedPost, [currentLogo.dataUri]), '');
+  assert.equal(getArticleCardExcerpt(noImagePollutedPost, 160), 'Notice without photos.');
+
+  const ssrNoImgHtml = renderBlogArticleHtml(
+    templateHtml,
+    noImagePollutedPost,
+    'https://isezerano.online',
+    { platformTitle: 'ISEZERANO', websiteDescription: 'Independent Digital News and Updates' },
+    { disallowedUrls: [currentLogo.dataUri] }
+  );
+  assert.equal(extractMeta(ssrNoImgHtml, 'property', 'og:image'), null);
+  assert.equal(extractMeta(ssrNoImgHtml, 'property', 'og:image:secure_url'), null);
+  assert.equal(extractMeta(ssrNoImgHtml, 'name', 'twitter:image'), null);
+  assert.equal(ssrNoImgHtml.includes('ISEZERANO%20Online'), false);
+  assert.equal(ssrNoImgHtml.includes('Independent Digital News and Updates'), false);
+  assert.equal(
+    extractMeta(ssrNoImgHtml, 'property', 'og:description'),
+    'Notice without photos.'
+  );
+
+  // 2. Article with explicit custom cover uses explicit cover; article without custom cover uses first content image
+  const customCoverPost: BlogPost = {
+    id: 'art_custom_cover_ok',
+    title: 'Custom Cover Article',
+    slug: 'custom-cover-article',
+    excerpt: 'Real custom summary.',
+    content: `<p>Article paragraph.</p><img src="${bodyPhoto.dataUri}" alt="Body photo" />`,
+    thumbnailUrl: genuineCover.dataUri,
+    thumbnailIsCustomOverride: true,
+    category: 'National',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T18:10:00Z',
+    status: 'published'
+  };
+  const bodyFirstPost: BlogPost = {
+    ...customCoverPost,
+    id: 'art_body_first_ok',
+    slug: 'body-first-article',
+    thumbnailUrl: 'https://isezerano.online/ISEZERANO%20Online%20%20Logo.png',
+    thumbnailIsCustomOverride: false
+  };
+  assert.equal(resolvePostThumbnailSource(customCoverPost), genuineCover.dataUri);
+  assert.equal(resolvePostThumbnailSource(bodyFirstPost), bodyPhoto.dataUri);
+
+  // 3. Prerender & Express SSR parity + /og-image/ endpoint checks + dist cleanup of ISEZERANO Online  Logo.png
+  const postsForCheck = [noImagePollutedPost, customCoverPost, bodyFirstPost];
+  const tempDist = fs.mkdtempSync(path.join(os.tmpdir(), 'isezerano-old-banner-check-'));
+  const app = createServerApp({
+    isProd: false,
+    providers: {
+      fetchPosts: async () => postsForCheck,
+      fetchBranding: async () => ({
+        platformTitle: 'ISEZERANO',
+        websiteDescription: 'Independent Digital News and Updates'
+      })
+    }
+  });
+  const srv = http.createServer(app);
+  await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  const srvBase = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+
+  try {
+    fs.writeFileSync(path.join(tempDist, 'index.html'), templateHtml, 'utf8');
+    fs.writeFileSync(path.join(tempDist, 'ISEZERANO Online  Logo.png'), 'stale-banner');
+    fs.writeFileSync(path.join(tempDist, 'og-isezerano-online.png'), 'stale-banner');
+
+    await prerenderStaticBlogDist({
+      distDir: tempDist,
+      origin: 'https://isezerano.online',
+      posts: postsForCheck,
+      branding: {
+        platformTitle: 'ISEZERANO',
+        websiteDescription: 'Independent Digital News and Updates'
+      },
+      homepageLogoUrl: currentLogo.dataUri
+    });
+
+    assert.equal(fs.existsSync(path.join(tempDist, 'ISEZERANO Online  Logo.png')), false);
+    assert.equal(fs.existsSync(path.join(tempDist, 'og-isezerano-online.png')), false);
+
+    // /blog index & image-free article never leak "Independent Digital News and Updates" or old banner
+    const builtBlogIndex = fs.readFileSync(path.join(tempDist, 'blog', 'index.html'), 'utf8');
+    assert.equal(builtBlogIndex.includes('Independent Digital News and Updates'), false);
+    assert.equal(extractMeta(builtBlogIndex, 'property', 'og:image'), null);
+
+    for (const p of postsForCheck) {
+      const staticHtml = fs.readFileSync(path.join(tempDist, 'blog', p.slug, 'index.html'), 'utf8');
+      const ssrHtml = await (
+        await fetch(`${srvBase}/blog/${p.slug}`, {
+          headers: { 'User-Agent': 'WhatsApp/2.23.20.0' }
+        })
+      ).text();
+
+      assert.equal(extractMeta(ssrHtml, 'property', 'og:title'), extractMeta(staticHtml, 'property', 'og:title'));
+      assert.equal(extractMeta(ssrHtml, 'property', 'og:description'), extractMeta(staticHtml, 'property', 'og:description'));
+      assert.equal(extractMeta(ssrHtml, 'property', 'og:image'), extractMeta(staticHtml, 'property', 'og:image'));
+      assert.equal(extractMeta(ssrHtml, 'name', 'twitter:image'), extractMeta(staticHtml, 'name', 'twitter:image'));
+      assert.equal(extractMeta(ssrHtml, 'property', 'og:url'), extractMeta(staticHtml, 'property', 'og:url'));
+    }
+
+    // /og-image/ serves real article image bytes and 404s on image-free article, old banner names, and site-logo
+    const okImgRes = await fetch(`${srvBase}/og-image/${customCoverPost.slug}`);
+    assert.equal(okImgRes.status, 200);
+    assert.equal(okImgRes.headers.get('content-type'), 'image/jpeg');
+    const okBuf = Buffer.from(await okImgRes.arrayBuffer());
+    assert.equal(okBuf.equals(genuineCover.rawBuffer), true);
+
+    for (const badSlug of [
+      noImagePollutedPost.slug,
+      'site-logo-f0744544.jpg',
+      'default',
+      'ISEZERANO%20Online%20%20Logo.png',
+      'og-isezerano-online.jpg'
+    ]) {
+      const badRes = await fetch(`${srvBase}/og-image/${badSlug}`);
+      assert.equal(badRes.status, 404, `/og-image/${badSlug} must return 404`);
+    }
+  } finally {
+    fs.rmSync(tempDist, { recursive: true, force: true });
+    await new Promise<void>((resolve, reject) => srv.close((err) => (err ? reject(err) : resolve())));
+  }
+
+  console.log('✓ 8. Old banner elimination, shorter generic phrase filtering, SSR/prerender parity & /og-image/ 404 guards verified');
+}
+
 async function run(): Promise<void> {
   testHtmlAndFirebaseConfig();
   await testThreeDistinctArticlesWithCrawlerUserAgents();
@@ -1222,6 +1395,7 @@ async function run(): Promise<void> {
   await testBrandingIsolationAndArticleSafety();
   await testGlobalSeoReliabilityAndProtection();
   await testGenericArticleDescriptionAndImagePermanentRemoval();
+  await testOldBannerAndPhraseCannotLeakIntoArticles();
   console.log('\nALL SOCIAL CRAWLER METADATA TESTS PASSED!');
 }
 

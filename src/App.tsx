@@ -60,7 +60,16 @@ const getPageFromUrl = (): AppPage => {
   ) {
     return 'admin';
   }
-  if (pathname === '/blog' || pathname.startsWith('/blog/') || hash === '#blog' || hash.startsWith('#blog/') || search.get('page') === 'blog') return 'blog';
+  if (
+    pathname === '/blog' ||
+    pathname.startsWith('/blog/') ||
+    hash === '#blog' ||
+    hash.startsWith('#blog/') ||
+    search.get('page') === 'blog' ||
+    Boolean(search.get('post'))
+  ) {
+    return 'blog';
+  }
   if (pathname === '/about' || hash === '#about' || search.get('page') === 'about') return 'about';
   if (pathname === '/contact' || hash === '#contact' || search.get('page') === 'contact') return 'contact';
   if (pathname === '/privacy' || hash === '#privacy' || search.get('page') === 'privacy') return 'privacy';
