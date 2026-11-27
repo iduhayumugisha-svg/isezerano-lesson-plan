@@ -74,6 +74,27 @@ export function isPublicHttpsImageUrl(url: string | null | undefined): boolean {
   return trimmed.startsWith('https://');
 }
 
+const GENERIC_BRANDING_ASSET_REGEX =
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+
+export function isGenericBrandingAssetUrl(
+  url: string | null | undefined,
+  disallowedUrls: Array<string | null | undefined> = []
+): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (GENERIC_BRANDING_ASSET_REGEX.test(trimmed)) {
+    return true;
+  }
+  for (const blocked of disallowedUrls) {
+    if (typeof blocked === 'string' && blocked.trim() && blocked.trim() === trimmed) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function extractRawImageField(field: unknown): string {
   if (typeof field === 'string') return field.trim();
   if (field && typeof field === 'object') {
@@ -174,7 +195,8 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
     if (
       /(?:favicon|\/icons?\/|twemoji|wp-includes\/images\/|1x1|pixel\.|(?:^|\/|[-_])logo(?:[-_.]|$))/i.test(
         lowerSrc
-      )
+      ) ||
+      isGenericBrandingAssetUrl(normalizedSrc)
     ) {
       return true;
     }
@@ -183,7 +205,10 @@ export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): bo
   return false;
 }
 
-export function extractFirstContentImage(htmlContent: string | null | undefined): string {
+export function extractFirstContentImage(
+  htmlContent: string | null | undefined,
+  disallowedUrls: Array<string | null | undefined> = []
+): string {
   if (!htmlContent || typeof htmlContent !== 'string') return '';
   const imgTagRegex = /<img\b[^>]*>/gi;
   let match: RegExpExecArray | null;
@@ -198,7 +223,11 @@ export function extractFirstContentImage(htmlContent: string | null | undefined)
     ];
     for (const rawCandidate of candidates) {
       const normalized = normalizePersistentImageSrc(rawCandidate);
-      if (normalized && !isDecorativeOrIconImgTag(tag, normalized)) {
+      if (
+        normalized &&
+        !isDecorativeOrIconImgTag(tag, normalized) &&
+        !isGenericBrandingAssetUrl(normalized, disallowedUrls)
+      ) {
         return normalized;
       }
     }
@@ -206,7 +235,10 @@ export function extractFirstContentImage(htmlContent: string | null | undefined)
   return '';
 }
 
-export function resolveExplicitPostCoverSource(post?: Partial<BlogPost> | null): string {
+export function resolveExplicitPostCoverSource(
+  post?: Partial<BlogPost> | null,
+  disallowedUrls: Array<string | null | undefined> = []
+): string {
   if (!post) return '';
   const fields: unknown[] = [
     post.thumbnailUrl,
@@ -218,7 +250,14 @@ export function resolveExplicitPostCoverSource(post?: Partial<BlogPost> | null):
   ];
   for (const field of fields) {
     const norm = normalizePersistentImageSrc(extractRawImageField(field));
-    if (norm) return norm;
+    if (
+      norm &&
+      !norm.toLowerCase().startsWith('data:image/svg+xml') &&
+      !/\.svg(?:[?#]|$)/i.test(norm) &&
+      !isGenericBrandingAssetUrl(norm, disallowedUrls)
+    ) {
+      return norm;
+    }
   }
   return '';
 }
@@ -228,16 +267,19 @@ export function resolveExplicitPostCoverSource(post?: Partial<BlogPost> | null):
  * 1. Explicit custom cover ONLY when `post.thumbnailIsCustomOverride === true` and an explicit cover field is valid.
  * 2. Otherwise, always prefer the first actual non-decorative article image inside `post.content`.
  * 3. Otherwise, fall back to valid `thumbnailUrl` / `featuredImage` / `coverImage` / `image`.
- * 4. Otherwise, return '' (omits article-specific social image metadata rather than substituting a default image).
+ * 4. Otherwise, return '' (omits article-specific social image metadata rather than substituting a generic branding image).
  */
-export function resolvePostThumbnailSource(post?: Partial<BlogPost> | null): string {
+export function resolvePostThumbnailSource(
+  post?: Partial<BlogPost> | null,
+  disallowedUrls: Array<string | null | undefined> = []
+): string {
   if (!post) return '';
-  const explicit = resolveExplicitPostCoverSource(post);
+  const explicit = resolveExplicitPostCoverSource(post, disallowedUrls);
   if (post.thumbnailIsCustomOverride === true && explicit) {
     return explicit;
   }
   if (post.content) {
-    const firstContentImg = extractFirstContentImage(post.content);
+    const firstContentImg = extractFirstContentImage(post.content, disallowedUrls);
     if (firstContentImg) return firstContentImg;
   }
   return explicit;
@@ -778,6 +820,13 @@ export function renderBlogArticleHtml(
     }
   }
 
+  if (imageUrl && (isGenericBrandingAssetUrl(imageUrl) || /\.svg(?:[?#]|$)/i.test(imageUrl))) {
+    imageUrl = '';
+    imageWidth = undefined;
+    imageHeight = undefined;
+    imageMime = undefined;
+  }
+
   const hasArticleImage = Boolean(imageUrl);
   const imageAlt = hasArticleImage ? (post.thumbnailAlt || articleTitle).trim() : '';
   const authorName = post.author?.name || 'ISEZERANO Editorial Team';
@@ -857,19 +906,28 @@ export function renderBlogArticleHtml(
 
 /**
  * Renders homepage or section-level HTML retaining the website's own title and description cleanly.
+ * Only homepage (`pagePath === '/'`) may optionally include a verified non-SVG HTTPS `homepageImageUrl`.
  */
 export function renderWebsiteDefaultHtml(
   templateHtml: string,
   origin: string,
   branding?: Partial<WebsiteBrandingSettings> | null,
   pagePath: string = '/',
-  pageTitlePrefix?: string
+  pageTitlePrefix?: string,
+  homepageImageUrl?: string
 ): string {
   const cleanOrigin = origin.replace(/\/+$/, '');
   const { fullTitle, siteDescription } = resolveBrandingTitleAndDesc(branding);
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const normalizedPath = pagePath.startsWith('/') ? pagePath : `/${pagePath}`;
   const canonicalUrl = `${cleanOrigin}${normalizedPath}`;
+  const resolvedHomepageImage =
+    normalizedPath === '/' &&
+    isPublicHttpsImageUrl(homepageImageUrl) &&
+    !isGenericBrandingAssetUrl(homepageImageUrl) &&
+    !/\.svg(?:[?#]|$)/i.test(homepageImageUrl!)
+      ? homepageImageUrl!.trim()
+      : '';
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -893,11 +951,18 @@ export function renderWebsiteDefaultHtml(
     `    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta property="og:description" content="${escapeHtml(siteDescription)}" />`,
     `    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
+    resolvedHomepageImage ? `    <meta property="og:image" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
+    resolvedHomepageImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
+    resolvedHomepageImage ? `    <meta property="og:image:alt" content="${escapeHtml(siteDescription)}" />` : '',
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />`,
     `    <meta name="twitter:description" content="${escapeHtml(siteDescription)}" />`,
+    resolvedHomepageImage ? `    <meta name="twitter:image" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
+    resolvedHomepageImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(siteDescription)}" />` : '',
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return injectHeadBlock(templateHtml, headBlock);
 }

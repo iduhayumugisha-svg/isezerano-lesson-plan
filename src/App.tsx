@@ -26,7 +26,7 @@ import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
 import { initGoogleAnalytics, trackPageView } from './services/analyticsService';
-import { updateWebsiteBrandingSeo } from './services/seoService';
+import { setRegisteredWebsiteLogoUrl, updateWebsiteBrandingSeo } from './services/seoService';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from './types/blog';
 import {
   subscribeToBlogPosts,
@@ -83,7 +83,7 @@ const getBlogSlugFromUrl = (): string | null => {
 
 function AppContent() {
   const { user, isAdmin, signOutUser } = useAuth();
-  const { branding } = useWebsiteDesign();
+  const { branding, logoUrl } = useWebsiteDesign();
 
   // Route state initialized from browser URL
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
@@ -216,11 +216,16 @@ function AppContent() {
   }, [currentPage]);
 
   useEffect(() => {
+    setRegisteredWebsiteLogoUrl(logoUrl);
     if (currentPage === 'blog' && activeBlogSlug) {
       return; // BlogView manages per-article SEO tags cleanly
     }
-    updateWebsiteBrandingSeo(branding);
-  }, [branding, currentPage, activeBlogSlug]);
+    updateWebsiteBrandingSeo(
+      branding,
+      currentPage === 'blog' ? 'News & Editorial Articles' : undefined,
+      currentPage === 'home' ? logoUrl : undefined
+    );
+  }, [branding, logoUrl, currentPage, activeBlogSlug]);
 
   const handleNavigate = (page: WebsitePage | AppPage) => {
     setCurrentPage(page);

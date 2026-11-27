@@ -65,6 +65,52 @@ const normalizePublicImageUrl = (rawUrl: string): string => {
   return trimmed;
 };
 
+const GENERIC_BRANDING_IMAGE_PATTERN =
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+
+const isSvgImageSource = (url: string): boolean => {
+  const lower = url.trim().toLowerCase();
+  return lower.startsWith('data:image/svg+xml') || /\.svg(?:[?#]|$)/i.test(lower);
+};
+
+/**
+ * Identifies unwanted generic website branding assets or an explicit homepage logo URL
+ * so they can never be emitted as an individual article's social preview thumbnail.
+ */
+export const isGenericBrandingImageUrl = (
+  url: string | null | undefined,
+  disallowedUrls: Array<string | null | undefined> = []
+): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const normalized = normalizePublicImageUrl(trimmed);
+
+  if (
+    GENERIC_BRANDING_IMAGE_PATTERN.test(trimmed) ||
+    GENERIC_BRANDING_IMAGE_PATTERN.test(normalized)
+  ) {
+    return true;
+  }
+
+  for (const blocked of disallowedUrls) {
+    if (!blocked || typeof blocked !== 'string') continue;
+    const blockedTrimmed = blocked.trim();
+    if (!blockedTrimmed) continue;
+    const blockedNorm = normalizePublicImageUrl(blockedTrimmed);
+    if (
+      trimmed === blockedTrimmed ||
+      normalized === blockedTrimmed ||
+      trimmed === blockedNorm ||
+      normalized === blockedNorm
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const BASE_URL = DEFAULT_CANONICAL_ORIGIN;
 
 export interface SiteBrandingSeoInput {
@@ -94,18 +140,36 @@ export const resolveSiteBrandingSeo = (branding?: Partial<WebsiteBrandingSetting
   return { siteName, fullTitle, siteDescription };
 };
 
+const queryAllMatchingElements = (selector: string): Element[] => {
+  if (typeof document === 'undefined') return [];
+  if (typeof document.querySelectorAll === 'function') {
+    return Array.from(document.querySelectorAll(selector));
+  }
+  const single = document.querySelector(selector);
+  return single ? [single] : [];
+};
+
 const setMetaTag = (attributeName: string, attributeValue: string, content: string) => {
   if (typeof document === 'undefined') return;
 
-  const element = document.querySelector(`meta[${attributeName}="${attributeValue}"]`) as HTMLMetaElement | null;
+  const selector = `meta[${attributeName}="${attributeValue}"]`;
+  const existing = queryAllMatchingElements(selector) as HTMLMetaElement[];
+
   if (!content) {
-    if (element) element.remove();
+    for (const el of existing) {
+      el.remove();
+    }
     return;
   }
-  const target = element || document.createElement('meta');
-  if (!element) {
+
+  const target = existing[0] || document.createElement('meta');
+  if (existing.length === 0) {
     target.setAttribute(attributeName, attributeValue);
     document.head.appendChild(target);
+  } else {
+    for (let i = 1; i < existing.length; i++) {
+      existing[i].remove();
+    }
   }
   target.setAttribute('content', content);
 };
@@ -113,18 +177,25 @@ const setMetaTag = (attributeName: string, attributeValue: string, content: stri
 const setLinkTag = (rel: string, href: string) => {
   if (typeof document === 'undefined') return;
 
-  let element = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
-  if (!element) {
-    element = document.createElement('link');
-    element.setAttribute('rel', rel);
-    document.head.appendChild(element);
+  const selector = `link[rel="${rel}"]`;
+  const existing = queryAllMatchingElements(selector) as HTMLLinkElement[];
+  const target = existing[0] || document.createElement('link');
+  if (existing.length === 0) {
+    target.setAttribute('rel', rel);
+    document.head.appendChild(target);
+  } else {
+    for (let i = 1; i < existing.length; i++) {
+      existing[i].remove?.();
+    }
   }
-  element.setAttribute('href', href);
+  target.setAttribute('href', href);
 };
 
 /**
  * Updates global browser title, meta description, OpenGraph, and Twitter tags
- * dynamically from Admin branding settings while keeping HTTPS social card images intact.
+ * dynamically from Admin branding settings for non-article pages.
+ * Homepage may optionally pass an explicit HTTPS branding image via `siteLogoUrl`;
+ * when omitted or invalid, social image tags are cleanly removed so no stale image persists.
  */
 export const updateWebsiteBrandingSeo = (
   branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput,
@@ -136,7 +207,11 @@ export const updateWebsiteBrandingSeo = (
   const { fullTitle, siteDescription } = resolveSiteBrandingSeo(branding);
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const pageUrl = `${BASE_URL}/`;
-  const customLogo = isValidHttpsImageUrl(siteLogoUrl) ? normalizePublicImageUrl(siteLogoUrl!) : '';
+  const rawLogo =
+    isValidHttpsImageUrl(siteLogoUrl) && !isSvgImageSource(siteLogoUrl!)
+      ? normalizePublicImageUrl(siteLogoUrl!)
+      : '';
+  const customLogo = isGenericBrandingImageUrl(rawLogo) ? '' : rawLogo;
 
   document.title = resolvedTitle;
   setMetaTag('name', 'description', siteDescription);
@@ -166,20 +241,42 @@ export const updateWebsiteBrandingSeo = (
   }
 };
 
+let registeredWebsiteLogoUrl = '';
+
+/**
+ * Registers the current website logo URL so `updateBlogPostSeo` always excludes it
+ * without affecting homepage branding behavior.
+ */
+export const setRegisteredWebsiteLogoUrl = (logoUrl: string | null | undefined): void => {
+  registeredWebsiteLogoUrl = typeof logoUrl === 'string' ? logoUrl.trim() : '';
+};
+
 /**
  * Updates SEO, OpenGraph, Twitter Cards, and Schema.org metadata for a blog post.
- * Uses the article's first actual image (or explicit HTTPS image); omits article image metadata when image-free.
+ * Uses the article's first actual image (or explicit HTTPS image); strictly rejects generic branding
+ * assets or site logos and omits article image metadata completely when image-free.
  */
 export const updateBlogPostSeo = (
   post: BlogPost,
-  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput,
+  disallowedBrandingUrls: Array<string | null | undefined> = []
 ): void => {
   if (typeof document === 'undefined') return;
+
+  const effectiveDisallowedUrls = registeredWebsiteLogoUrl
+    ? [...disallowedBrandingUrls, registeredWebsiteLogoUrl]
+    : disallowedBrandingUrls;
 
   const { fullTitle } = resolveSiteBrandingSeo(branding);
   const pageTitle = `${post.title} – ${fullTitle}`;
   const postUrl = `${BASE_URL}/blog/${encodeURIComponent(post.slug || post.id)}`;
-  const thumb = getSingleArticleThumbnailUrl(post);
+  const rawThumb = getSingleArticleThumbnailUrl(post);
+  const thumb =
+    rawThumb &&
+    !isSvgImageSource(rawThumb) &&
+    !isGenericBrandingImageUrl(rawThumb, effectiveDisallowedUrls)
+      ? rawThumb
+      : '';
   const cleanedSlug =
     (post.slug || post.id || 'article')
       .trim()
@@ -198,7 +295,7 @@ export const updateBlogPostSeo = (
     : thumb.startsWith('data:image/gif')
     ? 'gif'
     : 'jpg';
-  const articleHttpsImage = isValidHttpsImageUrl(thumb)
+  const candidateArticleImage = isValidHttpsImageUrl(thumb)
     ? normalizePublicImageUrl(thumb)
     : thumb.startsWith('data:image/') && !thumb.startsWith('data:image/svg+xml')
     ? `${BASE_URL}/og-blog/${encodeURIComponent(
@@ -207,7 +304,12 @@ export const updateBlogPostSeo = (
     : thumb.startsWith('/') && !thumb.startsWith('//') && !/\.svg(?:$|\?)/i.test(thumb)
     ? `${BASE_URL}${thumb}`
     : '';
-  const ogHttpsImage = articleHttpsImage;
+  const ogHttpsImage =
+    candidateArticleImage &&
+    !isSvgImageSource(candidateArticleImage) &&
+    !isGenericBrandingImageUrl(candidateArticleImage, effectiveDisallowedUrls)
+      ? candidateArticleImage
+      : '';
   const hasArticleImage = Boolean(ogHttpsImage);
   const description =
     (post.excerpt || '').trim() ||
@@ -271,8 +373,9 @@ export const updateBlogPostSeo = (
 };
 
 export const resetDefaultSeo = (
-  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput
+  branding?: Partial<WebsiteBrandingSettings> | SiteBrandingSeoInput,
+  siteLogoUrl?: string
 ): void => {
-  updateWebsiteBrandingSeo(branding);
+  updateWebsiteBrandingSeo(branding, undefined, siteLogoUrl);
 };
 

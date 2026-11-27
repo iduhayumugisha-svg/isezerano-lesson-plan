@@ -11,7 +11,11 @@ import { createServerApp } from '../server.ts';
 import { prerenderStaticBlogDist } from '../scripts/prerenderBlogMeta.ts';
 import {
   fetchPublishedBlogPostsFromFirestore,
+  isGenericBrandingAssetUrl,
   readImageDimensionsFromBuffer,
+  renderBlogArticleHtml,
+  renderWebsiteDefaultHtml,
+  resolvePostThumbnailSource,
   sniffImageMimeFromBuffer
 } from '../server/ogMeta.ts';
 import {
@@ -23,7 +27,9 @@ import {
 import {
   DEFAULT_CANONICAL_ORIGIN,
   getCanonicalPublicOrigin,
+  isGenericBrandingImageUrl,
   resolveCanonicalDomainRedirectUrl,
+  setRegisteredWebsiteLogoUrl,
   updateBlogPostSeo,
   updateWebsiteBrandingSeo
 } from '../src/services/seoService.ts';
@@ -613,10 +619,201 @@ async function testCanonicalDomainEnforcementAcrossShareCopySeoAndSsr(): Promise
   console.log('✓ 4. https://isezerano.online URL enforcement verified across Copy Link, Share menu, SEO tags, SSR & safe host redirects for 3 articles');
 }
 
+async function testBrandingIsolationAndArticleSafety(): Promise<void> {
+  // 1. Public directory must never ship any generic OG branding banner image
+  const publicFiles = fs.readdirSync(path.resolve('public'));
+  for (const name of ['og-default.jpg', 'og-isezerano-online.jpg', 'isezerano-online-logo.jpg']) {
+    assert.equal(publicFiles.includes(name), false, `public/${name} must not exist`);
+  }
+
+  // 2. Server-side & client-side generic branding filters reject unwanted branding assets & siteLogoUrl
+  const blockedUrls = [
+    'https://isezerano.online/og-default.jpg',
+    'https://isezerano.online/og-isezerano-online.jpg',
+    'https://isezerano.online/isezerano-online-logo.jpg',
+    '/og-isezerano-online.jpg',
+    '/og-default.jpg'
+  ];
+  const siteLogoBannerUrl = 'https://isezerano.online/assets/homepage-brand-card.jpg';
+
+  for (const badUrl of blockedUrls) {
+    assert.equal(isGenericBrandingImageUrl(badUrl), true, `Client filter must block ${badUrl}`);
+    assert.equal(isGenericBrandingAssetUrl(badUrl), true, `Server filter must block ${badUrl}`);
+  }
+  assert.equal(isGenericBrandingImageUrl(siteLogoBannerUrl, [siteLogoBannerUrl]), true);
+  assert.equal(isGenericBrandingAssetUrl(siteLogoBannerUrl, [siteLogoBannerUrl]), true);
+
+  // Article A whose cover wrongly points to og-isezerano-online.jpg but body has a real photo -> uses real photo
+  const realPhoto = buildMinimalJpegDataUri(1200, 630, 0x5a);
+  const articleWithPollutedCoverButRealBody: BlogPost = {
+    id: 'art_polluted_cover',
+    title: 'Real Photo Overrides Generic Banner',
+    slug: 'real-photo-overrides-generic-banner',
+    excerpt: 'Article should prefer its real image over generic banner.',
+    content: `<p>First text.</p><img src="https://isezerano.online/og-isezerano-online.jpg" alt="banner" /><img src="${realPhoto.dataUri}" alt="Actual News Photo" />`,
+    thumbnailUrl: 'https://isezerano.online/og-isezerano-online.jpg',
+    category: 'National',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T08:00:00Z',
+    updatedAt: '2026-11-26T08:00:00Z',
+    status: 'published'
+  };
+  const resolvedSource = resolvePostThumbnailSource(articleWithPollutedCoverButRealBody);
+  assert.equal(resolvedSource, realPhoto.dataUri);
+  const templateHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+  const renderedRealHtml = renderBlogArticleHtml(
+    templateHtml,
+    articleWithPollutedCoverButRealBody,
+    'https://isezerano.online',
+    null
+  );
+  const renderedOgImg = extractMeta(renderedRealHtml, 'property', 'og:image');
+  assert.ok(renderedOgImg && renderedOgImg.startsWith('https://isezerano.online/og-blog/real-photo-overrides-generic-banner-'));
+  assert.equal(renderedRealHtml.includes('og-isezerano-online.jpg'), false);
+
+  // Article B whose ONLY image is a generic branding image or SVG -> must omit og:image & twitter:image completely
+  const articleWithOnlyGenericCover: BlogPost = {
+    id: 'art_only_generic',
+    title: 'Breaking Update Without Photo',
+    slug: 'breaking-update-without-photo',
+    excerpt: 'Text-only breaking update.',
+    content: '<p>Text-only article body.</p>',
+    thumbnailUrl: 'https://isezerano.online/og-isezerano-online.jpg',
+    thumbnailIsCustomOverride: true,
+    category: 'National',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T09:00:00Z',
+    updatedAt: '2026-11-26T09:00:00Z',
+    status: 'published'
+  };
+  assert.equal(resolvePostThumbnailSource(articleWithOnlyGenericCover), '');
+  const renderedCleanHtml = renderBlogArticleHtml(
+    templateHtml,
+    articleWithOnlyGenericCover,
+    'https://isezerano.online',
+    null
+  );
+  assert.equal(extractMeta(renderedCleanHtml, 'property', 'og:image'), null);
+  assert.equal(extractMeta(renderedCleanHtml, 'property', 'og:image:secure_url'), null);
+  assert.equal(extractMeta(renderedCleanHtml, 'name', 'twitter:image'), null);
+
+  // 3. Homepage MAY use its valid HTTPS branding image, while Blog index / articles MUST NEVER inherit it
+  const homeHtmlWithBrandImg = renderWebsiteDefaultHtml(
+    templateHtml,
+    'https://isezerano.online',
+    null,
+    '/',
+    undefined,
+    siteLogoBannerUrl
+  );
+  assert.equal(extractMeta(homeHtmlWithBrandImg, 'property', 'og:image'), siteLogoBannerUrl);
+
+  const blogIdxHtmlWithBrandImgAttempt = renderWebsiteDefaultHtml(
+    templateHtml,
+    'https://isezerano.online',
+    null,
+    '/blog',
+    'News & Editorial Articles',
+    siteLogoBannerUrl
+  );
+  assert.equal(extractMeta(blogIdxHtmlWithBrandImgAttempt, 'property', 'og:image'), null);
+
+  // 4. Client JSDOM test: switching from Homepage (with branding image + duplicate meta tags) -> Image-free article
+  // and Article whose thumbnail matches registered siteLogoBannerUrl
+  const prevWindow = (globalThis as any).window;
+  const prevDocument = (globalThis as any).document;
+  const dom = new JSDOM(
+    '<!doctype html><html><head>' +
+      '<meta property="og:image" content="https://isezerano.online/stale-dup-1.jpg" />' +
+      '<meta property="og:image" content="https://isezerano.online/stale-dup-2.jpg" />' +
+      '<meta name="twitter:image" content="https://isezerano.online/stale-dup-tw.jpg" />' +
+      '</head><body></body></html>',
+    { url: 'https://isezerano.online/' }
+  );
+  (globalThis as any).window = dom.window;
+  (globalThis as any).document = dom.window.document;
+
+  try {
+    setRegisteredWebsiteLogoUrl(siteLogoBannerUrl);
+
+    // Homepage applies siteLogoBannerUrl cleanly and removes duplicate tags
+    updateWebsiteBrandingSeo(undefined, undefined, siteLogoBannerUrl);
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image"]').length, 1);
+    assert.equal(
+      dom.window.document.querySelector('meta[property="og:image"]')?.getAttribute('content'),
+      siteLogoBannerUrl
+    );
+
+    // Navigating to an article with NO image (or whose thumbnail equals siteLogoBannerUrl) strips og:image cleanly
+    const imageFreeOrSiteLogoArticle: BlogPost = {
+      id: 'art_site_logo',
+      title: 'Article Must Not Inherit Site Logo',
+      slug: 'article-must-not-inherit-site-logo',
+      excerpt: 'No custom article photo.',
+      content: '<p>Text only.</p>',
+      thumbnailUrl: siteLogoBannerUrl,
+      category: 'National',
+      author: { name: 'Editor', role: 'Admin' },
+      publishedAt: '2026-11-26T10:00:00Z',
+      updatedAt: '2026-11-26T10:00:00Z',
+      status: 'published'
+    };
+    updateBlogPostSeo(imageFreeOrSiteLogoArticle);
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image:secure_url"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[name="twitter:image"]').length, 0);
+
+    // Navigating to an article with an SVG image also emits no og:image
+    updateBlogPostSeo({
+      ...imageFreeOrSiteLogoArticle,
+      id: 'art_svg',
+      slug: 'art-svg',
+      thumbnailUrl: 'https://isezerano.online/icon.svg'
+    });
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image"]').length, 0);
+
+    // Navigating to an article with a real photo sets ONLY that article's image
+    updateBlogPostSeo({
+      ...imageFreeOrSiteLogoArticle,
+      id: 'art_real',
+      slug: 'art-real',
+      thumbnailUrl: 'https://cdn.example.org/real-news-photo.jpg'
+    });
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image"]').length, 1);
+    assert.equal(
+      dom.window.document.querySelector('meta[property="og:image"]')?.getAttribute('content'),
+      'https://cdn.example.org/real-news-photo.jpg'
+    );
+  } finally {
+    setRegisteredWebsiteLogoUrl('');
+    dom.window.close();
+    (globalThis as any).window = prevWindow;
+    (globalThis as any).document = prevDocument;
+  }
+
+  // 5. Verify BlogView loading-race guard prevents overwriting prerendered article tags while isLoading === true
+  const blogViewSrc = fs.readFileSync(path.resolve('src/views/BlogView.tsx'), 'utf8');
+  assert.match(
+    blogViewSrc,
+    /else\s+if\s*\(\s*!activeSlug\s*\|\|\s*!isLoading\s*\)\s*\{\s*resetDefaultSeo\(branding\);/m,
+    'BlogView must guard resetDefaultSeo so loading /blog/<slug> never overwrites prerendered article SEO'
+  );
+
+  const appSrc = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  assert.match(
+    appSrc,
+    /currentPage === 'home' \? logoUrl : undefined/,
+    'App.tsx must isolate homepage logoUrl from non-homepage SEO'
+  );
+
+  console.log('✓ 5. Generic branding elimination, homepage vs article isolation, duplicate meta cleanup & BlogView loading guard verified');
+}
+
 async function run(): Promise<void> {
   testHtmlAndFirebaseConfig();
   await testThreeDistinctArticlesWithCrawlerUserAgents();
   await testCanonicalDomainEnforcementAcrossShareCopySeoAndSsr();
+  await testBrandingIsolationAndArticleSafety();
   console.log('\nALL SOCIAL CRAWLER METADATA TESTS PASSED!');
 }
 

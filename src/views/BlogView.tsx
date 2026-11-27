@@ -24,7 +24,11 @@ import {
   subscribeToAdsSettings
 } from '../services/siteSettingsService';
 import { useWebsiteDesign } from '../context/WebsiteDesignContext';
-import { updateBlogPostSeo, resetDefaultSeo } from '../services/seoService';
+import {
+  updateBlogPostSeo,
+  resetDefaultSeo,
+  setRegisteredWebsiteLogoUrl
+} from '../services/seoService';
 import { formatPublicationDate } from '../utils/dateUtils';
 import { ArticleThumbnailImage } from '../components/ArticleThumbnailImage';
 import { ArticleShareButton } from '../components/ArticleShareButton';
@@ -62,7 +66,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
   focusComments = false,
   onConsumeFocusComments
 }) => {
-  const { branding, categoryNav } = useWebsiteDesign();
+  const { branding, categoryNav, logoUrl } = useWebsiteDesign();
   const allNewsLabel = resolveAllNewsLabel(branding);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [rawCategories, setRawCategories] = useState<BlogCategory[]>(DEFAULT_AI_BLOG_CATEGORIES);
@@ -194,18 +198,20 @@ export const BlogView: React.FC<BlogViewProps> = ({
     setAutoFocusCommentsForm(true);
   };
 
-  // Update SEO metadata and increment views once when opening a published article
+  // Update SEO metadata and increment views once when opening a published article.
+  // Never overwrite prerendered article tags with homepage metadata while the post is still loading.
   useEffect(() => {
+    setRegisteredWebsiteLogoUrl(logoUrl);
     if (activePost) {
       updateBlogPostSeo(activePost, branding);
       if (!incrementedPostIdsRef.current.has(activePost.id)) {
         incrementedPostIdsRef.current.add(activePost.id);
         incrementPostViews(activePost.id);
       }
-    } else {
+    } else if (!activeSlug || !isLoading) {
       resetDefaultSeo(branding);
     }
-  }, [activePost?.id, branding]);
+  }, [activePost?.id, activeSlug, isLoading, branding, logoUrl]);
 
   // Scroll cleanly to comments when navigated via a card Comment button or #article-comments hash
   useEffect(() => {
