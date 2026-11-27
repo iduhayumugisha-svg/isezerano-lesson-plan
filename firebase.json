@@ -114,6 +114,10 @@
     ],
     "rewrites": [
       {
+        "source": "/blog/**",
+        "destination": "/blog/fallback.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

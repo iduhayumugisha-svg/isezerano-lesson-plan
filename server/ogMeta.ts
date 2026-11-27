@@ -75,7 +75,49 @@ export function isPublicHttpsImageUrl(url: string | null | undefined): boolean {
 }
 
 const GENERIC_BRANDING_ASSET_REGEX =
-  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
+
+const GENERIC_SITE_DESC_CORE =
+  'independent digital news breaking updates features and community information';
+
+function normalizeDescForMatch(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/[\u2013\u2014-]+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isGenericSiteDescriptionText(
+  text: string | null | undefined,
+  branding?: Partial<WebsiteBrandingSettings> | null
+): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const normalized = normalizeDescForMatch(trimmed);
+  if (!normalized) return false;
+
+  if (
+    normalized === GENERIC_SITE_DESC_CORE ||
+    normalized === `isezerano online ${GENERIC_SITE_DESC_CORE}` ||
+    normalized === `isezerano ${GENERIC_SITE_DESC_CORE}` ||
+    normalized.includes(GENERIC_SITE_DESC_CORE)
+  ) {
+    return true;
+  }
+
+  const customSiteDesc = (branding?.websiteDescription || '').trim();
+  if (customSiteDesc) {
+    const customNorm = normalizeDescForMatch(customSiteDesc);
+    if (customNorm && normalized === customNorm) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export function safeDecodeURIComponent(raw: string): string {
   try {
@@ -169,7 +211,11 @@ function parseServerPixelDim(raw: string): number | null {
 
 export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): boolean {
   const lowerSrc = normalizedSrc.toLowerCase();
-  if (lowerSrc.startsWith('data:image/svg+xml') || /\.svg(?:$|\?)/i.test(lowerSrc)) {
+  if (
+    lowerSrc.startsWith('data:image/svg+xml') ||
+    /\.svg(?:$|\?)/i.test(lowerSrc) ||
+    isGenericBrandingAssetUrl(normalizedSrc)
+  ) {
     return true;
   }
 
@@ -921,24 +967,17 @@ function resolveArticleDescription(
   post: BlogPost,
   branding?: Partial<WebsiteBrandingSettings> | null
 ): string {
-  const genericSiteDesc = (branding?.websiteDescription || '').trim().toLowerCase();
-  const defaultSiteDesc = DEFAULT_SITE_DESCRIPTION.trim().toLowerCase();
   const rawExcerpt = (post.excerpt || '').trim();
-  const isGenericExcerpt =
-    !rawExcerpt ||
-    rawExcerpt.toLowerCase() === defaultSiteDesc ||
-    (genericSiteDesc !== '' && rawExcerpt.toLowerCase() === genericSiteDesc);
-
-  if (!isGenericExcerpt) {
+  if (rawExcerpt && !isGenericSiteDescriptionText(rawExcerpt, branding)) {
     return rawExcerpt;
   }
 
   const contentExcerpt = extractPlainText(post.content || '', 160);
-  if (contentExcerpt) {
+  if (contentExcerpt && !isGenericSiteDescriptionText(contentExcerpt, branding)) {
     return contentExcerpt;
   }
 
-  return (post.title || 'Article').trim();
+  return '';
 }
 
 /**
@@ -955,6 +994,7 @@ export function renderBlogArticleHtml(
     imageWidth?: number;
     imageHeight?: number;
     imageMimeType?: string;
+    disallowedUrls?: Array<string | null | undefined>;
   }
 ): string {
   const cleanOrigin = origin.replace(/\/+$/, '');
@@ -965,7 +1005,8 @@ export function renderBlogArticleHtml(
   const description = resolveArticleDescription(post, branding);
   const articleUrl = `${cleanOrigin}/blog/${encodeURIComponent(post.slug || post.id)}`;
 
-  const rawThumb = resolvePostThumbnailSource(post);
+  const disallowedUrls = options?.disallowedUrls || [];
+  const rawThumb = resolvePostThumbnailSource(post, disallowedUrls);
   const decodedData = rawThumb.startsWith('data:image/') ? decodeImageDataUri(rawThumb) : null;
 
   let imageUrl = options?.overrideImageUrl || '';
@@ -993,7 +1034,10 @@ export function renderBlogArticleHtml(
     }
   }
 
-  if (imageUrl && (isGenericBrandingAssetUrl(imageUrl) || /\.svg(?:[?#]|$)/i.test(imageUrl))) {
+  if (
+    imageUrl &&
+    (isGenericBrandingAssetUrl(imageUrl, disallowedUrls) || /\.svg(?:[?#]|$)/i.test(imageUrl))
+  ) {
     imageUrl = '';
     imageWidth = undefined;
     imageHeight = undefined;
@@ -1013,7 +1057,7 @@ export function renderBlogArticleHtml(
       '@id': articleUrl
     },
     headline: articleTitle,
-    description,
+    ...(description ? { description } : {}),
     ...(hasArticleImage ? { image: [imageUrl] } : {}),
     datePublished: post.publishedAt || post.updatedAt || '',
     dateModified: post.updatedAt || post.publishedAt || '',
@@ -1044,12 +1088,12 @@ export function renderBlogArticleHtml(
 
   const articleTags = [
     `    <title>${escapeHtml(pageTitle)}</title>`,
-    `    <meta name="description" content="${escapeHtml(description)}" />`,
+    description ? `    <meta name="description" content="${escapeHtml(description)}" />` : '',
     `    <link rel="canonical" href="${escapeHtml(articleUrl)}" />`,
     `    <meta property="og:type" content="article" />`,
     `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
     `    <meta property="og:title" content="${escapeHtml(articleTitle)}" />`,
-    `    <meta property="og:description" content="${escapeHtml(description)}" />`,
+    description ? `    <meta property="og:description" content="${escapeHtml(description)}" />` : '',
     hasArticleImage ? `    <meta property="og:image" content="${escapeHtml(imageUrl)}" />` : '',
     hasArticleImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />` : '',
     optionalDimTags,
@@ -1066,7 +1110,7 @@ export function renderBlogArticleHtml(
       : '',
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(articleTitle)}" />`,
-    `    <meta name="twitter:description" content="${escapeHtml(description)}" />`,
+    description ? `    <meta name="twitter:description" content="${escapeHtml(description)}" />` : '',
     hasArticleImage ? `    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />` : '',
     hasArticleImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />` : '',
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
@@ -1079,7 +1123,7 @@ export function renderBlogArticleHtml(
 
 /**
  * Renders homepage or section-level HTML retaining the website's own title and description cleanly.
- * Only homepage (`pagePath === '/'`) may optionally include a verified non-SVG HTTPS `homepageImageUrl`.
+ * Only homepage (`pagePath === '/'`) includes homepage description fallback and verified HTTPS `homepageImageUrl`.
  */
 export function renderWebsiteDefaultHtml(
   templateHtml: string,
@@ -1094,6 +1138,13 @@ export function renderWebsiteDefaultHtml(
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
   const normalizedPath = pagePath.startsWith('/') ? pagePath : `/${pagePath}`;
   const canonicalUrl = `${cleanOrigin}${normalizedPath}`;
+  const rawCustomDesc = (branding?.websiteDescription || '').trim();
+  const effectiveDescription =
+    normalizedPath === '/'
+      ? siteDescription
+      : isGenericSiteDescriptionText(rawCustomDesc)
+      ? ''
+      : rawCustomDesc;
   const resolvedHomepageImage =
     normalizedPath === '/' &&
     isPublicHttpsImageUrl(homepageImageUrl) &&
@@ -1104,12 +1155,12 @@ export function renderWebsiteDefaultHtml(
       ? homepageImageUrl!.trim()
       : '';
 
-  const structuredData = {
+  const structuredData: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: fullTitle,
     alternateName: branding?.platformTitle?.trim() || 'ISEZERANO ONLINE',
-    description: siteDescription,
+    ...(effectiveDescription ? { description: effectiveDescription } : {}),
     url: `${cleanOrigin}/`,
     publisher: {
       '@type': 'NewsMediaOrganization',
@@ -1119,25 +1170,51 @@ export function renderWebsiteDefaultHtml(
 
   const headBlock = [
     `    <title>${escapeHtml(resolvedTitle)}</title>`,
-    `    <meta name="description" content="${escapeHtml(siteDescription)}" />`,
+    effectiveDescription ? `    <meta name="description" content="${escapeHtml(effectiveDescription)}" />` : '',
     `    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`,
     `    <meta property="og:type" content="website" />`,
     `    <meta property="og:site_name" content="${escapeHtml(fullTitle)}" />`,
     `    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />`,
-    `    <meta property="og:description" content="${escapeHtml(siteDescription)}" />`,
+    effectiveDescription ? `    <meta property="og:description" content="${escapeHtml(effectiveDescription)}" />` : '',
     `    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     resolvedHomepageImage ? `    <meta property="og:image" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
     resolvedHomepageImage ? `    <meta property="og:image:secure_url" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
-    resolvedHomepageImage ? `    <meta property="og:image:alt" content="${escapeHtml(siteDescription)}" />` : '',
+    resolvedHomepageImage ? `    <meta property="og:image:alt" content="${escapeHtml(effectiveDescription || fullTitle)}" />` : '',
     `    <meta name="twitter:card" content="summary_large_image" />`,
     `    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />`,
-    `    <meta name="twitter:description" content="${escapeHtml(siteDescription)}" />`,
+    effectiveDescription ? `    <meta name="twitter:description" content="${escapeHtml(effectiveDescription)}" />` : '',
     resolvedHomepageImage ? `    <meta name="twitter:image" content="${escapeHtml(resolvedHomepageImage)}" />` : '',
-    resolvedHomepageImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(siteDescription)}" />` : '',
+    resolvedHomepageImage ? `    <meta name="twitter:image:alt" content="${escapeHtml(effectiveDescription || fullTitle)}" />` : '',
     `    <script type="application/ld+json">\n${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}\n    </script>`
   ]
     .filter(Boolean)
     .join('\n');
+
+  return injectHeadBlock(templateHtml, headBlock);
+}
+
+/**
+ * Neutral SPA shell for Firebase Hosting `/blog/**` fallback (`/blog/fallback.html`)
+ * when an article URL does not yet have a pre-rendered HTML file.
+ * Strictly omits generic homepage descriptions, `og:image`, `twitter:image`, and `WebSite` JSON-LD.
+ */
+export function renderBlogFallbackShellHtml(
+  templateHtml: string,
+  origin: string,
+  branding?: Partial<WebsiteBrandingSettings> | null
+): string {
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  const { fullTitle: siteName } = resolveBrandingTitleAndDesc(branding);
+
+  const headBlock = [
+    `    <title>${escapeHtml(siteName)}</title>`,
+    `    <meta property="og:type" content="article" />`,
+    `    <meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
+    `    <meta property="og:title" content="${escapeHtml(siteName)}" />`,
+    `    <meta name="twitter:card" content="summary" />`,
+    `    <meta name="twitter:title" content="${escapeHtml(siteName)}" />`,
+    `    <link rel="sitemap" type="application/xml" title="Sitemap" href="${escapeHtml(cleanOrigin)}/sitemap.xml" />`
+  ].join('\n');
 
   return injectHeadBlock(templateHtml, headBlock);
 }

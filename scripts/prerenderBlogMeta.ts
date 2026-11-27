@@ -15,6 +15,7 @@ import {
   isPublicHttpsImageUrl,
   readImageDimensionsFromBuffer,
   renderBlogArticleHtml,
+  renderBlogFallbackShellHtml,
   renderWebsiteDefaultHtml,
   resolveHomepageSocialImageUrl,
   resolvePostThumbnailSource,
@@ -204,8 +205,10 @@ export async function prerenderStaticBlogDist(
     '/blog',
     'News & Editorial Articles'
   );
+  const blogFallbackHtml = renderBlogFallbackShellHtml(templateHtml, origin, branding);
   fs.mkdirSync(blogOutDir, { recursive: true });
   fs.writeFileSync(path.join(blogOutDir, 'index.html'), blogIndexHtml, 'utf-8');
+  fs.writeFileSync(path.join(blogOutDir, 'fallback.html'), blogFallbackHtml, 'utf-8');
   fs.writeFileSync(path.join(distDir, 'blog.html'), blogIndexHtml, 'utf-8');
 
   const publishedPosts = posts.filter(
@@ -249,12 +252,16 @@ export async function prerenderStaticBlogDist(
 
   const generatedFiles: PrerenderStaticResult['generatedFiles'] = [];
 
+  const disallowedBrandingUrls = [resolvedLogoInput, homepageLogo.publicUrl].filter(
+    (u): u is string => Boolean(u && u.trim())
+  );
+
   for (const post of publishedPosts) {
     const rawSlug = (post.slug || post.id || '').trim();
     if (!rawSlug || rawSlug.includes('..') || rawSlug.includes('/') || rawSlug.includes('\\')) continue;
     const fileSlug = safeFileSlug(rawSlug);
 
-    const thumbSrc = resolvePostThumbnailSource(post);
+    const thumbSrc = resolvePostThumbnailSource(post, disallowedBrandingUrls);
     let staticImageUrl = '';
     let writtenImagePath: string | null = null;
     let imageWidth: number | undefined;
@@ -274,7 +281,11 @@ export async function prerenderStaticBlogDist(
         imageHeight = decoded.height;
         imageMimeType = decoded.mimeType;
       }
-    } else if (isPublicHttpsImageUrl(thumbSrc) && !/\.svg(?:[?#]|$)/i.test(thumbSrc) && !isGenericBrandingAssetUrl(thumbSrc)) {
+    } else if (
+      isPublicHttpsImageUrl(thumbSrc) &&
+      !/\.svg(?:[?#]|$)/i.test(thumbSrc) &&
+      !isGenericBrandingAssetUrl(thumbSrc, disallowedBrandingUrls)
+    ) {
       const downloaded = await downloadExternalImageToBuffer(thumbSrc);
       if (downloaded) {
         fs.mkdirSync(ogImagesDir, { recursive: true });
@@ -296,7 +307,7 @@ export async function prerenderStaticBlogDist(
       thumbSrc.startsWith('/') &&
       !thumbSrc.startsWith('//') &&
       !/\.svg(?:[?#]|$)/i.test(thumbSrc) &&
-      !isGenericBrandingAssetUrl(thumbSrc)
+      !isGenericBrandingAssetUrl(thumbSrc, disallowedBrandingUrls)
     ) {
       staticImageUrl = `${origin}${thumbSrc}`;
     }
@@ -305,7 +316,8 @@ export async function prerenderStaticBlogDist(
       overrideImageUrl: staticImageUrl || undefined,
       imageWidth,
       imageHeight,
-      imageMimeType
+      imageMimeType,
+      disallowedUrls: disallowedBrandingUrls
     });
 
     const resolvedOgImageUrl = staticImageUrl || '';

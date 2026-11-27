@@ -1,5 +1,95 @@
 import { BlogPost } from '../types/blog';
 
+const GENERIC_BRANDING_THUMBNAIL_PATTERN =
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
+
+const GENERIC_WEBSITE_DESC_CORE =
+  'independent digital news breaking updates features and community information';
+
+let registeredDisallowedBrandingUrls: string[] = [];
+let registeredDisallowedSiteDescriptions: string[] = [];
+
+export function setDisallowedArticleBrandingUrls(
+  urls: Array<string | null | undefined>
+): void {
+  registeredDisallowedBrandingUrls = urls
+    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+    .map((u) => u.trim());
+}
+
+export function setDisallowedArticleSiteDescriptions(
+  descriptions: Array<string | null | undefined>
+): void {
+  registeredDisallowedSiteDescriptions = descriptions
+    .filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
+    .map((d) => d.trim());
+}
+
+function normalizeDescriptionForMatch(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/[\u2013\u2014-]+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Detects whether text is the generic website description (with or without site-name prefix,
+ * commas, dashes, or trailing period) or matches an explicitly configured site description.
+ */
+export function isGenericWebsiteDescriptionText(
+  text: string | null | undefined,
+  extraSiteDescriptions: Array<string | null | undefined> = []
+): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const normalized = normalizeDescriptionForMatch(trimmed);
+  if (!normalized) return false;
+
+  if (
+    normalized === GENERIC_WEBSITE_DESC_CORE ||
+    normalized === `isezerano online ${GENERIC_WEBSITE_DESC_CORE}` ||
+    normalized === `isezerano ${GENERIC_WEBSITE_DESC_CORE}` ||
+    normalized.includes(GENERIC_WEBSITE_DESC_CORE)
+  ) {
+    return true;
+  }
+
+  for (const cand of [...registeredDisallowedSiteDescriptions, ...extraSiteDescriptions]) {
+    if (!cand || typeof cand !== 'string') continue;
+    const candNorm = normalizeDescriptionForMatch(cand);
+    if (candNorm && normalized === candNorm) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Checks whether an image source matches known generic SEO/branding banners or the website's own logo.
+ */
+export function isGenericBrandingThumbnailUrl(
+  src: string | null | undefined,
+  extraDisallowedUrls: Array<string | null | undefined> = []
+): boolean {
+  if (!src || typeof src !== 'string') return false;
+  const trimmed = src.trim();
+  if (!trimmed) return false;
+  if (GENERIC_BRANDING_THUMBNAIL_PATTERN.test(trimmed)) {
+    return true;
+  }
+  for (const blocked of [...registeredDisallowedBrandingUrls, ...extraDisallowedUrls]) {
+    if (typeof blocked === 'string' && blocked.trim() && blocked.trim() === trimmed) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Extracts a string URL/Data URI from either a direct string or an object map like `{ url }`.
  */
@@ -128,7 +218,11 @@ function parseExplicitPixelDim(raw: string): number | null {
  */
 export function isDecorativeOrIconImgTag(tag: string, normalizedSrc: string): boolean {
   const lowerSrc = normalizedSrc.toLowerCase();
-  if (lowerSrc.startsWith('data:image/svg+xml') || /\.svg(?:$|\?)/i.test(lowerSrc)) {
+  if (
+    lowerSrc.startsWith('data:image/svg+xml') ||
+    /\.svg(?:$|\?)/i.test(lowerSrc) ||
+    isGenericBrandingThumbnailUrl(normalizedSrc)
+  ) {
     return true;
   }
 
@@ -197,7 +291,8 @@ function getImgCandidateSrc(tag: string): string {
  * from an article's rich-text HTML content.
  */
 export function extractFirstImageMetaFromContent(
-  htmlContent: string | null | undefined
+  htmlContent: string | null | undefined,
+  disallowedUrls: Array<string | null | undefined> = []
 ): { src: string; alt: string } | null {
   if (!htmlContent || typeof htmlContent !== 'string') return null;
 
@@ -207,7 +302,11 @@ export function extractFirstImageMetaFromContent(
   while ((tagMatch = imgTagRegex.exec(htmlContent)) !== null) {
     const tag = tagMatch[0];
     const normalized = getImgCandidateSrc(tag);
-    if (normalized && !isDecorativeOrIconImgTag(tag, normalized)) {
+    if (
+      normalized &&
+      !isDecorativeOrIconImgTag(tag, normalized) &&
+      !isGenericBrandingThumbnailUrl(normalized, disallowedUrls)
+    ) {
       return {
         src: normalized,
         alt: getHtmlAttr(tag, 'alt').trim()
@@ -221,16 +320,21 @@ export function extractFirstImageMetaFromContent(
 /**
  * Convenience helper returning only the normalized URL/Data URI of the first actual article image in content.
  */
-export function extractFirstImageFromContent(htmlContent: string | null | undefined): string {
-  return extractFirstImageMetaFromContent(htmlContent)?.src || '';
+export function extractFirstImageFromContent(
+  htmlContent: string | null | undefined,
+  disallowedUrls: Array<string | null | undefined> = []
+): string {
+  return extractFirstImageMetaFromContent(htmlContent, disallowedUrls)?.src || '';
 }
 
 /**
  * Resolves the first explicit cover field on a BlogPost across canonical and legacy field names
  * (`thumbnailUrl`, `featuredImage`, `coverImage`, `imageUrl`, `bannerImage`, `image`).
+ * Rejects SVG assets, generic branding banners, and the website's own logo.
  */
 export function resolveExplicitPostCoverField(
-  post?: Partial<BlogPost> | null
+  post?: Partial<BlogPost> | null,
+  disallowedUrls: Array<string | null | undefined> = []
 ): string {
   if (!post) return '';
   const fields: unknown[] = [
@@ -244,7 +348,14 @@ export function resolveExplicitPostCoverField(
   for (const f of fields) {
     const raw = extractRawImageFieldValue(f);
     const norm = normalizeThumbnailSrc(raw);
-    if (norm) return norm;
+    if (
+      norm &&
+      !norm.toLowerCase().startsWith('data:image/svg+xml') &&
+      !/\.svg(?:[?#]|$)/i.test(norm) &&
+      !isGenericBrandingThumbnailUrl(norm, disallowedUrls)
+    ) {
+      return norm;
+    }
   }
   return '';
 }
@@ -257,18 +368,19 @@ export function resolveExplicitPostCoverField(
  * 2. Otherwise, always use the first actual article image inside `post.content`
  *    (so an older/stale cover field never overrides the article's real first image).
  * 3. Otherwise, fall back to valid `thumbnailUrl` / `featuredImage` / `coverImage` / `image`.
- * 4. Otherwise -> '' (Blog listing shows default placeholder; social meta omits article image metadata).
+ * 4. Otherwise -> '' (never substitutes a generic branding image or website logo).
  */
 export function getSingleArticleThumbnailUrl(
-  post?: Partial<BlogPost> | null
+  post?: Partial<BlogPost> | null,
+  disallowedUrls: Array<string | null | undefined> = []
 ): string {
   if (!post) return '';
-  const explicit = resolveExplicitPostCoverField(post);
+  const explicit = resolveExplicitPostCoverField(post, disallowedUrls);
   if (post.thumbnailIsCustomOverride === true && explicit) {
     return explicit;
   }
   if (post.content) {
-    const firstContentImg = extractFirstImageFromContent(post.content);
+    const firstContentImg = extractFirstImageFromContent(post.content, disallowedUrls);
     if (firstContentImg) return firstContentImg;
   }
   return explicit;
@@ -339,6 +451,27 @@ export function extractPlainTextExcerpt(htmlContent: string, maxLength: number =
 
   if (plain.length <= maxLength) return plain;
   return plain.slice(0, maxLength - 1).trimEnd() + '…';
+}
+
+/**
+ * Returns an article's own excerpt or body-text summary for article cards and SEO metadata.
+ * Rejects any generic website description and returns '' when the article has no valid summary.
+ */
+export function getArticleCardExcerpt(
+  post?: Pick<Partial<BlogPost>, 'excerpt' | 'content'> | null,
+  maxLength: number = 160,
+  extraSiteDescriptions: Array<string | null | undefined> = []
+): string {
+  if (!post) return '';
+  const rawExcerpt = (post.excerpt || '').trim();
+  if (rawExcerpt && !isGenericWebsiteDescriptionText(rawExcerpt, extraSiteDescriptions)) {
+    return rawExcerpt;
+  }
+  const contentExcerpt = extractPlainTextExcerpt(post.content || '', maxLength);
+  if (contentExcerpt && !isGenericWebsiteDescriptionText(contentExcerpt, extraSiteDescriptions)) {
+    return contentExcerpt;
+  }
+  return '';
 }
 
 /**

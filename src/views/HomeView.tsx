@@ -23,7 +23,9 @@ import { ArticleShareButton } from '../components/ArticleShareButton';
 import { formatPublicationDate } from '../utils/dateUtils';
 import {
   getSingleArticleThumbnailUrl,
-  extractPlainTextExcerpt
+  getArticleCardExcerpt,
+  setDisallowedArticleBrandingUrls,
+  setDisallowedArticleSiteDescriptions
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
@@ -62,8 +64,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenArticle,
   onOpenArticleComments
 }) => {
-  const { colors, branding, typography } = useWebsiteDesign();
+  const { colors, branding, typography, logoUrl } = useWebsiteDesign();
   const allNewsLabel = resolveAllNewsLabel(branding);
+
+  useEffect(() => {
+    setDisallowedArticleBrandingUrls([logoUrl]);
+    setDisallowedArticleSiteDescriptions([branding?.websiteDescription]);
+  }, [logoUrl, branding?.websiteDescription]);
 
   // Fallback self-subscriptions if HomeView is mounted standalone
   const [internalPosts, setInternalPosts] = useState<BlogPost[]>([]);
@@ -527,9 +534,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           >
                             {topStory.title}
                           </h2>
-                          <p className="text-sm leading-relaxed line-clamp-4" style={{ color: 'var(--app-muted-text)' }}>
-                            {topStory.excerpt || extractPlainTextExcerpt(topStory.content, 220)}
-                          </p>
+                          {(() => {
+                            const cardExcerpt = getArticleCardExcerpt(topStory, 220, [branding?.websiteDescription]);
+                            return cardExcerpt ? (
+                              <p className="text-sm leading-relaxed line-clamp-4" style={{ color: 'var(--app-muted-text)' }}>
+                                {cardExcerpt}
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                         <div
                           className="pt-4 border-t flex flex-wrap items-center justify-between gap-2 text-xs"
@@ -618,9 +630,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               >
                                 {post.title}
                               </h3>
-                              <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
-                                {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
-                              </p>
+                              {(() => {
+                                const cardExcerpt = getArticleCardExcerpt(post, 150, [branding?.websiteDescription]);
+                                return cardExcerpt ? (
+                                  <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
+                                    {cardExcerpt}
+                                  </p>
+                                ) : null;
+                              })()}
                             </div>
                             <div
                               className="pt-3 border-t flex items-center justify-between gap-2 text-xs"
@@ -725,9 +742,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         {leadPost.title}
                       </h1>
 
-                      <p className="text-sm sm:text-base leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
-                        {leadPost.excerpt || extractPlainTextExcerpt(leadPost.content, 240)}
-                      </p>
+                      {(() => {
+                        const cardExcerpt = getArticleCardExcerpt(leadPost, 240, [branding?.websiteDescription]);
+                        return cardExcerpt ? (
+                          <p className="text-sm sm:text-base leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
+                            {cardExcerpt}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
 
                     <div
@@ -964,9 +986,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             >
                               {post.title}
                             </h3>
-                            <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
-                              {post.excerpt || extractPlainTextExcerpt(post.content, 145)}
-                            </p>
+                            {(() => {
+                              const cardExcerpt = getArticleCardExcerpt(post, 145, [branding?.websiteDescription]);
+                              return cardExcerpt ? (
+                                <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
+                                  {cardExcerpt}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                           <div
                             className="pt-3 border-t flex items-center justify-between gap-2 text-xs"
@@ -1086,9 +1113,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               >
                                 {post.title}
                               </h3>
-                              <p className="text-xs sm:text-sm leading-relaxed line-clamp-2" style={{ color: 'var(--app-muted-text)' }}>
-                                {post.excerpt || extractPlainTextExcerpt(post.content, 130)}
-                              </p>
+                              {(() => {
+                                const cardExcerpt = getArticleCardExcerpt(post, 130, [branding?.websiteDescription]);
+                                return cardExcerpt ? (
+                                  <p className="text-xs sm:text-sm leading-relaxed line-clamp-2" style={{ color: 'var(--app-muted-text)' }}>
+                                    {cardExcerpt}
+                                  </p>
+                                ) : null;
+                              })()}
                             </div>
                             <div
                               className="pt-3 border-t flex items-center justify-between gap-2 text-xs"

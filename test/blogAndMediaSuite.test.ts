@@ -1063,7 +1063,7 @@ function testCommentsSharingAndNewspaperRedesign() {
     'Latest Headlines',
     'Latest News',
     'categorySections.map',
-    'extractPlainTextExcerpt',
+    'getArticleCardExcerpt',
     'showWebsiteName',
     'showWebsiteDescription'
   ]) {

@@ -226,7 +226,9 @@ export function createServerApp(options: ServerAppOptions = {}): Express {
         }
 
         if (post) {
-          html = renderBlogArticleHtml(html, post, origin, designMeta.branding);
+          html = renderBlogArticleHtml(html, post, origin, designMeta.branding, {
+            disallowedUrls: designMeta.logoUrl ? [designMeta.logoUrl] : []
+          });
         } else {
           // Never expose unpublished/draft articles and never silently render homepage metadata on an article URL
           html = renderMissingArticleHtml(html, origin, route.slugOrId, designMeta.branding);

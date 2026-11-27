@@ -17,6 +17,7 @@ import {
   parseBlogRoute,
   readImageDimensionsFromBuffer,
   renderBlogArticleHtml,
+  renderBlogFallbackShellHtml,
   renderMissingArticleHtml,
   renderWebsiteDefaultHtml,
   resolveHomepageSocialImageUrl,
@@ -40,6 +41,13 @@ import {
   updateMissingArticleSeo,
   updateWebsiteBrandingSeo
 } from '../src/services/seoService.ts';
+import {
+  getArticleCardExcerpt,
+  getSingleArticleThumbnailUrl,
+  isGenericWebsiteDescriptionText,
+  setDisallowedArticleBrandingUrls,
+  setDisallowedArticleSiteDescriptions
+} from '../src/utils/thumbnailUtils.ts';
 import type { BlogPost } from '../src/types/blog.ts';
 
 function extractMeta(html: string, attr: 'property' | 'name', key: string): string | null {
@@ -1062,12 +1070,158 @@ async function testGlobalSeoReliabilityAndProtection(): Promise<void> {
   console.log('✓ 6. Global SEO protection: old/new/missing/draft posts, slug/ID/docId lookup, cache resilience & homepage real logo verified');
 }
 
+async function testGenericArticleDescriptionAndImagePermanentRemoval(): Promise<void> {
+  const realSiteLogo = buildMinimalJpegDataUri(400, 400, 0x6b);
+  const genuinePhoto = buildMinimalJpegDataUri(1200, 630, 0x7c);
+  const templateHtml = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+  const unprefixedGenericDesc = 'Independent digital news, breaking updates, features and community information';
+  assert.equal(isGenericWebsiteDescriptionText(unprefixedGenericDesc), true);
+  assert.equal(isGenericWebsiteDescriptionText(DEFAULT_SEO_DESCRIPTION), true);
+  assert.equal(isGenericWebsiteDescriptionText('Real reporting on Kigali transit.'), false);
+
+  // 1. Article cards & thumbnails reject unprefixed generic description and generic branding images/site logo
+  setDisallowedArticleBrandingUrls([realSiteLogo.dataUri]);
+  setDisallowedArticleSiteDescriptions([DEFAULT_SEO_DESCRIPTION]);
+  try {
+    const pollutedEmptyArticle: BlogPost = {
+      id: 'art_polluted_empty',
+      title: 'Empty Content Polluted Excerpt Story',
+      slug: 'empty-content-polluted-excerpt-story',
+      excerpt: unprefixedGenericDesc,
+      content: '',
+      thumbnailUrl: realSiteLogo.dataUri,
+      category: 'National',
+      author: { name: 'Editor', role: 'Admin' },
+      publishedAt: '2026-11-26T12:00:00Z',
+      status: 'published'
+    };
+
+    assert.equal(getArticleCardExcerpt(pollutedEmptyArticle, 160), '');
+    assert.equal(getSingleArticleThumbnailUrl(pollutedEmptyArticle), '');
+
+    const pollutedWithRealContent: BlogPost = {
+      ...pollutedEmptyArticle,
+      id: 'art_polluted_with_real_body',
+      slug: 'polluted-with-real-body',
+      content: `<p>Actual breaking news paragraph written for this story.</p><img src="${genuinePhoto.dataUri}" alt="News Photo" />`
+    };
+    assert.equal(
+      getArticleCardExcerpt(pollutedWithRealContent, 160),
+      'Actual breaking news paragraph written for this story.'
+    );
+    assert.equal(getSingleArticleThumbnailUrl(pollutedWithRealContent), genuinePhoto.dataUri);
+  } finally {
+    setDisallowedArticleBrandingUrls([]);
+    setDisallowedArticleSiteDescriptions([]);
+  }
+
+  // 2. SSR renderBlogArticleHtml omits description/og:description/twitter:description/og:image/twitter:image when empty/generic
+  const emptyDescNoImgPost: BlogPost = {
+    id: 'art_no_desc_no_img',
+    title: 'Headline Only Notice',
+    slug: 'headline-only-notice',
+    excerpt: unprefixedGenericDesc,
+    content: '',
+    thumbnailUrl: realSiteLogo.dataUri,
+    category: 'Announcements',
+    author: { name: 'Editor', role: 'Admin' },
+    publishedAt: '2026-11-26T13:00:00Z',
+    status: 'published'
+  };
+  const cleanEmptyHtml = renderBlogArticleHtml(templateHtml, emptyDescNoImgPost, 'https://isezerano.online', null, {
+    disallowedUrls: [realSiteLogo.dataUri]
+  });
+  assert.equal(extractMeta(cleanEmptyHtml, 'name', 'description'), null);
+  assert.equal(extractMeta(cleanEmptyHtml, 'property', 'og:description'), null);
+  assert.equal(extractMeta(cleanEmptyHtml, 'name', 'twitter:description'), null);
+  assert.equal(extractMeta(cleanEmptyHtml, 'property', 'og:image'), null);
+  assert.equal(extractMeta(cleanEmptyHtml, 'name', 'twitter:image'), null);
+  assert.equal(cleanEmptyHtml.includes('Independent digital news'), false);
+
+  // 3. Client updateBlogPostSeo removes stale/duplicate generic description & image tags when article lacks them
+  const dom = new JSDOM(
+    '<!doctype html><html><head>' +
+      `<meta name="description" content="${unprefixedGenericDesc}" />` +
+      `<meta property="og:description" content="${DEFAULT_SEO_DESCRIPTION}" />` +
+      `<meta name="twitter:description" content="${unprefixedGenericDesc}" />` +
+      '<meta property="og:image" content="https://isezerano.online/og-blog/site-logo-f0744544.jpg" />' +
+      '<meta name="twitter:image" content="https://isezerano.online/og-default.jpg" />' +
+      '</head><body></body></html>',
+    { url: 'https://isezerano.online/blog/headline-only-notice' }
+  );
+  const prevWin = (globalThis as any).window;
+  const prevDoc = (globalThis as any).document;
+  (globalThis as any).window = dom.window;
+  (globalThis as any).document = dom.window.document;
+  try {
+    setRegisteredWebsiteLogoUrl(realSiteLogo.dataUri);
+    updateBlogPostSeo(emptyDescNoImgPost, { platformTitle: 'ISEZERANO' });
+    assert.equal(dom.window.document.querySelectorAll('meta[name="description"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:description"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[name="twitter:description"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[property="og:image"]').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('meta[name="twitter:image"]').length, 0);
+    const jsonLd = JSON.parse(dom.window.document.getElementById('blog-post-schema-jsonld')?.textContent || '{}');
+    assert.equal(jsonLd.description, undefined);
+    assert.equal(jsonLd.image, undefined);
+  } finally {
+    setRegisteredWebsiteLogoUrl('');
+    dom.window.close();
+    (globalThis as any).window = prevWin;
+    (globalThis as any).document = prevDoc;
+  }
+
+  // 4. Prerendered /blog/fallback.html, /blog/index.html & firebase.json /blog/** rewrite never emit generic desc or logo
+  const fallbackHtml = renderBlogFallbackShellHtml(templateHtml, 'https://isezerano.online', {
+    platformTitle: 'ISEZERANO'
+  });
+  assert.equal(extractMeta(fallbackHtml, 'property', 'og:type'), 'article');
+  assert.equal(extractMeta(fallbackHtml, 'property', 'og:image'), null);
+  assert.equal(extractMeta(fallbackHtml, 'name', 'twitter:image'), null);
+  assert.equal(fallbackHtml.includes('Independent digital news'), false);
+  assert.equal(fallbackHtml.includes('site-logo'), false);
+
+  const firebaseJson = JSON.parse(fs.readFileSync(path.resolve('firebase.json'), 'utf8'));
+  const rewrites = firebaseJson.hosting?.rewrites || [];
+  assert.equal(rewrites[0]?.source, '/blog/**');
+  assert.equal(rewrites[0]?.destination, '/blog/fallback.html');
+
+  const tempDist = fs.mkdtempSync(path.join(os.tmpdir(), 'isezerano-fallback-check-'));
+  try {
+    fs.writeFileSync(path.join(tempDist, 'index.html'), templateHtml, 'utf8');
+    await prerenderStaticBlogDist({
+      distDir: tempDist,
+      origin: 'https://isezerano.online',
+      posts: [emptyDescNoImgPost],
+      branding: { platformTitle: 'ISEZERANO' },
+      homepageLogoUrl: realSiteLogo.dataUri
+    });
+
+    const builtFallback = fs.readFileSync(path.join(tempDist, 'blog', 'fallback.html'), 'utf8');
+    assert.equal(builtFallback.includes('Independent digital news'), false);
+    assert.equal(extractMeta(builtFallback, 'property', 'og:image'), null);
+
+    const builtBlogIndex = fs.readFileSync(path.join(tempDist, 'blog', 'index.html'), 'utf8');
+    assert.equal(builtBlogIndex.includes('Independent digital news'), false);
+    assert.equal(extractMeta(builtBlogIndex, 'property', 'og:image'), null);
+
+    const builtHome = fs.readFileSync(path.join(tempDist, 'index.html'), 'utf8');
+    assert.ok(extractMeta(builtHome, 'property', 'og:image')?.includes('/og-blog/site-logo-'));
+  } finally {
+    fs.rmSync(tempDist, { recursive: true, force: true });
+  }
+
+  console.log('✓ 7. Permanent removal of generic article description & branding image verified across cards, SSR, client SEO, and /blog/** fallback');
+}
+
 async function run(): Promise<void> {
   testHtmlAndFirebaseConfig();
   await testThreeDistinctArticlesWithCrawlerUserAgents();
   await testCanonicalDomainEnforcementAcrossShareCopySeoAndSsr();
   await testBrandingIsolationAndArticleSafety();
   await testGlobalSeoReliabilityAndProtection();
+  await testGenericArticleDescriptionAndImagePermanentRemoval();
   console.log('\nALL SOCIAL CRAWLER METADATA TESTS PASSED!');
 }
 

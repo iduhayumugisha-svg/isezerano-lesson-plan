@@ -28,6 +28,7 @@ import { isValidDateString } from '../utils/dateUtils';
 import {
   estimateUtf8Bytes,
   extractPlainTextExcerpt,
+  getArticleCardExcerpt,
   sanitizePostThumbnail
 } from '../utils/thumbnailUtils';
 
@@ -348,7 +349,7 @@ export const prepareBlogPostPayload = (
     id: sanitized.id || `post_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     title: sanitized.title.trim(),
     slug: uniqueSlug,
-    excerpt: (sanitized.excerpt || '').trim() || extractPlainTextExcerpt(sanitized.content, 160),
+    excerpt: getArticleCardExcerpt(sanitized, 160),
     content: sanitized.content || '',
     thumbnailUrl: sanitized.thumbnailUrl || '',
     thumbnailAlt: (sanitized.thumbnailAlt || `${sanitized.title.trim()} – Featured Image`).trim(),

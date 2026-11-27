@@ -3,8 +3,10 @@ import { WebsiteBrandingSettings } from '../types/websiteDesign';
 import {
   computeImageDataUriHash8,
   computeUint8ArrayHash8,
-  extractPlainTextExcerpt,
+  getArticleCardExcerpt,
   getSingleArticleThumbnailUrl,
+  isGenericBrandingThumbnailUrl,
+  isGenericWebsiteDescriptionText,
   isValidHttpsImageUrl
 } from '../utils/thumbnailUtils';
 
@@ -66,7 +68,7 @@ const normalizePublicImageUrl = (rawUrl: string): string => {
 };
 
 const GENERIC_BRANDING_IMAGE_PATTERN =
-  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?)\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i;
+  /(?:^|\/)(?:og-default|og-isezerano-online|isezerano-online-logo|og-branding|site-logo(?:-[0-9a-f]{8})?|isezerano[-_ %20]+online[-_ %20]+logo)\.(?:jpe?g|png|webp|gif|svg)(?:[?#]|$)/i;
 
 const isSvgImageSource = (url: string): boolean => {
   const lower = url.trim().toLowerCase();
@@ -106,7 +108,9 @@ export const isGenericBrandingImageUrl = (
 
   if (
     GENERIC_BRANDING_IMAGE_PATTERN.test(trimmed) ||
-    GENERIC_BRANDING_IMAGE_PATTERN.test(normalized)
+    GENERIC_BRANDING_IMAGE_PATTERN.test(normalized) ||
+    isGenericBrandingThumbnailUrl(trimmed, disallowedUrls) ||
+    isGenericBrandingThumbnailUrl(normalized, disallowedUrls)
   ) {
     return true;
   }
@@ -224,6 +228,16 @@ export const updateWebsiteBrandingSeo = (
 
   const { fullTitle, siteDescription } = resolveSiteBrandingSeo(branding);
   const resolvedTitle = pageTitlePrefix ? `${pageTitlePrefix} – ${fullTitle}` : fullTitle;
+  const rawCustomDesc = (
+    ((branding as Partial<WebsiteBrandingSettings> | undefined)?.websiteDescription ||
+      (branding as SiteBrandingSeoInput | undefined)?.siteDescription ||
+      '')
+  ).trim();
+  const effectiveDescription = pageTitlePrefix
+    ? isGenericWebsiteDescriptionText(rawCustomDesc)
+      ? ''
+      : rawCustomDesc
+    : siteDescription;
   const pageUrl = `${BASE_URL}/`;
   const rawLogo =
     isValidHttpsImageUrl(siteLogoUrl) && !isSvgImageSource(siteLogoUrl!)
@@ -232,26 +246,26 @@ export const updateWebsiteBrandingSeo = (
   const customLogo = isGenericBrandingImageUrl(rawLogo) && !/\/og-blog\/site-logo-/i.test(rawLogo) ? '' : rawLogo;
 
   document.title = resolvedTitle;
-  setMetaTag('name', 'description', siteDescription);
+  setMetaTag('name', 'description', effectiveDescription);
   setLinkTag('canonical', pageUrl);
 
   setMetaTag('property', 'og:type', 'website');
   setMetaTag('property', 'og:site_name', fullTitle);
   setMetaTag('property', 'og:title', resolvedTitle);
-  setMetaTag('property', 'og:description', siteDescription);
+  setMetaTag('property', 'og:description', effectiveDescription);
   setMetaTag('property', 'og:url', pageUrl);
   setMetaTag('property', 'og:image', customLogo);
   setMetaTag('property', 'og:image:secure_url', customLogo);
   setMetaTag('property', 'og:image:type', '');
   setMetaTag('property', 'og:image:width', '');
   setMetaTag('property', 'og:image:height', '');
-  setMetaTag('property', 'og:image:alt', customLogo ? siteDescription : '');
+  setMetaTag('property', 'og:image:alt', customLogo ? effectiveDescription : '');
 
   setMetaTag('name', 'twitter:card', 'summary_large_image');
   setMetaTag('name', 'twitter:title', resolvedTitle);
-  setMetaTag('name', 'twitter:description', siteDescription);
+  setMetaTag('name', 'twitter:description', effectiveDescription);
   setMetaTag('name', 'twitter:image', customLogo);
-  setMetaTag('name', 'twitter:image:alt', customLogo ? siteDescription : '');
+  setMetaTag('name', 'twitter:image:alt', customLogo ? effectiveDescription : '');
 
   const scriptTag = document.getElementById('blog-post-schema-jsonld');
   if (scriptTag) {
@@ -288,7 +302,7 @@ export const updateBlogPostSeo = (
   const { fullTitle } = resolveSiteBrandingSeo(branding);
   const pageTitle = `${post.title} – ${fullTitle}`;
   const postUrl = `${BASE_URL}/blog/${encodeURIComponent(post.slug || post.id)}`;
-  const rawThumb = getSingleArticleThumbnailUrl(post);
+  const rawThumb = getSingleArticleThumbnailUrl(post, effectiveDisallowedUrls);
   const thumb =
     rawThumb &&
     !isSvgImageSource(rawThumb) &&
@@ -330,15 +344,11 @@ export const updateBlogPostSeo = (
       : '';
   const hasArticleImage = Boolean(ogHttpsImage);
   const { siteDescription } = resolveSiteBrandingSeo(branding);
-  const rawExcerpt = (post.excerpt || '').trim();
-  const isGenericExcerpt =
-    !rawExcerpt ||
-    rawExcerpt.toLowerCase() === DEFAULT_SEO_DESCRIPTION.toLowerCase() ||
-    rawExcerpt.toLowerCase() === siteDescription.toLowerCase();
-  const description =
-    (!isGenericExcerpt ? rawExcerpt : '') ||
-    extractPlainTextExcerpt(post.content || '', 160) ||
-    post.title;
+  const description = getArticleCardExcerpt(post, 160, [
+    siteDescription,
+    (branding as Partial<WebsiteBrandingSettings> | undefined)?.websiteDescription,
+    (branding as SiteBrandingSeoInput | undefined)?.siteDescription
+  ]);
 
   document.title = pageTitle;
   setMetaTag('name', 'description', description);
@@ -378,7 +388,7 @@ export const updateBlogPostSeo = (
       '@id': postUrl
     },
     headline: post.title,
-    description,
+    ...(description ? { description } : {}),
     ...(ogHttpsImage ? { image: [ogHttpsImage] } : {}),
     datePublished: post.publishedAt,
     dateModified: post.updatedAt || post.publishedAt,
@@ -418,6 +428,9 @@ export const updateMissingArticleSeo = (
   setMetaTag('property', 'og:url', articleUrl);
   setMetaTag('property', 'og:image', '');
   setMetaTag('property', 'og:image:secure_url', '');
+  setMetaTag('property', 'og:image:type', '');
+  setMetaTag('property', 'og:image:width', '');
+  setMetaTag('property', 'og:image:height', '');
   setMetaTag('property', 'og:image:alt', '');
 
   setMetaTag('name', 'twitter:card', 'summary');

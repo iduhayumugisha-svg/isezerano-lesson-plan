@@ -40,8 +40,10 @@ import { HilltopAdsArticleBanner } from '../components/HilltopAdsArticleBanner';
 import { buildArticleRenderSegments } from '../utils/articleAdInjector';
 import {
   extractFirstImageFromContent,
-  extractPlainTextExcerpt,
-  getSingleArticleThumbnailUrl
+  getArticleCardExcerpt,
+  getSingleArticleThumbnailUrl,
+  setDisallowedArticleBrandingUrls,
+  setDisallowedArticleSiteDescriptions
 } from '../utils/thumbnailUtils';
 import { resolveAllNewsLabel, resolveCategoryNavItemStyle } from '../utils/categoryStyleUtils';
 import { scrollMainContentToTop } from '../utils/scrollUtils';
@@ -219,6 +221,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
   // or when a specific article slug cannot be resolved.
   useEffect(() => {
     setRegisteredWebsiteLogoUrl(logoUrl);
+    setDisallowedArticleBrandingUrls([logoUrl]);
+    setDisallowedArticleSiteDescriptions([branding?.websiteDescription]);
     if (activePost) {
       updateBlogPostSeo(activePost, branding);
       if (!incrementedPostIdsRef.current.has(activePost.id)) {
@@ -723,9 +727,14 @@ export const BlogView: React.FC<BlogViewProps> = ({
                       {post.title}
                     </h2>
 
-                    <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
-                      {post.excerpt || extractPlainTextExcerpt(post.content, 150)}
-                    </p>
+                    {(() => {
+                      const cardExcerpt = getArticleCardExcerpt(post, 150, [branding?.websiteDescription]);
+                      return cardExcerpt ? (
+                        <p className="text-xs sm:text-sm leading-relaxed line-clamp-3" style={{ color: 'var(--app-muted-text)' }}>
+                          {cardExcerpt}
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
 
                   <div

@@ -56,7 +56,9 @@ import {
   extractFirstImageFromContent,
   extractFirstImageMetaFromContent,
   extractPlainTextExcerpt,
+  getArticleCardExcerpt,
   getSingleArticleThumbnailUrl,
+  isGenericBrandingThumbnailUrl,
   isValidPersistentImageSrc
 } from '../utils/thumbnailUtils';
 
@@ -324,10 +326,15 @@ export const AdminBlogManager: React.FC = () => {
 
   const buildPostFromDraft = (targetStatus: 'published' | 'draft'): BlogPost => {
     const firstContentMeta = extractFirstImageMetaFromContent(draft.content);
-    const resolvedThumbnailUrl =
-      draft.thumbnailIsCustomOverride && isValidPersistentImageSrc(draft.thumbnailUrl)
+    const validExplicitThumb =
+      isValidPersistentImageSrc(draft.thumbnailUrl) &&
+      !isGenericBrandingThumbnailUrl(draft.thumbnailUrl)
         ? draft.thumbnailUrl
-        : firstContentMeta?.src || (isValidPersistentImageSrc(draft.thumbnailUrl) ? draft.thumbnailUrl : '');
+        : '';
+    const resolvedThumbnailUrl =
+      draft.thumbnailIsCustomOverride && validExplicitThumb
+        ? validExplicitThumb
+        : firstContentMeta?.src || validExplicitThumb;
 
     const validStorageMode =
       draft.thumbnailStorageMode === 'firebase_storage' ||
@@ -340,7 +347,7 @@ export const AdminBlogManager: React.FC = () => {
       title: draft.title.trim(),
       slug: draft.slug ? generateSlug(draft.slug) : generateSlug(draft.title),
       content: draft.content,
-      excerpt: draft.excerpt.trim() || extractPlainTextExcerpt(draft.content, 160),
+      excerpt: getArticleCardExcerpt({ excerpt: draft.excerpt, content: draft.content }, 160),
       thumbnailUrl: resolvedThumbnailUrl,
       thumbnailAlt:
         draft.thumbnailAlt.trim() || firstContentMeta?.alt || draft.title.trim(),
@@ -1295,9 +1302,14 @@ export const AdminBlogManager: React.FC = () => {
                               {post.title}
                             </h3>
 
-                            <p className="text-xs text-slate-600 line-clamp-2">
-                              {post.excerpt || extractPlainTextExcerpt(post.content, 140)}
-                            </p>
+                            {(() => {
+                              const cardExcerpt = getArticleCardExcerpt(post, 140);
+                              return cardExcerpt ? (
+                                <p className="text-xs text-slate-600 line-clamp-2">
+                                  {cardExcerpt}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
 

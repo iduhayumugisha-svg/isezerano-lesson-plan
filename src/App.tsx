@@ -27,6 +27,10 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebsiteDesignProvider, useWebsiteDesign } from './context/WebsiteDesignContext';
 import { initGoogleAnalytics, trackPageView } from './services/analyticsService';
 import { setRegisteredWebsiteLogoUrl, updateWebsiteBrandingSeo } from './services/seoService';
+import {
+  setDisallowedArticleBrandingUrls,
+  setDisallowedArticleSiteDescriptions
+} from './utils/thumbnailUtils';
 import { BlogCategory, BlogPost, DEFAULT_AI_BLOG_CATEGORIES } from './types/blog';
 import {
   subscribeToBlogPosts,
@@ -217,6 +221,8 @@ function AppContent() {
 
   useEffect(() => {
     setRegisteredWebsiteLogoUrl(logoUrl);
+    setDisallowedArticleBrandingUrls([logoUrl]);
+    setDisallowedArticleSiteDescriptions([branding?.websiteDescription]);
     if (currentPage === 'blog' && activeBlogSlug) {
       return; // BlogView manages per-article SEO tags cleanly
     }

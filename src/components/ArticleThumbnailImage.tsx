@@ -27,16 +27,11 @@ export const ArticleThumbnailImage: React.FC<ArticleThumbnailImageProps> = ({
       <div
         role="img"
         aria-label={alt || 'Article placeholder'}
-        className={`w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex flex-col items-center justify-center text-slate-400 text-center ${
-          compact ? 'p-2' : 'p-4 space-y-1.5'
+        className={`w-full h-full bg-gradient-to-br from-slate-100 to-slate-200/70 flex items-center justify-center text-slate-400 text-center ${
+          compact ? 'p-2' : 'p-4'
         }`}
       >
         <FileText className={compact ? 'w-5 h-5 opacity-55' : 'w-7 h-7 opacity-55'} />
-        {!compact && (
-          <span className="text-[11px] font-medium tracking-wide uppercase text-slate-500">
-            ISEZERANO ONLINE
-          </span>
-        )}
       </div>
     );
   }
